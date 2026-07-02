@@ -13,7 +13,6 @@ const AJAX_URL = "https://kalbu.vdu.lt/ajax-call";
 const NONCE_TTL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_CHUNK_SIZE = 4500;
 export const WORD_CACHE_SECONDS = 7 * 24 * 60 * 60;
-export const NEGATIVE_WORD_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 type NonceCache = {
   value: string;
@@ -25,7 +24,7 @@ type VduAjaxEnvelope = {
   message?: unknown;
 };
 
-type VduTextPart = {
+export type VduTextPart = {
   string?: string;
   accented?: string;
   accentType?: string;
@@ -48,13 +47,10 @@ type VduWordResponse = {
   accentInfo?: VduAccentInfo[];
 };
 
-type WordDictionaryEntry = {
+export type WordAccentEntry = {
   variants: AccentVariant[];
-  fetchedAt: string;
-};
-
-type WordDictionaryEnv = {
-  WORDS: KVNamespace;
+  defaultForm: string | null;
+  accentType: string | null;
 };
 
 let nonceCache: NonceCache | null = null;
@@ -138,7 +134,18 @@ async function postVdu<T>(
       }
 
       const envelope = (await response.json()) as VduAjaxEnvelope;
-      if (envelope.code !== 200 || typeof envelope.message !== "string") {
+      if (envelope.code !== 200) {
+        throw new RetryableVduError();
+      }
+
+      // word_accent answers `message: false` for words entirely outside the
+      // dictionary (e.g. non-Lithuanian spellings) — a genuine negative,
+      // not a transport error.
+      if (envelope.message === false) {
+        return {} as T;
+      }
+
+      if (typeof envelope.message !== "string") {
         throw new RetryableVduError();
       }
 
@@ -263,7 +270,7 @@ function formatInformation(
     .join("; ");
 }
 
-type AccentTextOptions = {
+export type AccentTextOptions = {
   lookupVariants?: (word: string) => Promise<AccentVariant[]>;
   useTagger?: boolean;
 };
@@ -276,12 +283,19 @@ export async function accentText(
   text: string,
   options: AccentTextOptions = {},
 ): Promise<AccentResponse> {
+  return {
+    ...(await accentTextParts(text, await fetchTextAccentParts(text), options)),
+    source: "vdu",
+  };
+}
+
+export async function accentTextParts(
+  text: string,
+  textParts: VduTextPart[],
+  options: AccentTextOptions = {},
+): Promise<Omit<AccentResponse, "source">> {
   const taggerPromise = getTaggerResult(text, options.useTagger !== false);
-  const textPartsPromise = fetchTextAccentParts(text);
-  const [textParts, taggerResult] = await Promise.all([
-    textPartsPromise,
-    taggerPromise,
-  ]);
+  const taggerResult = await taggerPromise;
   const parts = normalizeTextParts(textParts);
   const wordParts = textParts.filter(isWordPart);
   const aligned =
@@ -398,7 +412,37 @@ async function fetchAmbiguousVariants(
   words: string[],
   lookupVariants: (word: string) => Promise<AccentVariant[]>,
 ): Promise<Map<string, AccentVariant[]>> {
-  const variantsByWord = new Map<string, AccentVariant[]>();
+  return lookupVariantsConcurrently(words, lookupVariants, { swallowErrors: true });
+}
+
+export async function lookupVariantsConcurrently(
+  words: string[],
+  lookupVariants: (word: string) => Promise<AccentVariant[]> = lookupWordVariants,
+  options: { swallowErrors?: boolean } = {},
+): Promise<Map<string, AccentVariant[]>> {
+  return lookupConcurrently(words, lookupVariants, {
+    ...options,
+    fallback: () => [],
+  });
+}
+
+export async function lookupWordEntriesConcurrently(
+  words: string[],
+  lookupEntry: (word: string) => Promise<WordAccentEntry> = fetchWordEntry,
+  options: { swallowErrors?: boolean } = {},
+): Promise<Map<string, WordAccentEntry>> {
+  return lookupConcurrently(words, lookupEntry, {
+    ...options,
+    fallback: () => ({ variants: [], defaultForm: null, accentType: null }),
+  });
+}
+
+async function lookupConcurrently<T>(
+  words: string[],
+  lookup: (word: string) => Promise<T>,
+  options: { swallowErrors?: boolean; fallback: () => T },
+): Promise<Map<string, T>> {
+  const resultsByWord = new Map<string, T>();
   let nextIndex = 0;
 
   async function worker(): Promise<void> {
@@ -407,9 +451,13 @@ async function fetchAmbiguousVariants(
       nextIndex += 1;
 
       try {
-        variantsByWord.set(word, await lookupVariants(word));
+        resultsByWord.set(word, await lookup(word));
       } catch {
-        variantsByWord.set(word, []);
+        if (!options.swallowErrors) {
+          throw new UpstreamError();
+        }
+
+        resultsByWord.set(word, options.fallback());
       }
     }
   }
@@ -418,7 +466,7 @@ async function fetchAmbiguousVariants(
     Array.from({ length: Math.min(6, words.length) }, () => worker()),
   );
 
-  return variantsByWord;
+  return resultsByWord;
 }
 
 export async function lookupWordVariants(word: string): Promise<AccentVariant[]> {
@@ -426,73 +474,23 @@ export async function lookupWordVariants(word: string): Promise<AccentVariant[]>
   return flattenVariants(response);
 }
 
-export async function lookupWordVariantsKV(
-  word: string,
-  env: WordDictionaryEnv,
-  ctx?: Pick<ExecutionContext, "waitUntil">,
-): Promise<AccentVariant[]> {
-  const key = normalizeWordKey(word);
-  const cached = await readWordDictionaryEntry(env.WORDS, key);
-  if (cached) {
-    return cached.variants;
+export async function fetchWordEntry(word: string): Promise<WordAccentEntry> {
+  const variants = await lookupWordVariants(word);
+  const textParts = await fetchTextAccentParts(word);
+  const wordPart = textParts.find((part) => part.type === "WORD");
+  const defaultForm = wordPart?.accented?.normalize("NFC") ?? null;
+
+  if (!wordPart || !defaultForm) {
+    return {
+      variants: [],
+      defaultForm: null,
+      accentType: wordPart?.accentType ?? null,
+    };
   }
 
-  const variants = await lookupWordVariants(key);
-  const entry: WordDictionaryEntry = {
+  return {
     variants,
-    fetchedAt: new Date().toISOString(),
+    defaultForm,
+    accentType: wordPart.accentType ?? "ONE",
   };
-  const put =
-    variants.length === 0
-      ? env.WORDS.put(key, JSON.stringify(entry), {
-          expirationTtl: NEGATIVE_WORD_TTL_SECONDS,
-        })
-      : env.WORDS.put(key, JSON.stringify(entry));
-
-  if (ctx) {
-    ctx.waitUntil(put);
-  } else {
-    await put;
-  }
-
-  return variants;
-}
-
-async function readWordDictionaryEntry(
-  words: KVNamespace,
-  key: string,
-): Promise<WordDictionaryEntry | null> {
-  try {
-    const entry = await words.get<WordDictionaryEntry>(key, "json");
-    return isWordDictionaryEntry(entry) ? entry : null;
-  } catch {
-    return null;
-  }
-}
-
-function isWordDictionaryEntry(value: unknown): value is WordDictionaryEntry {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as Partial<WordDictionaryEntry>;
-  return (
-    Array.isArray(candidate.variants) &&
-    candidate.variants.every(isAccentVariant) &&
-    typeof candidate.fetchedAt === "string"
-  );
-}
-
-function isAccentVariant(value: unknown): value is AccentVariant {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as Partial<AccentVariant>;
-  return (
-    typeof candidate.form === "string" &&
-    typeof candidate.info === "string" &&
-    Array.isArray(candidate.mi) &&
-    candidate.mi.every((label) => typeof label === "string")
-  );
 }

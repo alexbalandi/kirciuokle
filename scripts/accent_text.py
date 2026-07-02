@@ -68,7 +68,10 @@ async def vdu_call(client: httpx.AsyncClient, nonce: str, data: dict) -> dict:
     payload = r.json()
     if payload.get("code") != 200:
         raise RuntimeError(f"VDU API error: {payload}")
-    return json.loads(payload["message"])
+    msg = payload["message"]
+    if not isinstance(msg, str):  # unknown words yield message: false
+        return {}
+    return json.loads(msg)
 
 
 async def text_accents(client: httpx.AsyncClient, nonce: str, body: str) -> list[dict]:

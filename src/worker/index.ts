@@ -4,19 +4,18 @@ import type {
   ErrorResponse,
   WordResponse,
 } from "../shared/types";
-import {
-  accentText,
-  lookupWordVariantsKV,
-  UpstreamError,
-  WORD_CACHE_SECONDS,
-} from "./vdu";
+import { lookupWordVariantsD1 } from "./dictionary";
+import { accentTextLocalFirst } from "./localAccent";
+import { accentText, UpstreamError, WORD_CACHE_SECONDS } from "./vdu";
 import { toPublicVariants } from "./disambiguation";
 
 const MAX_TEXT_LENGTH = 20_000;
+type AccentSource = "local" | "vdu";
 
 export interface Env {
   ASSETS: Fetcher;
-  WORDS: KVNamespace;
+  DICT: D1Database;
+  ACCENT_SOURCE?: AccentSource;
 }
 
 export default {
@@ -25,7 +24,7 @@ export default {
 
     try {
       if (url.pathname === "/api/accent") {
-        return handleAccent(request, env, ctx);
+        return handleAccent(request, url, env, ctx);
       }
 
       if (url.pathname === "/api/word") {
@@ -50,6 +49,7 @@ export default {
 
 async function handleAccent(
   request: Request,
+  url: URL,
   env: Env,
   ctx: ExecutionContext,
 ): Promise<Response> {
@@ -66,9 +66,13 @@ async function handleAccent(
     return json<ErrorResponse>({ error: "Tekstas per ilgas." }, 413);
   }
 
-  const response = await accentText(payload.text, {
-    lookupVariants: (word) => lookupWordVariantsKV(word, env, ctx),
-  });
+  const source = getAccentSource(url, env);
+  const response =
+    source === "local"
+      ? await accentTextLocalFirst(payload.text, env, ctx)
+      : await accentText(payload.text, {
+          lookupVariants: (word) => lookupWordVariantsD1(word, env, ctx),
+        });
   return json<AccentResponse>(response);
 }
 
@@ -87,12 +91,21 @@ async function handleWord(
     return json<ErrorResponse>({ error: "Trūksta žodžio." }, 400);
   }
 
-  const variants = await lookupWordVariantsKV(word, env, ctx);
+  const variants = await lookupWordVariantsD1(word, env, ctx);
   return json<WordResponse>(
     { variants: toPublicVariants(variants) },
     200,
     { "cache-control": `public, max-age=${WORD_CACHE_SECONDS}` },
   );
+}
+
+function getAccentSource(url: URL, env: Env): AccentSource {
+  const requested = url.searchParams.get("source");
+  if (requested === "local" || requested === "vdu") {
+    return requested;
+  }
+
+  return env.ACCENT_SOURCE === "local" ? "local" : "vdu";
 }
 
 async function readJson<T>(request: Request): Promise<T | null> {

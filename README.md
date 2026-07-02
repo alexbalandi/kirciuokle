@@ -20,9 +20,11 @@ orchestrates:
    against the in-context tag and picks the best match per occurrence. A
    small lemma table handles homographs whose variants share identical
    morphology (e.g. *yra*: *būti* → *yrà*, *irti* → *ỹra*).
-3. **Durable dictionary** — every word's variant set is memoized permanently
-   in a Workers KV namespace on first sight, verbatim from VDU. Words VDU
-   does not know are cached negatively for 30 days.
+3. **Durable dictionary** — every word's variant set is memoized in a D1
+   dictionary on first sight, verbatim from VDU. Words VDU does not know are
+   cached negatively for 30 days. The local-first accent path can be enabled
+   with `ACCENT_SOURCE=local` or tested per request with `?source=local`; the
+   default remains the legacy VDU whole-text path.
 
 In the UI, green-underlined words were resolved by context, amber ones are
 unresolved ties, and dotted ones are not in the dictionary. Every ambiguous
@@ -40,9 +42,9 @@ The Worker (and the Python CLI) call exactly two external services:
 | **VDU kirčiuoklė** ([kalbu.vdu.lt](https://kalbu.vdu.lt/mokymosi-priemones/kirciuoklis/)) | `POST https://kalbu.vdu.lt/ajax-call` with form-encoded `action=text_accents` (whole text) or `action=word_accent` (single word variants) | Accent placement, variant lists, morphology labels — the dictionary source of truth | Requires a nonce scraped from the [tool page](https://kalbu.vdu.lt/mokymosi-priemones/kirciuoklis/) (regex `"NONCE":"([0-9a-f]+)"`), cached ~6 h and refreshed on failure. Same engine/data as kirtis.info. |
 | **LINDAT/CLARIN UDPipe 2** ([service page](https://lindat.mff.cuni.cz/services/udpipe/)) | `POST https://lindat.mff.cuni.cz/services/udpipe/api/process` with `tokenizer`, `tagger`, `model=lithuanian-alksnis`, `data=<text>` | Contextual tagging (lemma, POS, morphological features) for homograph disambiguation | Free fair-use REST service by ÚFAL. The [Lithuanian-ALKSNIS model](https://ufal.mff.cuni.cz/udpipe/2) is CC BY-NC-SA. Failure degrades gracefully (defaults + notice). |
 
-Word-variant lookups are served from our own KV dictionary after first
-sight, so VDU's `word_accent` is only hit for never-seen words. The
-`text_accents` and UDPipe calls currently run once per request.
+Word-variant lookups are served from our own D1 dictionary after first sight,
+so VDU's `word_accent` is only hit for never-seen words. The legacy
+`text_accents` path remains the default until local-first parity is proven.
 
 ## Local development
 
@@ -52,7 +54,15 @@ npm run dev
 ```
 
 `npm run dev` runs `vite dev` with the official `@cloudflare/vite-plugin`
-(workerd runtime, KV simulated locally).
+(workerd runtime, D1 simulated locally).
+
+The D1 database already exists in Cloudflare. The migration commands for the
+orchestrator are:
+
+```sh
+npx wrangler d1 migrations apply kirciuokle-words --local
+npx wrangler d1 migrations apply kirciuokle-words --remote
+```
 
 ## Checks
 
@@ -81,6 +91,7 @@ Wrangler reads the credentials from `.env` automatically. Alternatively,
 
 ```json
 {
+  "source": "vdu",
   "tagger": "ok",
   "parts": [
     { "text": "Čia", "accented": "Čià", "type": "word" },

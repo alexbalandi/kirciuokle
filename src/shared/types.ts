@@ -14,6 +14,7 @@ export type AccentRequest = {
 };
 
 export type AccentResponse = {
+  source: "local" | "vdu";
   parts: Part[];
   tagger: "ok" | "unavailable";
 };
