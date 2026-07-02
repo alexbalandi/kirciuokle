@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.wrangler/
+.cloudflare/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.dev.vars
+
+# local tooling state
+.claude/settings.local.json
