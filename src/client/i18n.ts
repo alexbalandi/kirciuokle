@@ -246,42 +246,74 @@ export const MORPH_GLOSSES: Record<string, Gloss> = {
 // Longest-first key list for greedy matching ("būt. k. l." before "būt. l.").
 const MORPH_KEYS = Object.keys(MORPH_GLOSSES).sort((a, b) => b.length - a.length);
 
+export type MorphSegment = { text: string; lt?: string };
+
+type MorphToken = { text: string; gloss?: Gloss };
+
+function walkMorphPiece(piece: string): MorphToken[] {
+  let rest = piece.trim();
+  const tokens: MorphToken[] = [];
+
+  while (rest.length > 0) {
+    const key = MORPH_KEYS.find(
+      (k) =>
+        rest.startsWith(k) &&
+        (rest.length === k.length || rest[k.length] === " "),
+    );
+
+    if (key) {
+      tokens.push({ text: key, gloss: MORPH_GLOSSES[key]! });
+      rest = rest.slice(key.length).trimStart();
+    } else {
+      const space = rest.indexOf(" ");
+      if (space === -1) {
+        tokens.push({ text: rest });
+        rest = "";
+      } else {
+        tokens.push({ text: rest.slice(0, space) });
+        rest = rest.slice(space + 1);
+      }
+    }
+  }
+
+  return tokens;
+}
+
+function segmentForToken(token: MorphToken, lang: Lang): MorphSegment {
+  if (!token.gloss) {
+    return { text: token.text };
+  }
+
+  const text = token.gloss[lang];
+  return lang === "lt" ? { text } : { text, lt: token.gloss.lt };
+}
+
+function readingSegments(reading: string, lang: Lang): MorphSegment[] {
+  const pieces = reading.split(", ");
+  const segments: MorphSegment[] = [];
+
+  pieces.forEach((piece, pieceIndex) => {
+    if (pieceIndex > 0) {
+      segments.push({ text: ", " });
+    }
+
+    walkMorphPiece(piece).forEach((token, tokenIndex) => {
+      if (tokenIndex > 0) {
+        segments.push({ text: " " });
+      }
+      segments.push(segmentForToken(token, lang));
+    });
+  });
+
+  return segments;
+}
+
 /** Translate one mi reading like "bdv., vyr. g., vns. vard." token-wise.
  *  Unrecognized fragments are kept verbatim. */
 function translateReading(reading: string, lang: Lang): string {
-  const pieces = reading.split(", ");
-  const out: string[] = [];
-
-  for (const piece of pieces) {
-    let rest = piece.trim();
-    const translated: string[] = [];
-
-    while (rest.length > 0) {
-      const key = MORPH_KEYS.find(
-        (k) =>
-          rest.startsWith(k) &&
-          (rest.length === k.length || rest[k.length] === " "),
-      );
-
-      if (key) {
-        translated.push(MORPH_GLOSSES[key]![lang]);
-        rest = rest.slice(key.length).trimStart();
-      } else {
-        const space = rest.indexOf(" ");
-        if (space === -1) {
-          translated.push(rest);
-          rest = "";
-        } else {
-          translated.push(rest.slice(0, space));
-          rest = rest.slice(space + 1);
-        }
-      }
-    }
-
-    out.push(translated.join(" "));
-  }
-
-  return out.join(", ");
+  return readingSegments(reading, lang)
+    .map((segment) => segment.text)
+    .join("");
 }
 
 /** Translate a full variant info string. Readings are separated by "; ",
@@ -292,15 +324,34 @@ export function translateMorphology(info: string, lang: Lang): string {
     return info;
   }
 
-  return info
-    .split("; ")
-    .map((segment) => {
-      const dash = segment.indexOf(" - ");
-      const mi = dash === -1 ? segment : segment.slice(0, dash);
-      const meaning = dash === -1 ? "" : segment.slice(dash);
-      return translateReading(mi, lang) + meaning;
-    })
-    .join("; ");
+  return morphologySegments(info, lang)
+    .map((segment) => segment.text)
+    .join("");
+}
+
+export function morphologySegments(info: string, lang: Lang): MorphSegment[] {
+  if (!info) {
+    return [];
+  }
+
+  const segments: MorphSegment[] = [];
+
+  info.split("; ").forEach((segment, segmentIndex) => {
+    if (segmentIndex > 0) {
+      segments.push({ text: "; " });
+    }
+
+    const dash = segment.indexOf(" - ");
+    const mi = dash === -1 ? segment : segment.slice(0, dash);
+    const meaning = dash === -1 ? "" : segment.slice(dash);
+    segments.push(...readingSegments(mi, lang));
+
+    if (meaning) {
+      segments.push({ text: meaning });
+    }
+  });
+
+  return segments;
 }
 
 export function detectLang(): Lang {

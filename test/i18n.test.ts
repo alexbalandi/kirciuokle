@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { detectLang, translateMorphology } from "../src/client/i18n";
+import {
+  detectLang,
+  morphologySegments,
+  translateMorphology,
+} from "../src/client/i18n";
 
 declare global {
   var localStorage: {
@@ -53,6 +57,71 @@ describe("translateMorphology", () => {
     expect(translateMorphology("vksm., būt. k. l., 3 asm.", "en")).toBe(
       "verb, simple past, 3rd person",
     );
+  });
+});
+
+describe("morphologySegments", () => {
+  const twoReadings = "bdv., vyr. g., vns. šauksm.; bdv., vyr. g., vns. vard.";
+  const twoReadingsLt = [
+    "būdvardis",
+    "vyriškoji giminė",
+    "vienaskaita",
+    "šauksmininkas",
+    "būdvardis",
+    "vyriškoji giminė",
+    "vienaskaita",
+    "vardininkas",
+  ];
+
+  it("segments two readings for English with full Lithuanian terms", () => {
+    const segments = morphologySegments(twoReadings, "en");
+
+    expect(segments.map((segment) => segment.text).join("")).toBe(
+      translateMorphology(twoReadings, "en"),
+    );
+    expect(segments.flatMap((segment) => (segment.lt ? [segment.lt] : []))).toEqual(
+      twoReadingsLt,
+    );
+  });
+
+  it("segments two readings for Russian with full Lithuanian terms", () => {
+    const segments = morphologySegments(twoReadings, "ru");
+
+    expect(segments.map((segment) => segment.text).join("")).toBe(
+      translateMorphology(twoReadings, "ru"),
+    );
+    expect(segments.flatMap((segment) => (segment.lt ? [segment.lt] : []))).toEqual(
+      twoReadingsLt,
+    );
+  });
+
+  it("keeps unknown fragments plain", () => {
+    const segments = morphologySegments("bdv., nežinoma, vns. vard.", "en");
+    const unknown = segments.find((segment) => segment.text === "nežinoma");
+
+    expect(segments.map((segment) => segment.text).join("")).toBe(
+      translateMorphology("bdv., nežinoma, vns. vard.", "en"),
+    );
+    expect(unknown).toEqual({ text: "nežinoma" });
+  });
+
+  it("keeps dictionary meanings plain", () => {
+    const segments = morphologySegments("vksm., 3 asm. - būti", "en");
+    const meaning = segments.find((segment) => segment.text.includes("būti"));
+
+    expect(segments.map((segment) => segment.text).join("")).toBe(
+      translateMorphology("vksm., 3 asm. - būti", "en"),
+    );
+    expect(meaning).toEqual({ text: " - būti" });
+  });
+
+  it("does not annotate Lithuanian segments", () => {
+    const segments = morphologySegments(twoReadings, "lt");
+
+    expect(segments.map((segment) => segment.text).join("")).toBe(
+      translateMorphology(twoReadings, "lt"),
+    );
+    expect(segments.some((segment) => "lt" in segment)).toBe(false);
   });
 });
 

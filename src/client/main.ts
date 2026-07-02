@@ -6,9 +6,10 @@ import type {
 import {
   detectLang,
   LANGS,
-  translateMorphology,
+  morphologySegments,
   UI,
   type Lang,
+  type MorphSegment,
   type UiStrings,
 } from "./i18n";
 import "./style.css";
@@ -272,7 +273,7 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
 
     if (variant.info) {
       const info = document.createElement("span");
-      info.textContent = translateMorphology(variant.info, lang);
+      appendMorphologyInfo(info, morphologySegments(variant.info, lang));
       button.append(info);
     }
 
@@ -291,6 +292,27 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
   });
 
   positionPopover(popover, anchor);
+}
+
+function appendMorphologyInfo(
+  container: HTMLElement,
+  segments: MorphSegment[],
+): void {
+  segments.forEach((segment) => {
+    if (!segment.lt) {
+      container.append(document.createTextNode(segment.text));
+      return;
+    }
+
+    const ruby = document.createElement("ruby");
+    ruby.append(document.createTextNode(segment.text));
+
+    const rt = document.createElement("rt");
+    rt.textContent = segment.lt;
+    ruby.append(rt);
+
+    container.append(ruby);
+  });
 }
 
 function closePopover(): void {
