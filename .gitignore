@@ -10,3 +10,5 @@ dist/
 
 # local tooling state
 .claude/settings.local.json
+
+__pycache__/
