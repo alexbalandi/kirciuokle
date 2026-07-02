@@ -132,6 +132,10 @@ export function alignTokens(
   parts: AlignablePart[],
   tokens: Token[],
 ): Array<Token | null> {
+  // VDU only emits letter tokens; drop UDPipe's number/punctuation tokens,
+  // otherwise digit-heavy text (dates, scores) desyncs the scan window and
+  // disambiguation silently degrades to defaults.
+  tokens = tokens.filter((token) => /\p{L}/u.test(token.form));
   const aligned: Array<Token | null> = [];
   let tokenIndex = 0;
 

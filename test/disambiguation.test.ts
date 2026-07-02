@@ -70,6 +70,29 @@ describe("UDPipe alignment", () => {
       ),
     ).toEqual([tokens[0], tokens[2], null]);
   });
+
+  it("survives long digit/punctuation runs that VDU does not tokenize", () => {
+    const yra = token("yra", "būti", "AUX");
+    const tokens = [
+      token("Karas", "karas", "NOUN"),
+      // "(1918 m. 02 16 d., 1940–1990, 2004)" — UDPipe emits these, VDU skips
+      ...["(", "1918", ".", "02", "16", ".", ",", "1940", "–", "1990", ",", "2004", ")"].map(
+        (form) => token(form, form, "PUNCT"),
+      ),
+      yra,
+    ];
+
+    expect(
+      alignTokens(
+        [
+          { string: "Karas", type: "WORD" },
+          { string: " ", type: "SEPARATOR" },
+          { string: "yra", type: "WORD" },
+        ],
+        tokens,
+      ),
+    ).toEqual([tokens[0], yra]);
+  });
 });
 
 describe("MI parsing and scoring", () => {

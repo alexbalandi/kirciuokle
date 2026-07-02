@@ -265,6 +265,10 @@ def match_case(accented: str, original: str) -> str:
 
 def align(parts: list[dict], tokens: list[Token]) -> list[Token | None]:
     """For each WORD part, find the matching UDPipe token (in order)."""
+    # VDU only emits letter tokens; drop UDPipe's number/punctuation tokens,
+    # otherwise digit-heavy text (dates, scores) desyncs the scan window and
+    # disambiguation silently degrades to defaults.
+    tokens = [t for t in tokens if any(ch.isalpha() for ch in t.form)]
     out: list[Token | None] = []
     ti = 0
     for p in parts:
