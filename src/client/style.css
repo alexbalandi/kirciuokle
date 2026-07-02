@@ -371,8 +371,8 @@ button:disabled {
 .variant-popover {
   position: absolute;
   z-index: 20;
-  width: min(320px, calc(100vw - 24px));
-  max-height: 320px;
+  width: min(460px, calc(100vw - 24px));
+  max-height: min(480px, 70vh);
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -406,21 +406,32 @@ button:disabled {
   font-weight: 800;
 }
 
-.variant-option span {
-  color: var(--text-muted);
-  font-size: 0.86rem;
-  line-height: 1.85;
-  padding-top: 0.35em;
+.variant-option .variant-info {
+  display: block;
+  padding-top: 0.3em;
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
+.variant-option .variant-reading {
+  display: block;
+  padding: 3px 0 4px;
+}
+
+.variant-option .variant-reading + .variant-reading {
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
 }
 
 .variant-option ruby {
   white-space: nowrap;
+  ruby-position: under;
 }
 
 .variant-option rt {
   color: var(--text-muted);
-  font-size: 0.6em;
-  line-height: 1;
+  font-size: 0.72em;
+  line-height: 1.4;
+  padding-top: 1px;
 }
 
 .variant-option .variant-current {

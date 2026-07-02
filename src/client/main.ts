@@ -273,7 +273,13 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
 
     if (variant.info) {
       const info = document.createElement("span");
-      appendMorphologyInfo(info, morphologySegments(variant.info, lang));
+      info.className = "variant-info";
+      variant.info.split("; ").forEach((reading) => {
+        const row = document.createElement("span");
+        row.className = "variant-reading";
+        appendMorphologyInfo(row, morphologySegments(reading, lang));
+        info.append(row);
+      });
       button.append(info);
     }
 
@@ -304,11 +310,13 @@ function appendMorphologyInfo(
       return;
     }
 
+    // Lithuanian term is the primary text; the translation is the small
+    // helper annotation underneath.
     const ruby = document.createElement("ruby");
-    ruby.append(document.createTextNode(segment.text));
+    ruby.append(document.createTextNode(segment.lt));
 
     const rt = document.createElement("rt");
-    rt.textContent = segment.lt;
+    rt.textContent = segment.text;
     ruby.append(rt);
 
     container.append(ruby);
