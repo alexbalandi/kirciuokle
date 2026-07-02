@@ -13,6 +13,7 @@ const AJAX_URL = "https://kalbu.vdu.lt/ajax-call";
 const NONCE_TTL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_CHUNK_SIZE = 4500;
 export const WORD_CACHE_SECONDS = 7 * 24 * 60 * 60;
+export const NEGATIVE_WORD_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 type NonceCache = {
   value: string;
@@ -45,6 +46,15 @@ type VduAccentInfo = {
 
 type VduWordResponse = {
   accentInfo?: VduAccentInfo[];
+};
+
+type WordDictionaryEntry = {
+  variants: AccentVariant[];
+  fetchedAt: string;
+};
+
+type WordDictionaryEnv = {
+  WORDS: KVNamespace;
 };
 
 let nonceCache: NonceCache | null = null;
@@ -416,81 +426,64 @@ export async function lookupWordVariants(word: string): Promise<AccentVariant[]>
   return flattenVariants(response);
 }
 
-export async function lookupWordVariantsCached(
+export async function lookupWordVariantsKV(
   word: string,
+  env: WordDictionaryEnv,
   ctx?: Pick<ExecutionContext, "waitUntil">,
 ): Promise<AccentVariant[]> {
-  const cache = getDefaultCache();
-  const cacheKey = new Request(
-    `https://kirciuokle.local/cache/word?w=${encodeURIComponent(normalizeWordKey(word))}`,
-  );
-
-  if (cache) {
-    const cached = await readCachedVariants(cache, cacheKey);
-    if (cached) {
-      return cached;
-    }
+  const key = normalizeWordKey(word);
+  const cached = await readWordDictionaryEntry(env.WORDS, key);
+  if (cached) {
+    return cached.variants;
   }
 
-  const variants = await lookupWordVariants(normalizeWordKey(word));
+  const variants = await lookupWordVariants(key);
+  const entry: WordDictionaryEntry = {
+    variants,
+    fetchedAt: new Date().toISOString(),
+  };
+  const put =
+    variants.length === 0
+      ? env.WORDS.put(key, JSON.stringify(entry), {
+          expirationTtl: NEGATIVE_WORD_TTL_SECONDS,
+        })
+      : env.WORDS.put(key, JSON.stringify(entry));
 
-  if (cache) {
-    const response = Response.json(
-      { variants },
-      {
-        headers: {
-          "cache-control": `public, max-age=${WORD_CACHE_SECONDS}`,
-        },
-      },
-    );
-    const put = cache.put(cacheKey, response);
-
-    if (ctx) {
-      ctx.waitUntil(put.catch(() => undefined));
-    } else {
-      await put.catch(() => undefined);
-    }
+  if (ctx) {
+    ctx.waitUntil(put);
+  } else {
+    await put;
   }
 
   return variants;
 }
 
-function getDefaultCache(): Cache | null {
-  return typeof caches === "undefined" ? null : caches.default;
-}
-
-async function readCachedVariants(
-  cache: Cache,
-  cacheKey: Request,
-): Promise<AccentVariant[] | null> {
+async function readWordDictionaryEntry(
+  words: KVNamespace,
+  key: string,
+): Promise<WordDictionaryEntry | null> {
   try {
-    const response = await cache.match(cacheKey);
-    if (!response) {
-      return null;
-    }
-
-    const payload = (await response.json()) as { variants?: unknown };
-    if (!Array.isArray(payload.variants)) {
-      return null;
-    }
-
-    return payload.variants.flatMap((variant) => {
-      if (!isCachedVariant(variant)) {
-        return [];
-      }
-
-      return {
-        form: variant.form.normalize("NFC"),
-        info: variant.info,
-        mi: variant.mi,
-      };
-    });
+    const entry = await words.get<WordDictionaryEntry>(key, "json");
+    return isWordDictionaryEntry(entry) ? entry : null;
   } catch {
     return null;
   }
 }
 
-function isCachedVariant(value: unknown): value is AccentVariant {
+function isWordDictionaryEntry(value: unknown): value is WordDictionaryEntry {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<WordDictionaryEntry>;
+  return (
+    Array.isArray(candidate.variants) &&
+    candidate.variants.every(isAccentVariant) &&
+    typeof candidate.fetchedAt === "string"
+  );
+}
+
+function isAccentVariant(value: unknown): value is AccentVariant {
   if (!value || typeof value !== "object") {
     return false;
   }

@@ -6,7 +6,7 @@ import type {
 } from "../shared/types";
 import {
   accentText,
-  lookupWordVariantsCached,
+  lookupWordVariantsKV,
   UpstreamError,
   WORD_CACHE_SECONDS,
 } from "./vdu";
@@ -16,6 +16,7 @@ const MAX_TEXT_LENGTH = 20_000;
 
 export interface Env {
   ASSETS: Fetcher;
+  WORDS: KVNamespace;
 }
 
 export default {
@@ -24,11 +25,11 @@ export default {
 
     try {
       if (url.pathname === "/api/accent") {
-        return handleAccent(request, ctx);
+        return handleAccent(request, env, ctx);
       }
 
       if (url.pathname === "/api/word") {
-        return handleWord(request, url, ctx);
+        return handleWord(request, url, env, ctx);
       }
 
       if (url.pathname.startsWith("/api/")) {
@@ -49,6 +50,7 @@ export default {
 
 async function handleAccent(
   request: Request,
+  env: Env,
   ctx: ExecutionContext,
 ): Promise<Response> {
   if (request.method !== "POST") {
@@ -65,7 +67,7 @@ async function handleAccent(
   }
 
   const response = await accentText(payload.text, {
-    lookupVariants: (word) => lookupWordVariantsCached(word, ctx),
+    lookupVariants: (word) => lookupWordVariantsKV(word, env, ctx),
   });
   return json<AccentResponse>(response);
 }
@@ -73,6 +75,7 @@ async function handleAccent(
 async function handleWord(
   request: Request,
   url: URL,
+  env: Env,
   ctx: ExecutionContext,
 ): Promise<Response> {
   if (request.method !== "GET") {
@@ -84,7 +87,7 @@ async function handleWord(
     return json<ErrorResponse>({ error: "Trūksta žodžio." }, 400);
   }
 
-  const variants = await lookupWordVariantsCached(word, ctx);
+  const variants = await lookupWordVariantsKV(word, env, ctx);
   return json<WordResponse>(
     { variants: toPublicVariants(variants) },
     200,
