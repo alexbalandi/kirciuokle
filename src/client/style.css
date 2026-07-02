@@ -50,6 +50,13 @@ a {
   margin-bottom: 28px;
 }
 
+.hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
 .hero h1 {
   margin: 0;
   font-size: clamp(2.35rem, 4vw, 4.5rem);
@@ -62,6 +69,43 @@ a {
   margin: 14px 0 0;
   color: var(--text-muted);
   font-size: 1.08rem;
+}
+
+.language-switcher {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(23 33 36 / 5%);
+}
+
+.language-switcher button {
+  min-width: 38px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.language-switcher button:hover,
+.language-switcher button:focus-visible {
+  color: var(--accent-strong);
+  background: var(--surface-muted);
+  outline: none;
+}
+
+.language-switcher button.is-active {
+  color: white;
+  background: var(--accent);
 }
 
 .workspace {
@@ -303,6 +347,11 @@ button:disabled {
   gap: 7px;
 }
 
+.legend-heading {
+  color: color-mix(in srgb, var(--text-muted) 88%, var(--accent));
+  font-weight: 800;
+}
+
 .legend-line {
   display: inline-block;
   width: 26px;
@@ -386,6 +435,10 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .hero-top {
+    flex-direction: column;
+  }
+
   .result-output {
     max-height: none;
   }
@@ -414,6 +467,10 @@ button:disabled {
 
   .secondary-button {
     color: #bff8ee;
+  }
+
+  .language-switcher button.is-active {
+    color: #07201c;
   }
 
   .counter.is-over,

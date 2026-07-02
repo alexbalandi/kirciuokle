@@ -3,27 +3,77 @@ import type {
   ErrorResponse,
   Part,
 } from "../shared/types";
+import {
+  detectLang,
+  LANGS,
+  translateMorphology,
+  UI,
+  type Lang,
+  type UiStrings,
+} from "./i18n";
 import "./style.css";
 
 const MAX_TEXT_LENGTH = 20_000;
+
+type MessageKey = Extract<
+  keyof UiStrings,
+  "errEmpty" | "errTooLong" | "errUpstream" | "errUnexpected"
+>;
 
 type RenderedPart = Part & {
   current?: string;
   userChosen?: boolean;
 };
 
+class AccentRequestError extends Error {
+  constructor(readonly status: number) {
+    super(`Accent request failed with status ${status}`);
+  }
+}
+
+const languageSwitcher = getElement<HTMLDivElement>("language-switcher");
+const languageButtons = Array.from(
+  languageSwitcher.querySelectorAll<HTMLButtonElement>("button[data-lang]"),
+);
+const heroTagline = getElement<HTMLParagraphElement>("hero-tagline");
 const form = getElement<HTMLFormElement>("accent-form");
+const inputLabel = getElement<HTMLLabelElement>("input-label");
 const textarea = getElement<HTMLTextAreaElement>("source-text");
 const charCounter = getElement<HTMLSpanElement>("char-counter");
 const accentButton = getElement<HTMLButtonElement>("accent-button");
 const copyButton = getElement<HTMLButtonElement>("copy-button");
 const message = getElement<HTMLParagraphElement>("form-message");
+const resultHeading = getElement<HTMLHeadingElement>("result-heading");
 const resultOutput = getElement<HTMLDivElement>("result-output");
 const taggerNotice = getElement<HTMLDivElement>("tagger-notice");
+const taggerNoticeText = getElement<HTMLSpanElement>("tagger-notice-text");
 const taggerNoticeClose = getElement<HTMLButtonElement>("tagger-notice-close");
+const legend = getElement<HTMLDivElement>("legend");
+const legendLabel = getElement<HTMLSpanElement>("legend-label");
+const legendResolved = getElement<HTMLSpanElement>("legend-resolved");
+const legendAmbiguous = getElement<HTMLSpanElement>("legend-ambiguous");
+const legendUnknown = getElement<HTMLSpanElement>("legend-unknown");
+const siteFooter = getElement<HTMLElement>("site-footer");
+const metaDescription = document.querySelector<HTMLMetaElement>(
+  'meta[name="description"]',
+);
 
+let lang: Lang = detectLang();
 let renderedParts: RenderedPart[] = [];
 let activePopover: HTMLDivElement | null = null;
+let isLoading = false;
+let messageKey: MessageKey | null = null;
+let copyResetTimer: number | undefined;
+let copied = false;
+
+languageButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const nextLang = parseLang(button.dataset.lang);
+    if (nextLang) {
+      setLanguage(nextLang);
+    }
+  });
+});
 
 textarea.addEventListener("input", () => {
   resizeTextarea();
@@ -68,21 +118,22 @@ document.addEventListener("click", (event) => {
   }
 });
 
+setLanguage(lang, { persist: false });
 resizeTextarea();
 updateCounter();
 
 async function submitText(): Promise<void> {
   const text = textarea.value;
   closePopover();
-  setMessage("");
+  setMessage(null);
 
   if (text.trim().length === 0) {
-    setMessage("Įveskite tekstą.");
+    setMessage("errEmpty");
     return;
   }
 
   if (text.length > MAX_TEXT_LENGTH) {
-    setMessage("Tekstas per ilgas.");
+    setMessage("errTooLong");
     return;
   }
 
@@ -95,9 +146,12 @@ async function submitText(): Promise<void> {
       body: JSON.stringify({ text }),
     });
 
-    const payload = (await response.json()) as AccentResponse | ErrorResponse;
-    if (!response.ok || "error" in payload) {
-      throw new Error("error" in payload ? payload.error : "Nepavyko sukirčiuoti.");
+    const payload = (await response.json().catch(() => null)) as
+      | AccentResponse
+      | ErrorResponse
+      | null;
+    if (!response.ok || !payload || "error" in payload) {
+      throw new AccentRequestError(response.status);
     }
 
     renderedParts = payload.parts.map((part) => ({
@@ -119,7 +173,11 @@ async function submitText(): Promise<void> {
     showTaggerNotice(false);
     renderResult();
     copyButton.disabled = true;
-    setMessage(error instanceof Error ? error.message : "Nepavyko sukirčiuoti.");
+    setMessage(
+      error instanceof AccentRequestError
+        ? getMessageKeyForStatus(error.status)
+        : "errUnexpected",
+    );
   } finally {
     setLoading(false);
   }
@@ -130,7 +188,7 @@ function renderResult(): void {
 
   if (renderedParts.length === 0) {
     resultOutput.classList.add("is-empty");
-    resultOutput.textContent = "Rezultatas atsiras čia.";
+    resultOutput.textContent = UI[lang].resultEmpty;
     return;
   }
 
@@ -166,7 +224,7 @@ function renderResult(): void {
     if (part.unknown) {
       const span = document.createElement("span");
       span.className = "token token-unknown";
-      span.title = "Žodyne nerasta";
+      span.title = UI[lang].unknownTitle;
       span.textContent = visibleText;
       resultOutput.append(span);
       return;
@@ -193,7 +251,7 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
   const variants = part.variants ?? [];
 
   if (variants.length === 0) {
-    popover.textContent = "Variantų nerasta.";
+    popover.textContent = UI[lang].variantsNone;
     positionPopover(popover, anchor);
     return;
   }
@@ -214,15 +272,8 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
 
     if (variant.info) {
       const info = document.createElement("span");
-      info.textContent = variant.info;
+      info.textContent = translateMorphology(variant.info, lang);
       button.append(info);
-    }
-
-    if (part.chosen === variantIndex) {
-      const marker = document.createElement("span");
-      marker.className = "variant-current";
-      marker.textContent = "Pasirinkta";
-      button.append(marker);
     }
 
     button.addEventListener("click", () => {
@@ -265,10 +316,15 @@ async function copyResult(): Promise<void> {
   }
 
   await navigator.clipboard.writeText(text);
-  const previous = copyButton.textContent;
-  copyButton.textContent = "Nukopijuota ✓";
-  window.setTimeout(() => {
-    copyButton.textContent = previous;
+  copied = true;
+  renderUi();
+
+  if (copyResetTimer) {
+    window.clearTimeout(copyResetTimer);
+  }
+  copyResetTimer = window.setTimeout(() => {
+    copied = false;
+    renderUi();
   }, 1400);
 }
 
@@ -276,9 +332,15 @@ function getVisibleText(part: RenderedPart): string {
   return (part.current ?? part.accented ?? part.text).normalize("NFC");
 }
 
-function setLoading(isLoading: boolean): void {
-  accentButton.disabled = isLoading;
-  accentButton.textContent = isLoading ? "Kirčiuojama..." : "Sukirčiuoti";
+function setLoading(nextLoading: boolean): void {
+  window.clearTimeout(copyResetTimer);
+  copyResetTimer = undefined;
+  isLoading = nextLoading;
+  copied = false;
+  accentButton.disabled = nextLoading;
+  accentButton.textContent = nextLoading
+    ? UI[lang].accentButtonLoading
+    : UI[lang].accentButton;
 }
 
 function updateCounter(): void {
@@ -292,12 +354,96 @@ function resizeTextarea(): void {
   textarea.style.height = `${textarea.scrollHeight}px`;
 }
 
-function setMessage(text: string): void {
-  message.textContent = text;
+function setMessage(key: MessageKey | null): void {
+  messageKey = key;
+  message.textContent = key ? UI[lang][key] : "";
 }
 
 function showTaggerNotice(show: boolean): void {
   taggerNotice.hidden = !show;
+}
+
+function setLanguage(
+  nextLang: Lang,
+  options: { persist: boolean } = { persist: true },
+): void {
+  lang = nextLang;
+  document.documentElement.lang = lang;
+
+  if (options.persist) {
+    localStorage.setItem("lang", lang);
+  }
+
+  closePopover();
+  renderUi();
+  renderResult();
+}
+
+function renderUi(): void {
+  const strings = UI[lang];
+
+  metaDescription?.setAttribute("content", strings.tagline);
+  heroTagline.textContent = strings.tagline;
+  inputLabel.textContent = strings.inputLabel;
+  accentButton.textContent = isLoading
+    ? strings.accentButtonLoading
+    : strings.accentButton;
+  copyButton.textContent = copied ? strings.copied : strings.copyButton;
+  resultHeading.textContent = strings.resultHeading;
+  taggerNoticeText.textContent = strings.taggerNotice;
+  legend.setAttribute("aria-label", strings.legendLabel);
+  legendLabel.textContent = strings.legendLabel;
+  legendResolved.textContent = strings.legendResolved;
+  legendAmbiguous.textContent = strings.legendAmbiguous;
+  legendUnknown.textContent = strings.legendUnknown;
+  message.textContent = messageKey ? strings[messageKey] : "";
+
+  languageButtons.forEach((button) => {
+    const buttonLang = parseLang(button.dataset.lang);
+    const isCurrent = buttonLang === lang;
+    button.classList.toggle("is-active", isCurrent);
+    button.setAttribute("aria-pressed", String(isCurrent));
+  });
+
+  renderFooter(strings);
+}
+
+function renderFooter(strings: UiStrings): void {
+  const vduLink = document.createElement("a");
+  vduLink.href = "https://kalbu.vdu.lt";
+  vduLink.rel = "noreferrer";
+  vduLink.target = "_blank";
+  vduLink.textContent = "VDU kirčiuoklė";
+
+  const kirtisLink = document.createElement("a");
+  kirtisLink.href = "https://kirtis.info";
+  kirtisLink.rel = "noreferrer";
+  kirtisLink.target = "_blank";
+  kirtisLink.textContent = "kirtis.info";
+
+  siteFooter.replaceChildren(
+    document.createTextNode(`${strings.footerData}: `),
+    vduLink,
+    document.createTextNode(` (kalbu.vdu.lt) · ${strings.footerInspired} `),
+    kirtisLink,
+  );
+}
+
+function parseLang(value: string | undefined): Lang | null {
+  return LANGS.find((candidate) => candidate === value) ?? null;
+}
+
+function getMessageKeyForStatus(status: number): MessageKey {
+  switch (status) {
+    case 400:
+      return "errEmpty";
+    case 413:
+      return "errTooLong";
+    case 502:
+      return "errUpstream";
+    default:
+      return "errUnexpected";
+  }
 }
 
 function matchCase(accented: string, original: string): string {
