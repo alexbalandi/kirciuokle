@@ -7,7 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "check": "tsc --build && vitest run --config vitest.config.ts",
-    "deploy": "wrangler deploy",
+    "deploy": "vite build && wrangler deploy",
     "cf-typegen": "wrangler types"
   },
   "devDependencies": {

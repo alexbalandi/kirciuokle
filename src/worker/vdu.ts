@@ -51,6 +51,8 @@ export type WordAccentEntry = {
   variants: AccentVariant[];
   defaultForm: string | null;
   accentType: string | null;
+  defaultFormTitle: string | null;
+  accentTypeTitle: string | null;
 };
 
 let nonceCache: NonceCache | null = null;
@@ -433,7 +435,13 @@ export async function lookupWordEntriesConcurrently(
 ): Promise<Map<string, WordAccentEntry>> {
   return lookupConcurrently(words, lookupEntry, {
     ...options,
-    fallback: () => ({ variants: [], defaultForm: null, accentType: null }),
+    fallback: () => ({
+      variants: [],
+      defaultForm: null,
+      accentType: "NONE",
+      defaultFormTitle: null,
+      accentTypeTitle: "NONE",
+    }),
   });
 }
 
@@ -476,21 +484,42 @@ export async function lookupWordVariants(word: string): Promise<AccentVariant[]>
 
 export async function fetchWordEntry(word: string): Promise<WordAccentEntry> {
   const variants = await lookupWordVariants(word);
-  const textParts = await fetchTextAccentParts(word);
-  const wordPart = textParts.find((part) => part.type === "WORD");
-  const defaultForm = wordPart?.accented?.normalize("NFC") ?? null;
-
-  if (!wordPart || !defaultForm) {
-    return {
-      variants: [],
-      defaultForm: null,
-      accentType: wordPart?.accentType ?? null,
-    };
-  }
+  const lower = await fetchCanonicalWordSide(word);
+  const title = await fetchCanonicalWordSide(toTitleCase(word));
 
   return {
     variants,
-    defaultForm,
-    accentType: wordPart.accentType ?? "ONE",
+    defaultForm: lower.form,
+    accentType: lower.type,
+    defaultFormTitle: title.form,
+    accentTypeTitle: title.type,
   };
+}
+
+async function fetchCanonicalWordSide(
+  word: string,
+): Promise<{ form: string | null; type: string }> {
+  const textParts = await fetchTextAccentParts(word);
+  const wordPart = textParts.find((part) => part.type === "WORD");
+  const form = wordPart?.accented?.normalize("NFC") ?? null;
+
+  if (!wordPart || !form) {
+    return { form: null, type: "NONE" };
+  }
+
+  return {
+    form,
+    type: wordPart.accentType ?? "ONE",
+  };
+}
+
+function toTitleCase(word: string): string {
+  const letters = Array.from(word.normalize("NFC"));
+  const first = letters[0];
+
+  if (!first) {
+    return word;
+  }
+
+  return `${first.toUpperCase()}${letters.slice(1).join("")}`;
 }

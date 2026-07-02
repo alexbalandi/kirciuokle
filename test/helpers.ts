@@ -9,6 +9,8 @@ type StoredWord = {
   negative_until: string | null;
   default_form: string | null;
   accent_type: string | null;
+  default_form_title: string | null;
+  accent_type_title: string | null;
 };
 
 type TestVduWordResponse = {
@@ -55,7 +57,7 @@ export class MemoryD1 {
           }
 
           this.insertBinds.push(values);
-          for (let index = 0; index < values.length; index += 6) {
+          for (let index = 0; index < values.length; index += 8) {
             const word = String(values[index]);
             this.store.set(word, {
               word,
@@ -67,6 +69,10 @@ export class MemoryD1 {
                 values[index + 4] === null ? null : String(values[index + 4]),
               accent_type:
                 values[index + 5] === null ? null : String(values[index + 5]),
+              default_form_title:
+                values[index + 6] === null ? null : String(values[index + 6]),
+              accent_type_title:
+                values[index + 7] === null ? null : String(values[index + 7]),
             } as StoredWord);
           }
 
@@ -84,6 +90,8 @@ export class MemoryD1 {
       negativeUntil?: string | null;
       defaultForm?: string | null;
       accentType?: string | null;
+      defaultFormTitle?: string | null;
+      accentTypeTitle?: string | null;
     } = {},
   ): void {
     const defaultForm =
@@ -94,6 +102,12 @@ export class MemoryD1 {
         : variants.length > 0
           ? "ONE"
           : null;
+    const defaultFormTitle =
+      "defaultFormTitle" in options
+        ? options.defaultFormTitle ?? null
+        : titleCaseForm(defaultForm);
+    const accentTypeTitle =
+      "accentTypeTitle" in options ? options.accentTypeTitle ?? null : accentType;
 
     this.store.set(word, {
       word,
@@ -102,6 +116,8 @@ export class MemoryD1 {
       negative_until: options.negativeUntil ?? null,
       default_form: defaultForm,
       accent_type: accentType,
+      default_form_title: defaultFormTitle,
+      accent_type_title: accentTypeTitle,
     });
   }
 
@@ -124,6 +140,8 @@ export class MemoryD1 {
       variants: JSON.parse(row.variants) as AccentVariant[],
       defaultForm: row.default_form,
       accentType: row.accent_type,
+      defaultFormTitle: row.default_form_title,
+      accentTypeTitle: row.accent_type_title,
     };
   }
 }
@@ -152,6 +170,7 @@ export function captureWaitUntil(): {
 export function stubVduFetch(options: {
   wordResponses?: Record<string, TestVduWordResponse>;
   textParts?: TestVduTextPart[];
+  textResponses?: Record<string, TestVduTextPart[]>;
   conllu?: string;
 }) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -183,9 +202,12 @@ export function stubVduFetch(options: {
     }
 
     if (action === "text_accents") {
+      const bodyText = params.get("body") ?? "";
       return Response.json({
         code: 200,
-        message: JSON.stringify({ textParts: options.textParts ?? [] }),
+        message: JSON.stringify({
+          textParts: options.textResponses?.[bodyText] ?? options.textParts ?? [],
+        }),
       });
     }
 
@@ -194,4 +216,19 @@ export function stubVduFetch(options: {
 
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+function titleCaseForm(form: string | null): string | null {
+  if (!form) {
+    return null;
+  }
+
+  const letters = Array.from(form.normalize("NFC"));
+  const first = letters[0];
+
+  if (!first) {
+    return form;
+  }
+
+  return `${first.toUpperCase()}${letters.slice(1).join("")}`;
 }

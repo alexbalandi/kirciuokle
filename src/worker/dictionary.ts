@@ -2,7 +2,7 @@ import type { AccentVariant } from "./disambiguation";
 import { fetchWordEntry } from "./vdu";
 
 const MAX_D1_BOUND_PARAMETERS = 90;
-const PUT_PARAMETERS_PER_ENTRY = 6;
+const PUT_PARAMETERS_PER_ENTRY = 8;
 export const NEGATIVE_WORD_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type WordDictionaryEnv = {
@@ -13,6 +13,8 @@ export type WordDictionaryEntry = {
   variants: AccentVariant[];
   defaultForm: string | null;
   accentType: string | null;
+  defaultFormTitle: string | null;
+  accentTypeTitle: string | null;
 };
 
 export type WordDictionaryPutEntry = WordDictionaryEntry & {
@@ -25,6 +27,8 @@ type WordRow = {
   negative_until: string | null;
   default_form: string | null;
   accent_type: string | null;
+  default_form_title: string | null;
+  accent_type_title: string | null;
 };
 
 export async function getWords(
@@ -45,7 +49,7 @@ export async function getWords(
     const placeholders = chunk.map(() => "?").join(", ");
     const rows = await env.DICT
       .prepare(
-        `SELECT word, variants, negative_until, default_form, accent_type FROM words WHERE word IN (${placeholders})`,
+        `SELECT word, variants, negative_until, default_form, accent_type, default_form_title, accent_type_title FROM words WHERE word IN (${placeholders})`,
       )
       .bind(...chunk)
       .all<WordRow>();
@@ -58,7 +62,12 @@ export async function getWords(
         continue;
       }
 
-      if (row.accent_type === null && !isValidNegative(row, variants, now)) {
+      if (row.accent_type_title === null) {
+        result.set(word, null);
+        continue;
+      }
+
+      if (isExpiredNegative(row, now)) {
         result.set(word, null);
         continue;
       }
@@ -67,6 +76,8 @@ export async function getWords(
         variants,
         defaultForm: row.default_form?.normalize("NFC") ?? null,
         accentType: row.accent_type,
+        defaultFormTitle: row.default_form_title?.normalize("NFC") ?? null,
+        accentTypeTitle: row.accent_type_title,
       });
     }
   }
@@ -91,19 +102,21 @@ export async function putWords(
       continue;
     }
 
-    const valuesSql = chunk.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+    const valuesSql = chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
     const values = chunk.flatMap((entry) => [
       entry.word,
       JSON.stringify(entry.variants),
       fetchedAt,
-      entry.variants.length === 0 ? negativeUntil : null,
+      isNegativeEntry(entry) ? negativeUntil : null,
       entry.defaultForm,
       entry.accentType,
+      entry.defaultFormTitle,
+      entry.accentTypeTitle,
     ]);
 
     await env.DICT
       .prepare(
-        `INSERT OR REPLACE INTO words (word, variants, fetched_at, negative_until, default_form, accent_type) VALUES ${valuesSql}`,
+        `INSERT OR REPLACE INTO words (word, variants, fetched_at, negative_until, default_form, accent_type, default_form_title, accent_type_title) VALUES ${valuesSql}`,
       )
       .bind(...values)
       .run();
@@ -153,6 +166,8 @@ function normalizePutEntries(
       })),
       defaultForm: entry.defaultForm?.normalize("NFC") ?? null,
       accentType: entry.accentType,
+      defaultFormTitle: entry.defaultFormTitle?.normalize("NFC") ?? null,
+      accentTypeTitle: entry.accentTypeTitle,
     });
   }
 
@@ -173,16 +188,16 @@ function chunks<T>(items: T[], size: number): T[][] {
   return result;
 }
 
-function isValidNegative(
-  row: WordRow,
-  variants: AccentVariant[],
-  now: number,
-): boolean {
+function isNegativeEntry(entry: WordDictionaryPutEntry): boolean {
   return (
-    variants.length === 0 &&
-    row.negative_until !== null &&
-    Date.parse(row.negative_until) >= now
+    entry.variants.length === 0 &&
+    entry.defaultForm === null &&
+    entry.defaultFormTitle === null
   );
+}
+
+function isExpiredNegative(row: WordRow, now: number): boolean {
+  return row.negative_until !== null && Date.parse(row.negative_until) < now;
 }
 
 function parseVariants(raw: string): AccentVariant[] | null {

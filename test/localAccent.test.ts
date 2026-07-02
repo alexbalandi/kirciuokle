@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccentVariant } from "../src/worker/disambiguation";
 import { getWords } from "../src/worker/dictionary";
 import worker from "../src/worker/index";
-import { accentTextLocalFirst } from "../src/worker/localAccent";
+import { accentTextLocalFirst, tokenizeLikeVdu } from "../src/worker/localAccent";
 import { accentText } from "../src/worker/vdu";
 import { clearNonceCache } from "../src/worker/vdu";
 import { captureWaitUntil, envFor, MemoryD1, stubVduFetch } from "./helpers";
@@ -134,6 +134,76 @@ describe("local-first accentuation", () => {
     ]);
   });
 
+  it("uses case-sensitive canonical sides for alyta and Alyta", async () => {
+    const d1 = new MemoryD1();
+    d1.setWord(
+      "alyta",
+      [{ form: "Alytà", info: "dkt.", mi: ["dkt."] }],
+      {
+        defaultForm: null,
+        accentType: "NONE",
+        defaultFormTitle: "Alytà",
+        accentTypeTitle: "MULTIPLE_MEANING",
+      },
+    );
+    const { ctx } = captureWaitUntil();
+
+    const response = await accentTextLocalFirst("alyta Alyta", envFor(d1), ctx, {
+      useTagger: false,
+    });
+
+    expect(response.parts).toEqual([
+      { text: "alyta", type: "word", unknown: true },
+      { text: " ", type: "sep" },
+      {
+        text: "Alyta",
+        accented: "Alytà",
+        type: "word",
+        ambiguous: true,
+        variants: [{ form: "Alytà", info: "dkt." }],
+        chosen: 0,
+      },
+    ]);
+  });
+
+  it("keeps lowercase vilnius variant plain but capitalized Vilnius ambiguous", async () => {
+    const d1 = new MemoryD1();
+    d1.setWord(
+      "vilnius",
+      [
+        { form: "vìlnius", info: "dkt.", mi: ["dkt."] },
+        { form: "vil̃nius", info: "dkt.", mi: ["dkt."] },
+      ],
+      {
+        defaultForm: "vìlnius",
+        accentType: "MULTIPLE_VARIANT",
+        defaultFormTitle: "Vìlnius",
+        accentTypeTitle: "MULTIPLE_MEANING",
+      },
+    );
+    const { ctx } = captureWaitUntil();
+
+    const response = await accentTextLocalFirst("vilnius Vilnius", envFor(d1), ctx, {
+      useTagger: false,
+    });
+
+    expect(response.parts).toEqual([
+      { text: "vilnius", accented: "vìlnius", type: "word" },
+      { text: " ", type: "sep" },
+      {
+        text: "Vilnius",
+        accented: "Vìlnius",
+        type: "word",
+        ambiguous: true,
+        variants: [
+          { form: "vìlnius", info: "dkt." },
+          { form: "vil̃nius", info: "dkt." },
+        ],
+        chosen: 0,
+      },
+    ]);
+  });
+
   it("emits uppercase Roman numerals as plain words without lookup flags", async () => {
     const d1 = new MemoryD1();
     const { ctx, promises } = captureWaitUntil();
@@ -147,9 +217,101 @@ describe("local-first accentuation", () => {
     expect(promises).toEqual([]);
   });
 
+  it("leaves dot abbreviations unknown without lookup before Roman numerals", async () => {
+    const d1 = new MemoryD1();
+    d1.setWord("kalba", [{ form: "kalbà", info: "dkt.", mi: ["dkt."] }], {
+      defaultForm: "kalbà",
+      accentType: "ONE",
+      defaultFormTitle: "Kalbà",
+      accentTypeTitle: "ONE",
+    });
+    const { ctx, promises } = captureWaitUntil();
+
+    const response = await accentTextLocalFirst(
+      "m. rus. V. kalba XX a.",
+      envFor(d1),
+      ctx,
+      { useTagger: false },
+    );
+
+    expect(response.parts).toEqual([
+      { text: "m.", type: "word", unknown: true },
+      { text: " ", type: "sep" },
+      { text: "rus.", type: "word", unknown: true },
+      { text: " ", type: "sep" },
+      { text: "V.", type: "word", unknown: true },
+      { text: " ", type: "sep" },
+      { text: "kalba", accented: "kalbà", type: "word" },
+      { text: " ", type: "sep" },
+      { text: "XX", type: "word" },
+      { text: " ", type: "sep" },
+      { text: "a.", type: "word", unknown: true },
+    ]);
+    expect(d1.selectBinds).toEqual([["kalba"]]);
+    expect(promises).toEqual([]);
+  });
+
+  it("refetches a legacy 5b row with NULL title columns and rewrites it complete", async () => {
+    const d1 = new MemoryD1();
+    d1.setWord("kalba", [{ form: "kalbà", info: "dkt.", mi: ["dkt."] }], {
+      defaultForm: "kalbà",
+      accentType: "ONE",
+      defaultFormTitle: null,
+      accentTypeTitle: null,
+    });
+    const fetchMock = stubVduFetch({
+      wordResponses: {
+        kalba: {
+          accentInfo: [
+            {
+              accented: ["kalba\u0300"],
+              information: [{ mi: "dkt.", meaning: "kalba" }],
+            },
+          ],
+        },
+      },
+      textResponses: {
+        kalba: [
+          {
+            string: "kalba",
+            accented: "kalba\u0300",
+            accentType: "ONE",
+            type: "WORD",
+          },
+        ],
+        Kalba: [
+          {
+            string: "Kalba",
+            accented: "Kalba\u0300",
+            accentType: "ONE",
+            type: "WORD",
+          },
+        ],
+      },
+    });
+    const { ctx, promises } = captureWaitUntil();
+
+    const response = await accentTextLocalFirst("kalba", envFor(d1), ctx, {
+      useTagger: false,
+    });
+    await Promise.all(promises);
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(response.parts).toEqual([
+      { text: "kalba", accented: "kalbà", type: "word" },
+    ]);
+    expect(d1.getEntry("kalba")).toEqual({
+      variants: [{ form: "kalbà", info: "dkt. - kalba", mi: ["dkt."] }],
+      defaultForm: "kalbà",
+      accentType: "ONE",
+      defaultFormTitle: "Kalbà",
+      accentTypeTitle: "ONE",
+    });
+  });
+
   it("falls back to legacy text accents over the miss budget and still seeds misses", async () => {
     const d1 = new MemoryD1();
-    const words = Array.from({ length: 16 }, (_, index) =>
+    const words = Array.from({ length: 11 }, (_, index) =>
       String.fromCharCode(97 + Math.floor(index / 26)) +
       String.fromCharCode(97 + (index % 26)),
     );
@@ -172,8 +334,8 @@ describe("local-first accentuation", () => {
     expect(response.parts).toEqual([
       { text: "fallback", accented: "fallback", type: "word" },
     ]);
-    expect(d1.store.size).toBe(15);
-    expect((await getWords(envFor(d1), words.slice(0, 15))).size).toBe(15);
+    expect(d1.store.size).toBe(10);
+    expect((await getWords(envFor(d1), words.slice(0, 10))).size).toBe(10);
   });
 
   it("lets the accent source be overridden per request", async () => {
@@ -215,5 +377,29 @@ describe("local-first accentuation", () => {
       source: "vdu",
       parts: [{ text: "Čia", accented: "Čià", type: "word" }],
     });
+  });
+});
+
+describe("tokenizeLikeVdu edge cases", () => {
+  it("keeps pre-accented words whole and untouched (NON_LT)", () => {
+    // "mė́nuo" carries a combining acute (no precomposed form exists for ė́)
+    const { textParts, lookupWords } = tokenizeLikeVdu("Tas mė́nuo baigėsi.");
+
+    expect(textParts.map((p) => [p.string, p.type])).toEqual([
+      ["Tas", "WORD"],
+      [" ", "SEPARATOR"],
+      ["mė́nuo".normalize("NFC"), "NON_LT"],
+      [" ", "SEPARATOR"],
+      ["baigėsi", "WORD"],
+      [".", "SEPARATOR"],
+    ]);
+    expect(lookupWords.map((w) => w.key)).toEqual(["tas", "baigėsi"]);
+  });
+
+  it("treats pers. as an abbreviation", () => {
+    const { textParts, lookupWords } = tokenizeLikeVdu("pers. Litva");
+
+    expect(textParts[0]).toMatchObject({ string: "pers.", accentType: "NONE" });
+    expect(lookupWords.map((w) => w.key)).toEqual(["litva"]);
   });
 });

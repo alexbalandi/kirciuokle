@@ -20,11 +20,18 @@ orchestrates:
    against the in-context tag and picks the best match per occurrence. A
    small lemma table handles homographs whose variants share identical
    morphology (e.g. *yra*: *būti* → *yrà*, *irti* → *ỹra*).
-3. **Durable dictionary** — every word's variant set is memoized in a D1
-   dictionary on first sight, verbatim from VDU. Words VDU does not know are
-   cached negatively for 30 days. The local-first accent path can be enabled
-   with `ACCENT_SOURCE=local` or tested per request with `?source=local`; the
-   default remains the legacy VDU whole-text path.
+3. **Durable dictionary, local-first** — the Worker tokenizes the text
+   itself and accents it from a D1 dictionary that stores, per word,
+   VDU's variants plus the canonical default form and accent type for both
+   the lowercase and the capitalized spelling (VDU's answers are
+   case-sensitive: *Alyta* vs *alyta*). Never-seen words are fetched from
+   VDU on the fly (and remembered); if a request has too many unknown
+   words, it transparently falls back to the legacy VDU whole-text path.
+   Words VDU does not know are cached negatively for 30 days.
+   `ACCENT_SOURCE=local` is the default; `?source=vdu` forces the legacy
+   path per request (used by the A/B parity gate).
+   `scripts/seed_dictionary.py` pre-warms the dictionary politely from a
+   frequency list or a text file.
 
 In the UI, green-underlined words were resolved by context, amber ones are
 unresolved ties, and dotted ones are not in the dictionary. Every ambiguous
@@ -42,9 +49,12 @@ The Worker (and the Python CLI) call exactly two external services:
 | **VDU kirčiuoklė** ([kalbu.vdu.lt](https://kalbu.vdu.lt/mokymosi-priemones/kirciuoklis/)) | `POST https://kalbu.vdu.lt/ajax-call` with form-encoded `action=text_accents` (whole text) or `action=word_accent` (single word variants) | Accent placement, variant lists, morphology labels — the dictionary source of truth | Requires a nonce scraped from the [tool page](https://kalbu.vdu.lt/mokymosi-priemones/kirciuoklis/) (regex `"NONCE":"([0-9a-f]+)"`), cached ~6 h and refreshed on failure. Same engine/data as kirtis.info. |
 | **LINDAT/CLARIN UDPipe 2** ([service page](https://lindat.mff.cuni.cz/services/udpipe/)) | `POST https://lindat.mff.cuni.cz/services/udpipe/api/process` with `tokenizer`, `tagger`, `model=lithuanian-alksnis`, `data=<text>` | Contextual tagging (lemma, POS, morphological features) for homograph disambiguation | Free fair-use REST service by ÚFAL. The [Lithuanian-ALKSNIS model](https://ufal.mff.cuni.cz/udpipe/2) is CC BY-NC-SA. Failure degrades gracefully (defaults + notice). |
 
-Word-variant lookups are served from our own D1 dictionary after first sight,
-so VDU's `word_accent` is only hit for never-seen words. The legacy
-`text_accents` path remains the default until local-first parity is proven.
+With the local-first path (the default), warm-dictionary requests only call
+UDPipe — VDU is consulted solely for never-seen words. The A/B parity gate
+(`?source=local` vs `?source=vdu` on a 2,600-token corpus) showed the local
+path reproduces the legacy output except where the legacy VDU path itself
+misbehaves (escaped apostrophes, swallowed spaces after sentence dots) —
+the local path is faithful to the input in those cases.
 
 ## Local development
 
@@ -133,6 +143,10 @@ upstream failures surface as `502`.
   `phonology_engine`) against the production pipeline on a corpus, reporting
   agreement, coverage, and disagreement samples. Run it before swapping any
   engine.
+- `uv run scripts/seed_dictionary.py --limit 10000` — politely pre-warms the
+  D1 dictionary from the Lithuanian frequency list (or
+  `--words-from-text file.txt` for a specific text). Resumable; already
+  complete words are skipped.
 
 ## Localization
 

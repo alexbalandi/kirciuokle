@@ -32,6 +32,8 @@ describe("D1 word dictionary", () => {
       variants: YRA_VARIANTS,
       defaultForm: "ỹra",
       accentType: "ONE",
+      defaultFormTitle: "Ỹra",
+      accentTypeTitle: "ONE",
     });
     expect(result.get("w0")).toBeNull();
   });
@@ -44,12 +46,14 @@ describe("D1 word dictionary", () => {
       word: `w${index}`,
       variants: index === 22 ? [] : YRA_VARIANTS,
       defaultForm: index === 22 ? null : "ỹra",
-      accentType: index === 22 ? null : "ONE",
+      accentType: index === 22 ? "NONE" : "ONE",
+      defaultFormTitle: index === 22 ? null : "Ỹra",
+      accentTypeTitle: index === 22 ? "NONE" : "ONE",
     }));
 
     await putWords(envFor(d1), entries);
 
-    expect(d1.insertBinds.map((binds) => binds.length)).toEqual([90, 48]);
+    expect(d1.insertBinds.map((binds) => binds.length)).toEqual([88, 88, 8]);
     expect(d1.getVariants("w22")).toEqual([]);
     expect(Date.parse(d1.getNegativeUntil("w22") ?? "")).toBe(
       Date.parse("2026-07-02T00:00:00.000Z") + NEGATIVE_WORD_TTL_MS,
@@ -61,8 +65,16 @@ describe("D1 word dictionary", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-02T00:00:00.000Z"));
     const d1 = new MemoryD1();
-    d1.setWord("old", [], { negativeUntil: "2026-07-01T00:00:00.000Z" });
-    d1.setWord("fresh", [], { negativeUntil: "2026-07-03T00:00:00.000Z" });
+    d1.setWord("old", [], {
+      negativeUntil: "2026-07-01T00:00:00.000Z",
+      accentType: "NONE",
+      accentTypeTitle: "NONE",
+    });
+    d1.setWord("fresh", [], {
+      negativeUntil: "2026-07-03T00:00:00.000Z",
+      accentType: "NONE",
+      accentTypeTitle: "NONE",
+    });
 
     const result = await getWords(envFor(d1), ["old", "fresh"]);
 
@@ -70,13 +82,20 @@ describe("D1 word dictionary", () => {
     expect(result.get("fresh")).toEqual({
       variants: [],
       defaultForm: null,
-      accentType: null,
+      accentType: "NONE",
+      defaultFormTitle: null,
+      accentTypeTitle: "NONE",
     });
   });
 
-  it("treats positive rows with NULL accent_type as incomplete misses", async () => {
+  it("treats legacy rows with NULL title accent_type as incomplete misses", async () => {
     const d1 = new MemoryD1();
-    d1.setWord("yra", YRA_VARIANTS, { defaultForm: null, accentType: null });
+    d1.setWord("yra", YRA_VARIANTS, {
+      defaultForm: "ỹra",
+      accentType: "ONE",
+      defaultFormTitle: null,
+      accentTypeTitle: null,
+    });
     const fetchMock = stubVduFetch({
       wordResponses: {
         yra: {
@@ -88,21 +107,31 @@ describe("D1 word dictionary", () => {
           ],
         },
       },
-      textParts: [
-        {
-          string: "yra",
-          accented: "yra\u0300",
-          accentType: "ONE",
-          type: "WORD",
-        },
-      ],
+      textResponses: {
+        yra: [
+          {
+            string: "yra",
+            accented: "yra\u0300",
+            accentType: "ONE",
+            type: "WORD",
+          },
+        ],
+        Yra: [
+          {
+            string: "Yra",
+            accented: "Yra\u0300",
+            accentType: "ONE",
+            type: "WORD",
+          },
+        ],
+      },
     });
     const { ctx, promises } = captureWaitUntil();
 
     const variants = await lookupWordVariantsD1("yra", envFor(d1), ctx);
     await Promise.all(promises);
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(variants).toEqual([
       { form: "yrà", info: "vksm. - būti", mi: ["vksm."] },
     ]);
@@ -110,6 +139,8 @@ describe("D1 word dictionary", () => {
       variants,
       defaultForm: "yrà",
       accentType: "ONE",
+      defaultFormTitle: "Yrà",
+      accentTypeTitle: "ONE",
     });
   });
 
@@ -141,14 +172,24 @@ describe("D1 word dictionary", () => {
           ],
         },
       },
-      textParts: [
-        {
-          string: "yra",
-          accented: "y\u0303ra",
-          accentType: "MULTIPLE_MEANING",
-          type: "WORD",
-        },
-      ],
+      textResponses: {
+        yra: [
+          {
+            string: "yra",
+            accented: "y\u0303ra",
+            accentType: "MULTIPLE_MEANING",
+            type: "WORD",
+          },
+        ],
+        Yra: [
+          {
+            string: "Yra",
+            accented: "Y\u0303ra",
+            accentType: "MULTIPLE_MEANING",
+            type: "WORD",
+          },
+        ],
+      },
     });
     const { ctx, promises, waitUntil } = captureWaitUntil();
 
@@ -158,7 +199,7 @@ describe("D1 word dictionary", () => {
     expect(variants).toEqual([
       { form: "ỹra", info: "vksm. - būti", mi: ["vksm."] },
     ]);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     const postInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
     expect(String(postInit.body)).toContain("word=yra");
     expect(waitUntil).toHaveBeenCalledTimes(1);
@@ -167,6 +208,8 @@ describe("D1 word dictionary", () => {
       variants,
       defaultForm: "ỹra",
       accentType: "MULTIPLE_MEANING",
+      defaultFormTitle: "Ỹra",
+      accentTypeTitle: "MULTIPLE_MEANING",
     });
   });
 
@@ -186,5 +229,45 @@ describe("D1 word dictionary", () => {
     expect(Date.parse(d1.getNegativeUntil("velvet") ?? "")).toBe(
       Date.parse("2026-07-02T00:00:00.000Z") + NEGATIVE_WORD_TTL_MS,
     );
+    expect(d1.getEntry("velvet")).toEqual({
+      variants: [],
+      defaultForm: null,
+      accentType: "NONE",
+      defaultFormTitle: null,
+      accentTypeTitle: "NONE",
+    });
+  });
+
+  it("does not store a negative when the title side has canonical data", async () => {
+    const d1 = new MemoryD1();
+    stubVduFetch({
+      wordResponses: { alyta: {} },
+      textResponses: {
+        alyta: [],
+        Alyta: [
+          {
+            string: "Alyta",
+            accented: "Alyta\u0300",
+            accentType: "MULTIPLE_MEANING",
+            type: "WORD",
+          },
+        ],
+      },
+    });
+    const { ctx, promises } = captureWaitUntil();
+
+    await expect(lookupWordVariantsD1("alyta", envFor(d1), ctx)).resolves.toEqual(
+      [],
+    );
+    await Promise.all(promises);
+
+    expect(d1.getNegativeUntil("alyta")).toBeNull();
+    expect(d1.getEntry("alyta")).toEqual({
+      variants: [],
+      defaultForm: null,
+      accentType: "NONE",
+      defaultFormTitle: "Alytà",
+      accentTypeTitle: "MULTIPLE_MEANING",
+    });
   });
 });

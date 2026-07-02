@@ -10,7 +10,7 @@
     "run_worker_first": true
   },
   "vars": {
-    "ACCENT_SOURCE": "vdu"
+    "ACCENT_SOURCE": "local"
   },
   "d1_databases": [
     {

@@ -16,10 +16,79 @@ import {
 } from "./vdu";
 import { matchCase } from "./disambiguation";
 
-const WORD_RE = /\p{L}+/gu;
+// Combining marks stay inside the token so pre-accented input (e.g. a
+// pasted "mė́nuo") is treated as one NON_LT word and left untouched instead
+// of being split at the mark and re-accented around it.
+const WORD_RE = /[\p{L}\p{M}]+/gu;
 const LT_WORD_RE = /^[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+$/u;
 const ROMAN_NUMERAL_RE = /^[IVXLCDM]+$/u;
-export const MISS_BUDGET = 15;
+export const MISS_BUDGET = 10;
+export const ABBREVIATIONS = new Set([
+  "a",
+  "akad",
+  "adr",
+  "angl",
+  "aps",
+  "apskr",
+  "dab",
+  "dir",
+  "doc",
+  "dr",
+  "egz",
+  "est",
+  "etc",
+  "gen",
+  "gr",
+  "gyv",
+  "habil",
+  "insp",
+  "isp",
+  "it",
+  "jaun",
+  "kan",
+  "kpt",
+  "kt",
+  "latv",
+  "lenk",
+  "liet",
+  "lot",
+  "m",
+  "min",
+  "mjr",
+  "mln",
+  "mlrd",
+  "mstl",
+  "nr",
+  "pan",
+  "pav",
+  "pgl",
+  "pirm",
+  "plg",
+  "plk",
+  "pers",
+  "pr",
+  "pranc",
+  "proc",
+  "prof",
+  "psn",
+  "pvz",
+  "rus",
+  "sav",
+  "sek",
+  "sen",
+  "sk",
+  "str",
+  "šnek",
+  "šv",
+  "tarm",
+  "tel",
+  "tūkst",
+  "ukr",
+  "val",
+  "vok",
+  "vyr",
+  "žr",
+]);
 
 type LocalAccentOptions = Pick<AccentTextOptions, "useTagger">;
 
@@ -95,6 +164,17 @@ export function tokenizeLikeVdu(text: string): TokenizedText {
     }
 
     const partIndex = textParts.length;
+    const wordEnd = index + match[0].length;
+    if (isAbbreviation(word, text, wordEnd)) {
+      textParts.push({
+        string: text.slice(index, wordEnd + 1).normalize("NFC"),
+        type: "WORD",
+        accentType: "NONE",
+      });
+      lastIndex = wordEnd + 1;
+      continue;
+    }
+
     if (ROMAN_NUMERAL_RE.test(word)) {
       textParts.push({ string: word, type: "WITH_NUMBER" });
     } else if (LT_WORD_RE.test(word)) {
@@ -105,7 +185,7 @@ export function tokenizeLikeVdu(text: string): TokenizedText {
       textParts.push({ string: word, type: "NON_LT" });
     }
 
-    lastIndex = index + match[0].length;
+    lastIndex = wordEnd;
   }
 
   if (lastIndex < text.length) {
@@ -129,20 +209,47 @@ function applyDictionaryResults(
     }
 
     const entry = entriesByWord.get(word.key);
-    if (
-      !entry ||
-      entry.accentType === "NONE" ||
-      (entry.accentType === null && entry.variants.length === 0) ||
-      !entry.defaultForm
-    ) {
+    const side = entry ? selectCanonicalSide(entry, word.text) : null;
+
+    if (!side || side.type === "NONE" || !side.form) {
       part.accentType = "NONE";
       delete part.accented;
       continue;
     }
 
-    part.accented = matchCase(entry.defaultForm, word.text).normalize("NFC");
-    part.accentType = entry.accentType ?? "ONE";
+    part.accented = matchCase(side.form, word.text).normalize("NFC");
+    part.accentType = side.type ?? "ONE";
   }
+}
+
+function isAbbreviation(word: string, text: string, wordEnd: number): boolean {
+  if (text[wordEnd] !== ".") {
+    return false;
+  }
+
+  return Array.from(word).length === 1 || ABBREVIATIONS.has(normalizeWordKey(word));
+}
+
+function selectCanonicalSide(
+  entry: WordDictionaryEntry,
+  word: string,
+): { form: string | null; type: string | null } {
+  if (startsWithUppercase(word)) {
+    return {
+      form: entry.defaultFormTitle,
+      type: entry.accentTypeTitle,
+    };
+  }
+
+  return {
+    form: entry.defaultForm,
+    type: entry.accentType,
+  };
+}
+
+function startsWithUppercase(word: string): boolean {
+  const first = Array.from(word)[0];
+  return Boolean(first && first.toUpperCase() === first && first.toLowerCase() !== first);
 }
 
 function scheduleSeedMisses(

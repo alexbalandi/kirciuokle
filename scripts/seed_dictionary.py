@@ -64,8 +64,11 @@ async def fetch_variants(client: httpx.AsyncClient, nonce: str, word: str) -> li
 
 async def fetch_default(
     client: httpx.AsyncClient, nonce: str, word: str
-) -> tuple[str | None, str | None]:
-    """Canonical (default_form, accent_type) from a single-word text_accents call."""
+) -> tuple[str | None, str]:
+    """Canonical (default_form, accent_type) from a single-word text_accents call.
+
+    A side with no accented WORD part stores form None and the explicit
+    type "NONE" (NULL in the DB means "legacy row, incomplete")."""
     msg = await accent_text.vdu_call(
         client, nonce, {"action": "text_accents", "body": word}
     )
@@ -73,9 +76,25 @@ async def fetch_default(
         if part.get("type") == "WORD" and part.get("accented"):
             return (
                 unicodedata.normalize("NFC", part["accented"]),
-                part.get("accentType"),
+                part.get("accentType") or "ONE",
             )
-    return None, None
+    return None, "NONE"
+
+
+async def fetch_entry(client: httpx.AsyncClient, nonce: str, word: str) -> dict:
+    """Mirror the worker's fetchWordEntry: variants + lower and title sides."""
+    variants = await fetch_variants(client, nonce, word)
+    lower_form, lower_type = await fetch_default(client, nonce, word)
+    title = word[0].upper() + word[1:]
+    title_form, title_type = await fetch_default(client, nonce, title)
+    return {
+        "word": word,
+        "variants": variants,
+        "default_form": lower_form,
+        "accent_type": lower_type,
+        "default_form_title": title_form,
+        "accent_type_title": title_type,
+    }
 
 FREQ_URL = (
     "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/"
@@ -85,7 +104,7 @@ LT_WORD = re.compile(r"^[a-ząčęėįšųūž]+$")
 DB_ID = "09f3ad62-f4b7-4869-bf69-b941f4316bd1"
 NEGATIVE_DAYS = 30
 PARAM_LIMIT = 100  # D1 bound-parameter limit per statement
-ROW_PARAMS = 6
+ROW_PARAMS = 8
 
 
 def load_env() -> tuple[str, str]:
@@ -114,41 +133,47 @@ class D1:
         return payload["result"][0].get("results", [])
 
     async def existing(self, words: list[str]) -> set[str]:
-        """Words with a complete entry: accent_type set, or a valid negative."""
+        """Words with a complete entry (both case sides evaluated)."""
         found: set[str] = set()
-        now = datetime.now(timezone.utc).isoformat()
-        for i in range(0, len(words), PARAM_LIMIT - 1):
-            chunk = words[i : i + PARAM_LIMIT - 1]
+        for i in range(0, len(words), PARAM_LIMIT):
+            chunk = words[i : i + PARAM_LIMIT]
             ph = ",".join("?" * len(chunk))
             rows = await self.query(
                 f"SELECT word FROM words WHERE word IN ({ph}) "
-                "AND (accent_type IS NOT NULL OR negative_until > ?)",
-                [*chunk, now],
+                "AND accent_type_title IS NOT NULL",
+                chunk,
             )
             found.update(r["word"] for r in rows)
         return found
 
-    async def upsert(self, entries: list[tuple[str, list, str | None, str | None]]) -> None:
+    async def upsert(self, entries: list[dict]) -> None:
         now = datetime.now(timezone.utc)
         neg_until = (now + timedelta(days=NEGATIVE_DAYS)).isoformat()
         rows_per_stmt = PARAM_LIMIT // ROW_PARAMS
         for i in range(0, len(entries), rows_per_stmt):
             chunk = entries[i : i + rows_per_stmt]
-            values = ",".join("(?,?,?,?,?,?)" for _ in chunk)
+            values = ",".join("(?,?,?,?,?,?,?,?)" for _ in chunk)
             params: list = []
-            for word, variants, default_form, accent_type in chunk:
-                negative = not variants or default_form is None
+            for e in chunk:
+                negative = (
+                    not e["variants"]
+                    and e["default_form"] is None
+                    and e["default_form_title"] is None
+                )
                 params += [
-                    word,
-                    json.dumps(variants, ensure_ascii=False),
+                    e["word"],
+                    json.dumps([] if negative else e["variants"], ensure_ascii=False),
                     now.isoformat(),
                     neg_until if negative else None,
-                    default_form,
-                    accent_type,
+                    e["default_form"],
+                    e["accent_type"],
+                    e["default_form_title"],
+                    e["accent_type_title"],
                 ]
             await self.query(
                 "INSERT OR REPLACE INTO words "
-                "(word, variants, fetched_at, negative_until, default_form, accent_type) "
+                "(word, variants, fetched_at, negative_until, default_form, accent_type, "
+                "default_form_title, accent_type_title) "
                 f"VALUES {values}",
                 params,
             )
@@ -177,8 +202,8 @@ async def main() -> None:
     ap.add_argument(
         "--rps",
         type=float,
-        default=1.0,
-        help="max words/sec (each word costs two VDU requests)",
+        default=0.8,
+        help="max words/sec (each word costs three VDU requests)",
     )
     ap.add_argument("--words-from-text", help="seed the words of a text file instead of the frequency list")
     args = ap.parse_args()
@@ -199,26 +224,26 @@ async def main() -> None:
 
         nonce = await accent_text.get_nonce(client)
         interval = 1.0 / args.rps
-        batch: list[tuple[str, list]] = []
+        batch: list[dict] = []
         done = negatives = 0
 
         for word in todo:
             started = asyncio.get_event_loop().time()
             try:
-                variants = await fetch_variants(client, nonce, word)
-                default_form, accent_type = await fetch_default(client, nonce, word)
+                entry = await fetch_entry(client, nonce, word)
             except Exception:
                 # refresh nonce once, then skip on repeat failure
                 try:
                     nonce = await accent_text.get_nonce(client)
-                    variants = await fetch_variants(client, nonce, word)
-                    default_form, accent_type = await fetch_default(client, nonce, word)
+                    entry = await fetch_entry(client, nonce, word)
                 except Exception as e:
                     print(f"  skip {word}: {e}", file=sys.stderr)
                     continue
-            batch.append((word, variants, default_form, accent_type))
+            batch.append(entry)
             done += 1
-            negatives += default_form is None
+            negatives += (
+                entry["default_form"] is None and entry["default_form_title"] is None
+            )
             if len(batch) >= 200:
                 await d1.upsert(batch)
                 batch.clear()
