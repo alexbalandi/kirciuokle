@@ -21,3 +21,4 @@ local/data/
 .scratch/
 
 .venv-train/
+local/tagger-hf/artifacts/

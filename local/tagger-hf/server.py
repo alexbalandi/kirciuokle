@@ -124,7 +124,11 @@ def split_label(label: str) -> tuple[str, str]:
 
 def lemma_for(form: str, upos: str) -> str:
     lowered = form.lower()
-    if lowered == "yra" and upos == "AUX":
+    # The accent pipeline's yra→yrà exception keys on lemma "būti". MATAS
+    # labels copular būti VERB (not AUX per UD), so accept both — the
+    # competing reading (ỹra from "irti", to crumble) is vanishingly rare
+    # in running text and stays user-overridable in the UI.
+    if lowered == "yra" and upos in ("AUX", "VERB"):
         return "būti"
     return lowered
 
