@@ -1,108 +1,147 @@
-# Lithuanian HF/ONNX Tagger Scaffold
+# Lithuanian HF/ONNX Tagger Bench
 
-This directory is a ready-to-train candidate replacement for the UDPipe-style
-tagger sidecar. It fine-tunes a Lithuanian transformer for joint
-`UPOS|FEATS` token classification on UD_Lithuanian-ALKSNIS, exports it to
-ONNX, quantizes it to INT8 for CPU serving, and exposes the existing
-`POST /process -> {"result": "<conllu>"}` contract.
+This directory trains, evaluates, compares, exports, and serves a candidate
+replacement for the UDPipe-style Lithuanian tagger sidecar. The training task
+is joint `UPOS|FEATS` token classification with first-subword alignment. The
+runtime contract remains `POST /process -> {"result": "<conllu>"}`.
 
-The default base model is `VSSA-SDSA/LT-MLKM-modernBERT` (Apache-2.0,
-Lithuanian ModernBERT with a native LT tokenizer). The fallback model is
-`xlm-roberta-base`.
+The default encoder is `VSSA-SDSA/LT-MLKM-modernBERT` (Lithuanian
+ModernBERT). The comparison bench also includes `EMBEDDIA/litlat-bert`, a
+Lithuanian-Latvian-English trilingual BERT and the strongest published
+Baltic-focused encoder candidate here, plus `xlm-roberta-base`.
 
-## Training data
+## Corpora
 
-- **UD_Lithuanian-ALKSNIS** (used by `prep_alksnis.py`): 2,341 train
-  sentences / 47,641 tokens (+11.5k dev, +10.8k test). Small, but it is
-  the exact corpus the production tagger (UDPipe 2) and Stanza trained
-  on — same data, hopefully a better Lithuanian encoder.
-- **MATAS** (the upgrade path): VDU's manually checked morphologically
-  annotated corpus, ~1.69M words / 144k sentences, distributed via
-  CLARIN-LT (v1.0 marked "Publicly Available" under the PUB CLARIN-LT
-  EULA — read the license before use) and offered in UD tagset among
-  others: https://clarin.vdu.lt/xmlui/handle/20.500.11821/9 (v3.0:
-  https://clarin.vdu.lt/xmlui/handle/20.500.11821/61). 35× ALKSNIS,
-  gold-quality, from the same VDU lab as the kirčiuoklė. Validate the
-  UD export's FEATS completeness on a sample, then extend
-  `prep_alksnis.py` to ingest it alongside ALKSNIS.
+| Corpus | Role | Size | License / attribution |
+| --- | --- | ---: | --- |
+| UD_Lithuanian-ALKSNIS | Gold dev/test and optional training source | 2,341 train sentences / 47,641 train tokens, plus about 11.5k dev tokens and 10.8k test tokens | Universal Dependencies ALKSNIS. The test split is the same gold split used by `scripts/bench_taggers.py`. |
+| MATAS v3.0 | Main training source | 144,026 sentences / 2,137,281 tokens | CC BY 4.0. Rimkutė, Bielinskienė, Boizou, Dadurkevičius, Kovalevskaitė, Utka — MATAS v3.0, CLARIN-LT, hdl:20.500.11821/61 |
 
-## 1. Prepare ALKSNIS
+MATAS is fetched from the CLARIN-LT bitstream and cached as
+`local/tagger-hf/data/raw/MATAS3.conllu.zip`; `fetch_corpora.py` reuses that
+zip when present and extracts `MATAS3.conllu`.
+
+## Fetch
 
 From the repository root:
 
 ```sh
-uv run local/tagger-hf/prep_alksnis.py --out local/tagger-hf/data/alksnis
+uv run local/tagger-hf/fetch_corpora.py
 ```
 
-This downloads UD_Lithuanian-ALKSNIS train/dev/test and writes:
+Use `--force` only when you intentionally want to re-download cached raw
+corpora. The fetcher downloads ALKSNIS train/dev/test CoNLL-U files, validates
+the MATAS zip size, and extracts MATAS.
 
-- `train.jsonl`, `dev.jsonl`, `test.jsonl`: one sentence per line with
-  `tokens` and combined `labels` like `NOUN|Case=Nom|Gender=Masc|Number=Sing`;
-- `labels.json`: the stable label list used by training, export, and serving;
-- `raw/*.conllu`: cached source files.
+## Prepare
 
-## 2. Fine-Tune
+```sh
+uv run local/tagger-hf/prep_corpus.py \
+  --sources matas,alksnis \
+  --out local/tagger-hf/data/combined
+```
 
-Install the training stack only for the run:
+The prepared split layout is:
+
+- `train`: MATAS with duplicate normalized sentences removed, plus ALKSNIS
+  train, after dropping any training sentence whose normalized text appears in
+  ALKSNIS dev or test.
+- `dev`: ALKSNIS dev.
+- `test`: ALKSNIS test, matching the benchmark gold split.
+
+Labels are `UPOS|FEATS`; FEATS are canonicalized by sorting `key=value` pairs
+so matching analyses from MATAS and ALKSNIS share one label string. The script
+writes `train.jsonl`, `dev.jsonl`, `test.jsonl`, `labels.json`, and prints
+sentence/token counts, label-set size, and dev/test OOV-label rates.
+
+For a deterministic small dataset:
+
+```sh
+uv run local/tagger-hf/prep_corpus.py --max-train-sentences 400
+```
+
+`prep_alksnis.py` remains as a deprecated wrapper for:
+
+```sh
+uv run local/tagger-hf/prep_corpus.py --sources alksnis
+```
+
+## Train
 
 ```sh
 uv run --with transformers --with datasets --with accelerate --with torch \
   local/tagger-hf/train.py \
-  --data-dir local/tagger-hf/data/alksnis \
-  --output-dir local/tagger-hf/runs/modernbert-alksnis
+  --data-dir local/tagger-hf/data/combined \
+  --run-name lt-mlkm-modernbert
 ```
 
-The trainer uses first-subword alignment: the first subword of each gold token
-gets the combined `UPOS|FEATS` label, and later subwords get `-100`.
-Evaluation runs each epoch and reports:
+Each run is written under `local/tagger-hf/runs/<run-name>/`:
 
-- `label_accuracy`: exact combined-label accuracy;
-- `slot_accuracy`: the production scoring-slot projection accuracy using the
-  same projection as `src/worker/disambiguation.ts`.
+- `checkpoints/`: Hugging Face trainer checkpoints.
+- `metrics.json`: one record per dev evaluation with epoch, label accuracy,
+  and scoring-slot projection accuracy.
+- `best/`: the best checkpoint saved as a normal Hugging Face model directory.
+- `final.json`: best-dev metrics and test metrics for the best checkpoint.
 
-The best checkpoint is selected by `slot_accuracy`. Expect roughly 1-3 GPU
-hours on a single modern consumer GPU for a first useful run, depending on
-batch size and max sequence length. CPU training is possible for smoke tests
-with `--max-train-samples`, but a full run is expected to be many hours or
-days on CPU and is not the intended path.
+The best checkpoint is selected by scoring-slot projection accuracy, the same
+projection used by the production disambiguation path. `--max-steps` and
+`--max-train-sentences` are available for smoke runs.
 
-If the default model cannot be loaded, pass:
+Full ModernBERT-0.2B training on roughly 2M tokens is expected to take about
+1-3 hours on a single modern GPU, depending on batch size and sequence length.
+CPU is not recommended for the full run.
+
+## Compare Encoders
 
 ```sh
---model-name xlm-roberta-base
+uv run --with transformers --with datasets --with accelerate --with torch \
+  local/tagger-hf/compare_encoders.py
 ```
 
-or keep the default `--fallback-model xlm-roberta-base`.
+The default bake-off trains:
 
-## 3. Export ONNX INT8
+```text
+VSSA-SDSA/LT-MLKM-modernBERT,EMBEDDIA/litlat-bert,xlm-roberta-base
+```
 
-After training:
+Each model uses the same hyperparameters. Failures are logged and do not stop
+the remaining models. Successful runs append a row to
+`local/tagger-hf/runs/comparison.md` with ALKSNIS-test UPOS, FEATS-exact,
+slots, AUX/VERB accuracy, and CPU inference tokens/sec.
+
+CPU smoke path:
+
+```sh
+uv run --with transformers --with datasets --with accelerate --with torch \
+  local/tagger-hf/compare_encoders.py --smoke
+```
+
+Smoke mode assumes the prepared dataset already exists, then trains
+`distilbert-base-multilingual-cased` with `--max-train-sentences 400` and
+`--max-steps 60`, evaluates the best checkpoint, and appends the comparison row.
+
+## Export ONNX INT8
+
+The ONNX export and sidecar consume `runs/<run-name>/best` unchanged:
 
 ```sh
 uv run --with "optimum[onnxruntime]" --with transformers --with torch \
   local/tagger-hf/export_onnx.py \
-  --model-dir local/tagger-hf/runs/modernbert-alksnis \
-  --data-dir local/tagger-hf/data/alksnis \
-  --output-dir local/tagger-hf/artifacts/modernbert-alksnis-onnx
+  --model-dir local/tagger-hf/runs/lt-mlkm-modernbert/best \
+  --data-dir local/tagger-hf/data/combined \
+  --output-dir local/tagger-hf/artifacts/lt-mlkm-modernbert-onnx
 ```
 
-The script exports a FP32 ONNX model under `fp32/`, dynamically quantizes it
-with `ORTQuantizer` under `int8/`, then compares Torch and ONNX argmax labels
-on dev examples. Increase `--max-mismatches` only if quantization changes a
-small, reviewed number of argmax decisions.
+The script exports FP32 ONNX under `fp32/`, dynamically quantizes it to INT8
+under `int8/`, and compares Torch and ONNX argmax labels on dev examples.
 
-CPU serving with ONNX Runtime INT8 should be materially faster than Python
-Stanza after model load, but exact latency depends on CPU vector extensions,
-sequence length, and thread settings. Use `scripts/bench_taggers.py` before
-changing the production tagger.
-
-## 4. Serve
+## Serve
 
 Build and run with the exported `int8/` directory mounted at `/model`:
 
 ```sh
 docker build -f local/tagger-hf/Dockerfile -t kirciuokle-tagger-hf .
-docker run --rm -p 8001:8001 -v "%cd%/local/tagger-hf/artifacts/modernbert-alksnis-onnx/int8:/model:ro" kirciuokle-tagger-hf
+docker run --rm -p 8001:8001 -v "%cd%/local/tagger-hf/artifacts/lt-mlkm-modernbert-onnx/int8:/model:ro" kirciuokle-tagger-hf
 ```
 
 Then point the local app at:
@@ -119,8 +158,7 @@ CoNLL-U with `XPOS` set to `_`.
 
 Token classification does not provide a lemmatizer. The production pipeline
 currently needs lemma only for the `LEMMA_EXCEPTIONS` table, specifically
-`yra`: `būti` vs `irti`. The server therefore emits the lowercased form as
-LEMMA except when the form is `yra` and the predicted UPOS is `AUX`, in which
-case it emits `būti`. That preserves the current `yra` exception path. If the
-exceptions table grows beyond AUX-distinguishable pairs, revisit this design
-and add a lemmatizer or a joint lemma head.
+`yra`: `būti` vs `irti`. The server emits the lowercased form as LEMMA except
+when the form is `yra` and the predicted UPOS is `AUX`, in which case it emits
+`būti`. If the exceptions table grows beyond AUX-distinguishable pairs, add a
+lemmatizer or a joint lemma head.

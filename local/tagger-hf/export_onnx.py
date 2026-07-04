@@ -115,19 +115,24 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument(
         "--model-dir",
         type=Path,
-        default=Path(__file__).resolve().parent / "runs" / "modernbert-alksnis",
+        default=Path(__file__).resolve().parent
+        / "runs"
+        / "lt-mlkm-modernbert"
+        / "best",
         help="trained HF model directory",
     )
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path(__file__).resolve().parent / "data" / "alksnis",
-        help="prepared ALKSNIS directory for verification",
+        default=Path(__file__).resolve().parent / "data" / "combined",
+        help="prepared corpus directory for verification",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path(__file__).resolve().parent / "artifacts" / "modernbert-alksnis-onnx",
+        default=Path(__file__).resolve().parent
+        / "artifacts"
+        / "lt-mlkm-modernbert-onnx",
     )
     parser.add_argument("--opset", type=int, default=17)
     parser.add_argument("--max-length", type=int, default=256)
