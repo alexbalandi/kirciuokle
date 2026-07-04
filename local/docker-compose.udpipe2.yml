@@ -1,0 +1,29 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: local/app/Dockerfile
+    environment:
+      DICT_PATH: /data/words.sqlite
+      FALLBACK: vdu
+      MIGRATIONS_DIR: /migrations
+      STATIC_DIR: /app/static
+      TAGGER_URL: http://tagger:8001
+    ports:
+      - "8765:8000"
+    volumes:
+      - ./data:/data
+    depends_on:
+      - tagger
+
+  wembedding:
+    image: ghcr.io/ufal/wembedding:2.10-tf-2.3.1-gpu-preloaded-staging
+    expose:
+      - "8000"
+
+  tagger:
+    image: ghcr.io/ufal/udpipe:2.10-lt_alksnis-tf-1.15.4-gpu-staging
+    expose:
+      - "8001"
+    depends_on:
+      - wembedding

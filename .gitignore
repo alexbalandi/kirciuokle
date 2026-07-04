@@ -12,3 +12,7 @@ dist/
 .claude/settings.local.json
 
 __pycache__/
+local/app/.venv/
+
+# local replica dictionary data (not distributed - see README License section)
+local/data/

@@ -82,6 +82,13 @@ npm run build
 npx wrangler deploy --dry-run
 ```
 
+## Self-hosting locally
+
+The self-hosted replica lives in [`local/`](local/). It packages the built
+frontend, a FastAPI port of the Worker pipeline, a SQLite dictionary, and a
+swappable UDPipe-compatible tagger. See [`local/README.md`](local/README.md)
+for Docker Compose usage, dictionary provisioning, and offline test commands.
+
 ## Deploying to Cloudflare
 
 Copy `.env.example` to `.env` and fill in a Cloudflare API token (create one

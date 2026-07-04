@@ -1,0 +1,24 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: local/app/Dockerfile
+    environment:
+      DICT_PATH: /data/words.sqlite
+      FALLBACK: vdu
+      MIGRATIONS_DIR: /migrations
+      STATIC_DIR: /app/static
+      TAGGER_URL: http://tagger:8001
+    ports:
+      - "8765:8000"
+    volumes:
+      - ./data:/data
+    depends_on:
+      - tagger
+
+  tagger:
+    build:
+      context: ..
+      dockerfile: local/tagger-stanza/Dockerfile
+    expose:
+      - "8001"
