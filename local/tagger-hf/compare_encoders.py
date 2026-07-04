@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = []
 # ///
-"""Train and compare encoder candidates for Lithuanian token tagging."""
+"""Train and compare encoder/head/pooling candidates for Lithuanian tagging."""
 
 from __future__ import annotations
 
@@ -16,8 +16,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
+from head_config import VALID_HEADS, VALID_POOLINGS, derive_run_name, load_head_config
+from inference_utils import outputs_to_labels
 from metrics import evaluate_label_pairs
-from train import derive_run_name, main as train_main
+from train import main as train_main
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -28,7 +30,24 @@ DEFAULT_MODELS = (
     "EMBEDDIA/litlat-bert,"
     "xlm-roberta-base"
 )
-SMOKE_MODELS = "distilbert-base-multilingual-cased"
+SMOKE_MODEL = "distilbert-base-multilingual-cased"
+RECOMMENDED_CELLS = (
+    ("VSSA-SDSA/LT-MLKM-modernBERT", "combined", "first"),
+    ("VSSA-SDSA/LT-MLKM-modernBERT", "combined", "last"),
+    ("VSSA-SDSA/LT-MLKM-modernBERT", "combined", "first_last"),
+    ("VSSA-SDSA/LT-MLKM-modernBERT", "factored", "last"),
+    ("EMBEDDIA/litlat-bert", "combined", "last"),
+    ("xlm-roberta-base", "combined", "first"),
+)
+SMOKE_CELLS = (
+    (SMOKE_MODEL, "combined", "first"),
+    (SMOKE_MODEL, "factored", "last"),
+)
+COMPARISON_HEADER = (
+    "| time | model | head | pooling | run | status | upos | feats-exact | "
+    "slots | aux/verb | tok/s | notes |\n"
+    "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |\n"
+)
 
 
 def parse_models(value: str) -> list[str]:
@@ -36,6 +55,18 @@ def parse_models(value: str) -> list[str]:
     if not models:
         raise argparse.ArgumentTypeError("at least one model is required")
     return models
+
+
+def parse_choices(value: str, valid: Iterable[str], label: str) -> list[str]:
+    items = [part.strip() for part in value.split(",") if part.strip()]
+    if not items:
+        raise argparse.ArgumentTypeError(f"at least one {label} is required")
+    unknown = sorted(set(items) - set(valid))
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            f"unknown {label}(s): {', '.join(unknown)}"
+        )
+    return list(dict.fromkeys(items))
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -47,11 +78,6 @@ def read_jsonl(path: Path) -> list[dict]:
     return rows
 
 
-def load_label_list(data_dir: Path) -> list[str]:
-    payload = json.loads((data_dir / "labels.json").read_text(encoding="utf-8"))
-    return list(payload["labels"])
-
-
 def batched(rows: list[dict], batch_size: int) -> Iterable[list[dict]]:
     for start in range(0, len(rows), batch_size):
         yield rows[start : start + batch_size]
@@ -60,24 +86,23 @@ def batched(rows: list[dict], batch_size: int) -> Iterable[list[dict]]:
 def evaluate_cpu(
     model_dir: Path,
     data_dir: Path,
-    max_length: int,
     batch_size: int,
 ) -> tuple[dict[str, float | int], float]:
     import torch  # type: ignore[import-not-found]
-    from transformers import (  # type: ignore[import-not-found]
-        AutoModelForTokenClassification,
-        AutoTokenizer,
-    )
+    from transformers import AutoTokenizer  # type: ignore[import-not-found]
 
-    labels = load_label_list(data_dir)
+    from export_onnx import load_torch_runner, run_torch_model
+
+    head_config = load_head_config(model_dir)
     rows = read_jsonl(data_dir / "test.jsonl")
     tokenizer = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
     if not tokenizer.is_fast:
-        raise RuntimeError("first-subword alignment requires a fast tokenizer")
+        raise RuntimeError("subword alignment requires a fast tokenizer")
 
-    model = AutoModelForTokenClassification.from_pretrained(model_dir)
-    model.to("cpu")
-    model.eval()
+    torch_runner, output_names = load_torch_runner(model_dir, head_config)
+    if hasattr(torch_runner, "to"):
+        torch_runner.to("cpu")
+    torch_runner.eval()
 
     predicted_labels: list[str] = []
     gold_labels: list[str] = []
@@ -89,28 +114,20 @@ def evaluate_cpu(
                 is_split_into_words=True,
                 padding=True,
                 truncation=True,
-                max_length=max_length,
+                max_length=head_config["max_length"],
                 return_tensors="pt",
             )
-            outputs = model(**{key: value.to("cpu") for key, value in encoded.items()})
-            pred_ids = outputs.logits.argmax(dim=-1).cpu().tolist()
-
+            outputs = run_torch_model(torch_runner, encoded, output_names)
             for batch_index, row in enumerate(batch):
-                row_predictions = ["_|_"] * len(row["tokens"])
-                seen_word_ids: set[int] = set()
-                for token_index, word_id in enumerate(
-                    encoded.word_ids(batch_index=batch_index)
-                ):
-                    if word_id is None or word_id in seen_word_ids:
-                        continue
-                    seen_word_ids.add(word_id)
-                    if word_id >= len(row_predictions):
-                        continue
-                    label_id = pred_ids[batch_index][token_index]
-                    row_predictions[word_id] = (
-                        labels[label_id] if 0 <= label_id < len(labels) else "_|_"
+                predicted_labels.extend(
+                    outputs_to_labels(
+                        outputs=outputs,
+                        word_ids=encoded.word_ids(batch_index=batch_index),
+                        word_count=len(row["tokens"]),
+                        head_config=head_config,
+                        batch_index=batch_index,
                     )
-                predicted_labels.extend(row_predictions)
+                )
                 gold_labels.extend(row["labels"])
 
     elapsed = time.perf_counter() - started
@@ -129,23 +146,34 @@ def format_percent(value: float | int | None) -> str:
     return f"{100 * float(value):.2f}%"
 
 
+def ensure_comparison_header(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text(COMPARISON_HEADER, encoding="utf-8")
+        return
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if not lines or " head " in lines[0]:
+        return
+    body = "\n".join(lines[2:])
+    path.write_text(
+        COMPARISON_HEADER + (body + "\n" if body else ""),
+        encoding="utf-8",
+    )
+
+
 def append_comparison_row(
     path: Path,
     model_name: str,
+    head: str,
+    pooling: str,
     run_name: str,
     status: str,
     metrics: dict[str, float | int] | None,
     tokens_per_second: float | None,
     notes: str,
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.write_text(
-            "| time | model | run | status | upos | feats-exact | slots | aux/verb | tok/s | notes |\n"
-            "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |\n",
-            encoding="utf-8",
-        )
-
+    ensure_comparison_header(path)
     row = {
         "upos": None if metrics is None else metrics.get("upos_accuracy"),
         "feats": None if metrics is None else metrics.get("feats_exact_accuracy"),
@@ -158,6 +186,8 @@ def append_comparison_row(
         handle.write(
             f"| {timestamp} "
             f"| {markdown_escape(model_name)} "
+            f"| {markdown_escape(head)} "
+            f"| {markdown_escape(pooling)} "
             f"| {markdown_escape(run_name)} "
             f"| {markdown_escape(status)} "
             f"| {format_percent(row['upos'])} "
@@ -169,9 +199,11 @@ def append_comparison_row(
         )
 
 
-def train_args_for_model(
+def train_args_for_cell(
     args: argparse.Namespace,
     model_name: str,
+    head: str,
+    pooling: str,
     run_name: str,
     max_train_sentences: int | None,
     max_steps: int,
@@ -187,6 +219,10 @@ def train_args_for_model(
         run_name,
         "--runs-dir",
         str(args.runs_dir),
+        "--head",
+        head,
+        "--subword-pooling",
+        pooling,
         "--epochs",
         str(args.epochs),
         "--learning-rate",
@@ -232,6 +268,21 @@ def clear_torch_cache() -> None:
         pass
 
 
+def cells_from_args(args: argparse.Namespace) -> list[tuple[str, str, str]]:
+    if args.recommended:
+        if args.models or args.heads or args.poolings:
+            raise SystemExit("--recommended cannot be combined with --models, --heads, or --poolings")
+        return list(RECOMMENDED_CELLS)
+
+    if args.smoke:
+        return list(SMOKE_CELLS)
+
+    models = parse_models(args.models or DEFAULT_MODELS)
+    heads = parse_choices(args.heads or "combined", VALID_HEADS, "head")
+    poolings = parse_choices(args.poolings or "first", VALID_POOLINGS, "pooling")
+    return [(model, head, pooling) for model in models for head in heads for pooling in poolings]
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
@@ -240,8 +291,15 @@ def main(argv: Iterable[str] | None = None) -> int:
         "--models",
         help="comma-separated Hugging Face model names",
     )
+    parser.add_argument("--heads", help="comma-separated heads: combined,factored")
+    parser.add_argument(
+        "--poolings",
+        help="comma-separated subword poolings: first,last,first_last",
+    )
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument("--smoke", action="store_true")
+    mode_group.add_argument("--recommended", action="store_true")
     parser.add_argument("--fallback-model", default="")
-    parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--epochs", type=float, default=6)
     parser.add_argument("--learning-rate", type=float, default=2e-5)
     parser.add_argument("--train-batch-size", type=int, default=8)
@@ -260,26 +318,28 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--bf16", action="store_true")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    model_arg = args.models or (SMOKE_MODELS if args.smoke else DEFAULT_MODELS)
-    models = parse_models(model_arg)
+    cells = cells_from_args(args)
     max_train_sentences = args.max_train_sentences
     max_steps = args.max_steps if args.max_steps is not None else -1
     if args.smoke:
-        if max_train_sentences is None:
-            max_train_sentences = 400
-        if args.max_steps is None:
-            max_steps = 60
+        max_train_sentences = 400
+        max_steps = 60
 
     comparison_path = args.runs_dir / "comparison.md"
     failures = 0
-    for model_name in models:
-        run_name = derive_run_name(model_name)
-        print(f"training {model_name} -> {run_name}", file=sys.stderr)
+    for model_name, head, pooling in cells:
+        run_name = derive_run_name(model_name, head, pooling)
+        print(
+            f"training {model_name} / {head} / {pooling} -> {run_name}",
+            file=sys.stderr,
+        )
         try:
             code = train_main(
-                train_args_for_model(
+                train_args_for_cell(
                     args,
                     model_name,
+                    head,
+                    pooling,
                     run_name,
                     max_train_sentences,
                     max_steps,
@@ -292,12 +352,13 @@ def main(argv: Iterable[str] | None = None) -> int:
             metrics, tokens_per_second = evaluate_cpu(
                 best_dir,
                 args.data_dir,
-                args.max_length,
                 args.inference_batch_size,
             )
             append_comparison_row(
                 comparison_path,
                 model_name,
+                head,
+                pooling,
                 run_name,
                 "ok",
                 metrics,
@@ -310,6 +371,8 @@ def main(argv: Iterable[str] | None = None) -> int:
             append_comparison_row(
                 comparison_path,
                 model_name,
+                head,
+                pooling,
                 run_name,
                 "failed",
                 None,
@@ -320,7 +383,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             clear_torch_cache()
 
     print(f"comparison table: {comparison_path}")
-    return 1 if failures == len(models) else 0
+    return 1 if failures == len(cells) else 0
 
 
 if __name__ == "__main__":

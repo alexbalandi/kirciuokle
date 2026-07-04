@@ -9,11 +9,24 @@ from __future__ import annotations
 import argparse
 import inspect
 import json
-import re
 import shutil
 from pathlib import Path
 from typing import Iterable
 
+from head_config import (
+    DEFAULT_LABEL,
+    VALID_HEADS,
+    VALID_POOLINGS,
+    assemble_label_from_ids,
+    build_head_config,
+    build_slots_from_labels,
+    derive_run_name,
+    label_token_positions,
+    labels_from_file,
+    slot_ids_for_label,
+    word_piece_spans,
+    write_head_config,
+)
 from metrics import evaluate_label_pairs
 
 
@@ -24,15 +37,8 @@ DEFAULT_DATA_DIR = BASE_DIR / "data" / "combined"
 DEFAULT_RUNS_DIR = BASE_DIR / "runs"
 
 
-def derive_run_name(model_name: str) -> str:
-    candidate = model_name.rstrip("/").split("/")[-1] or "model"
-    candidate = re.sub(r"[^A-Za-z0-9._-]+", "-", candidate).strip(".-_").lower()
-    return candidate or "model"
-
-
 def load_labels(path: Path) -> tuple[list[str], dict[str, int], dict[int, str]]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    labels = list(payload["labels"])
+    labels = labels_from_file(path)
     label2id = {label: index for index, label in enumerate(labels)}
     id2label = {index: label for index, label in enumerate(labels)}
     return labels, label2id, id2label
@@ -41,7 +47,11 @@ def load_labels(path: Path) -> tuple[list[str], dict[str, int], dict[int, str]]:
 def resolve_run_dir(args: argparse.Namespace) -> Path:
     if args.output_dir is not None:
         return args.output_dir
-    run_name = args.run_name or derive_run_name(args.model_name)
+    run_name = args.run_name or derive_run_name(
+        args.model_name,
+        args.head,
+        args.subword_pooling,
+    )
     return args.runs_dir / run_name
 
 
@@ -72,6 +82,8 @@ def training_arguments_kwargs(args: argparse.Namespace) -> dict:
         kwargs["eval_strategy"] = "epoch"
     else:
         kwargs["evaluation_strategy"] = "epoch"
+    if "label_names" in parameters:
+        kwargs["label_names"] = ["labels"]
     kwargs["save_strategy"] = "epoch"
     return kwargs
 
@@ -93,6 +105,14 @@ def strip_metric_prefix(metrics: dict[str, float], prefix: str) -> dict[str, flo
     return stripped
 
 
+def labels_in_rows(rows: Iterable[dict]) -> list[str]:
+    return [label for row in rows for label in row["labels"]]
+
+
+def uses_custom_model(args: argparse.Namespace) -> bool:
+    return args.head == "factored" or args.subword_pooling == "first_last"
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
@@ -100,13 +120,22 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--fallback-model", default=DEFAULT_FALLBACK_MODEL)
     parser.add_argument(
         "--run-name",
-        help="run directory name under --runs-dir; defaults to the model name",
+        help=(
+            "run directory name under --runs-dir; defaults to "
+            "<model-short>__<head>__<pooling>"
+        ),
     )
     parser.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR)
     parser.add_argument(
         "--output-dir",
         type=Path,
         help="compatibility alias for the full run directory",
+    )
+    parser.add_argument("--head", choices=VALID_HEADS, default="combined")
+    parser.add_argument(
+        "--subword-pooling",
+        choices=VALID_POOLINGS,
+        default="first",
     )
     parser.add_argument("--epochs", type=float, default=6)
     parser.add_argument("--learning-rate", type=float, default=2e-5)
@@ -139,7 +168,15 @@ def main(argv: Iterable[str] | None = None) -> int:
     metrics_path = run_dir / "metrics.json"
     final_path = run_dir / "final.json"
     run_dir.mkdir(parents=True, exist_ok=True)
-    write_json(metrics_path, {"run_name": args.run_name, "evaluations": []})
+    write_json(
+        metrics_path,
+        {
+            "run_name": args.run_name,
+            "head": args.head,
+            "pooling": args.subword_pooling,
+            "evaluations": [],
+        },
+    )
 
     from datasets import load_dataset  # type: ignore[import-not-found]
     from transformers import (  # type: ignore[import-not-found]
@@ -150,6 +187,13 @@ def main(argv: Iterable[str] | None = None) -> int:
         TrainerCallback,
         TrainingArguments,
         set_seed,
+    )
+
+    from head_modeling import (  # type: ignore[import-not-found]
+        PooledDataCollator,
+        create_custom_model,
+        hidden_size_from_config,
+        save_custom_model,
     )
 
     args.training_arguments_class = TrainingArguments
@@ -177,30 +221,58 @@ def main(argv: Iterable[str] | None = None) -> int:
             range(min(args.max_test_samples, len(dataset["test"])))
         )
 
+    slots = (
+        build_slots_from_labels(labels_in_rows(dataset["train"]))
+        if args.head == "factored"
+        else None
+    )
+    slot_count = len(slots or {})
+
     model_name = args.model_name
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        model = AutoModelForTokenClassification.from_pretrained(
-            model_name,
-            num_labels=len(labels),
-            label2id=label2id,
-            id2label=id2label,
-        )
+        if uses_custom_model(args):
+            model = create_custom_model(
+                model_name=model_name,
+                head=args.head,
+                pooling=args.subword_pooling,
+                labels=labels if args.head == "combined" else None,
+                slots=slots,
+            )
+        else:
+            model = AutoModelForTokenClassification.from_pretrained(
+                model_name,
+                num_labels=len(labels),
+                label2id=label2id,
+                id2label=id2label,
+            )
     except Exception:
         if not args.fallback_model or args.fallback_model == model_name:
             raise
         print(f"could not load {model_name}; falling back to {args.fallback_model}")
         model_name = args.fallback_model
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        model = AutoModelForTokenClassification.from_pretrained(
-            model_name,
-            num_labels=len(labels),
-            label2id=label2id,
-            id2label=id2label,
-        )
+        if uses_custom_model(args):
+            model = create_custom_model(
+                model_name=model_name,
+                head=args.head,
+                pooling=args.subword_pooling,
+                labels=labels if args.head == "combined" else None,
+                slots=slots,
+            )
+        else:
+            model = AutoModelForTokenClassification.from_pretrained(
+                model_name,
+                num_labels=len(labels),
+                label2id=label2id,
+                id2label=id2label,
+            )
 
     if not tokenizer.is_fast:
-        raise RuntimeError("first-subword alignment requires a fast tokenizer")
+        raise RuntimeError("subword alignment requires a fast tokenizer")
+
+    def encode_combined_label(label: str) -> int:
+        return label2id.get(label, -100)
 
     def tokenize_and_align(batch: dict) -> dict:
         tokenized = tokenizer(
@@ -210,20 +282,59 @@ def main(argv: Iterable[str] | None = None) -> int:
             max_length=args.max_length,
         )
         aligned_labels: list[list[int]] = []
+        aligned_slot_labels: list[list[list[int]]] = []
+        first_indices_batch: list[list[int]] = []
+        last_indices_batch: list[list[int]] = []
+
         for batch_index, sentence_labels in enumerate(batch["labels"]):
-            word_ids = tokenized.word_ids(batch_index=batch_index)
-            previous_word_id = None
-            sentence_ids: list[int] = []
-            for word_id in word_ids:
-                if word_id is None:
-                    sentence_ids.append(-100)
-                elif word_id != previous_word_id:
-                    sentence_ids.append(label2id[sentence_labels[word_id]])
-                else:
-                    sentence_ids.append(-100)
-                previous_word_id = word_id
+            word_ids = list(tokenized.word_ids(batch_index=batch_index))
+            word_count = len(sentence_labels)
+
+            if args.subword_pooling == "first_last":
+                first, last = word_piece_spans(word_ids, word_count)
+                sentence_ids: list[int] = []
+                sentence_slot_ids: list[list[int]] = []
+                first_indices: list[int] = []
+                last_indices: list[int] = []
+                for word_index, label in enumerate(sentence_labels):
+                    if first[word_index] == -1 or last[word_index] == -1:
+                        continue
+                    first_indices.append(first[word_index])
+                    last_indices.append(last[word_index])
+                    sentence_ids.append(encode_combined_label(label))
+                    if slots is not None:
+                        sentence_slot_ids.append(slot_ids_for_label(label, slots))
+                aligned_labels.append(sentence_ids)
+                first_indices_batch.append(first_indices)
+                last_indices_batch.append(last_indices)
+                if slots is not None:
+                    aligned_slot_labels.append(sentence_slot_ids)
+                continue
+
+            sentence_ids = [-100] * len(word_ids)
+            sentence_slot_ids = [[-100] * slot_count for _ in word_ids]
+            positions = label_token_positions(
+                word_ids,
+                word_count,
+                args.subword_pooling,
+            )
+            for word_index, token_index in enumerate(positions):
+                if token_index == -1:
+                    continue
+                label = sentence_labels[word_index]
+                sentence_ids[token_index] = encode_combined_label(label)
+                if slots is not None:
+                    sentence_slot_ids[token_index] = slot_ids_for_label(label, slots)
             aligned_labels.append(sentence_ids)
+            if slots is not None:
+                aligned_slot_labels.append(sentence_slot_ids)
+
         tokenized["labels"] = aligned_labels
+        if args.subword_pooling == "first_last":
+            tokenized["first_subword_indices"] = first_indices_batch
+            tokenized["last_subword_indices"] = last_indices_batch
+        if slots is not None:
+            tokenized["slot_labels"] = aligned_slot_labels
         return tokenized
 
     tokenized_dataset = dataset.map(
@@ -237,16 +348,35 @@ def main(argv: Iterable[str] | None = None) -> int:
 
         predictions = getattr(eval_prediction, "predictions")
         label_ids = getattr(eval_prediction, "label_ids")
-        if isinstance(predictions, tuple):
-            predictions = predictions[0]
-        pred_ids = np.argmax(predictions, axis=-1)
-        mask = label_ids != -100
+        if isinstance(label_ids, tuple):
+            label_ids = label_ids[0]
 
         pred_labels: list[str] = []
         gold_labels: list[str] = []
-        for pred_id, gold_id in zip(pred_ids[mask].tolist(), label_ids[mask].tolist()):
-            pred_labels.append(labels[pred_id] if pred_id < len(labels) else "_|_")
-            gold_labels.append(labels[gold_id] if gold_id < len(labels) else "_|_")
+
+        if args.head == "combined":
+            if isinstance(predictions, tuple):
+                predictions = predictions[0]
+            pred_ids = np.argmax(predictions, axis=-1)
+            mask = label_ids != -100
+            for pred_id, gold_id in zip(
+                pred_ids[mask].tolist(),
+                label_ids[mask].tolist(),
+            ):
+                pred_labels.append(labels[pred_id] if pred_id < len(labels) else DEFAULT_LABEL)
+                gold_labels.append(labels[gold_id] if gold_id < len(labels) else DEFAULT_LABEL)
+        else:
+            if not isinstance(predictions, (tuple, list)):
+                raise RuntimeError("factored model predictions must be per-slot tensors")
+            assert slots is not None
+            slot_predictions = [np.argmax(item, axis=-1) for item in predictions]
+            active_positions = np.argwhere(label_ids != -100)
+            for position in active_positions:
+                index = tuple(position.tolist())
+                pred_ids = [int(slot_prediction[index]) for slot_prediction in slot_predictions]
+                gold_id = int(label_ids[index])
+                pred_labels.append(assemble_label_from_ids(pred_ids, slots))
+                gold_labels.append(labels[gold_id] if gold_id < len(labels) else DEFAULT_LABEL)
 
         scored = evaluate_label_pairs(pred_labels, gold_labels)
         return {
@@ -257,7 +387,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             "aux_verb_accuracy": float(scored["aux_verb_accuracy"]),
         }
 
-    eval_records: list[dict[str, float | int | None]] = []
+    eval_records: list[dict[str, float | int | str | None]] = []
 
     class MetricsRecorder(TrainerCallback):
         def on_evaluate(self, args_obj, state, control, metrics=None, **kwargs):
@@ -266,6 +396,8 @@ def main(argv: Iterable[str] | None = None) -> int:
             record = {
                 "epoch": float(metrics.get("epoch", state.epoch or 0.0)),
                 "step": int(state.global_step),
+                "head": args.head,
+                "pooling": args.subword_pooling,
                 "label_accuracy": float(metrics.get("eval_label_accuracy", 0.0)),
                 "slot_accuracy": float(metrics.get("eval_slot_accuracy", 0.0)),
                 "upos_accuracy": float(metrics.get("eval_upos_accuracy", 0.0)),
@@ -279,21 +411,27 @@ def main(argv: Iterable[str] | None = None) -> int:
                 metrics_path,
                 {
                     "run_name": args.run_name,
+                    "head": args.head,
+                    "pooling": args.subword_pooling,
                     "evaluations": eval_records,
                 },
             )
 
     training_args = TrainingArguments(**training_arguments_kwargs(args))
+    data_collator = (
+        PooledDataCollator(tokenizer=tokenizer, slot_count=slot_count)
+        if uses_custom_model(args)
+        else DataCollatorForTokenClassification(tokenizer)
+    )
     trainer_kwargs = dict(
         model=model,
         args=training_args,
         train_dataset=tokenized_dataset["train"],
         eval_dataset=tokenized_dataset["dev"],
-        data_collator=DataCollatorForTokenClassification(tokenizer),
+        data_collator=data_collator,
         compute_metrics=compute_metrics,
         callbacks=[MetricsRecorder()],
     )
-    # transformers >=5 renamed Trainer(tokenizer=...) to processing_class
     if "processing_class" in inspect.signature(Trainer.__init__).parameters:
         trainer_kwargs["processing_class"] = tokenizer
     else:
@@ -305,16 +443,38 @@ def main(argv: Iterable[str] | None = None) -> int:
         metric_key_prefix="test",
     )
 
-    trainer.save_model(str(best_dir))
+    if uses_custom_model(args):
+        save_custom_model(model, best_dir)
+    else:
+        trainer.save_model(str(best_dir))
     tokenizer.save_pretrained(str(best_dir))
     shutil.copy2(labels_path, best_dir / "labels.json")
+
+    hidden_size = (
+        int(model.hidden_size)
+        if uses_custom_model(args)
+        else hidden_size_from_config(model.config)
+    )
+    head_config = build_head_config(
+        head=args.head,
+        pooling=args.subword_pooling,
+        base_model=model_name,
+        hidden_size=hidden_size,
+        max_length=args.max_length,
+        labels=labels if args.head == "combined" else None,
+        slots=slots if args.head == "factored" else None,
+    )
+    write_head_config(best_dir / "head_config.json", head_config)
     write_json(
         best_dir / "training_meta.json",
         {
             "base_model": model_name,
             "requested_model": args.model_name,
+            "head": args.head,
+            "pooling": args.subword_pooling,
             "max_length": args.max_length,
             "label_count": len(labels),
+            "slot_count": slot_count,
         },
     )
 
@@ -323,6 +483,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         "run_name": args.run_name,
         "requested_model": args.model_name,
         "base_model": model_name,
+        "head": args.head,
+        "pooling": args.subword_pooling,
         "data_dir": str(args.data_dir),
         "best_model_dir": str(best_dir),
         "best_checkpoint": trainer.state.best_model_checkpoint,

@@ -2,7 +2,8 @@
 
 This directory trains, evaluates, compares, exports, and serves a candidate
 replacement for the UDPipe-style Lithuanian tagger sidecar. The training task
-is joint `UPOS|FEATS` token classification with first-subword alignment. The
+is configurable over head shape and subword pooling. The default remains the
+original joint `UPOS|FEATS` classifier with first-subword alignment. The
 runtime contract remains `POST /process -> {"result": "<conllu>"}`.
 
 The default encoder is `VSSA-SDSA/LT-MLKM-modernBERT` (Lithuanian
@@ -72,20 +73,43 @@ uv run local/tagger-hf/prep_corpus.py --sources alksnis
 uv run --with transformers --with datasets --with accelerate --with torch \
   local/tagger-hf/train.py \
   --data-dir local/tagger-hf/data/combined \
-  --run-name lt-mlkm-modernbert
+  --head combined \
+  --subword-pooling first
 ```
+
+If `--run-name` is omitted, the run name is
+`<model-short>__<head>__<pooling>`, for example
+`lt-mlkm-modernbert__combined__first`.
 
 Each run is written under `local/tagger-hf/runs/<run-name>/`:
 
 - `checkpoints/`: Hugging Face trainer checkpoints.
 - `metrics.json`: one record per dev evaluation with epoch, label accuracy,
-  and scoring-slot projection accuracy.
+  scoring-slot projection accuracy, head, and pooling.
 - `best/`: the best checkpoint saved as a normal Hugging Face model directory.
+- `best/head_config.json`: the serving/export source of truth with head,
+  pooling, base model, labels or slots, hidden size, and max length.
 - `final.json`: best-dev metrics and test metrics for the best checkpoint.
 
 The best checkpoint is selected by scoring-slot projection accuracy, the same
 projection used by the production disambiguation path. `--max-steps` and
 `--max-train-sentences` are available for smoke runs.
+
+Head/pooling matrix:
+
+| Head | Pooling | What it tests |
+| --- | --- | --- |
+| `combined` | `first` | Existing single softmax over `UPOS\|FEATS` on the first subword. |
+| `combined` | `last` | Same label space, but labels attach to the last subword. |
+| `combined` | `first_last` | First and last subword states are concatenated before one softmax. |
+| `factored` | `first` | One classifier for UPOS and one per FEATS key, using first subwords. |
+| `factored` | `last` | Factored slots with labels attached to last subwords. |
+| `factored` | `first_last` | Factored slots over concatenated first and last subword states. |
+
+Lithuanian is suffixing, so inflectional evidence often lives near the word
+ending. `last` and `first_last` may therefore beat `first`, especially for
+fragmenting tokenizers such as `xlm-roberta-base`; native Lithuanian tokenizers
+may show a smaller gain. The matrix is designed to measure that interaction.
 
 Full ModernBERT-0.2B training on roughly 2M tokens is expected to take about
 1-3 hours on a single modern GPU, depending on batch size and sequence length.
@@ -104,10 +128,31 @@ The default bake-off trains:
 VSSA-SDSA/LT-MLKM-modernBERT,EMBEDDIA/litlat-bert,xlm-roberta-base
 ```
 
-Each model uses the same hyperparameters. Failures are logged and do not stop
-the remaining models. Successful runs append a row to
-`local/tagger-hf/runs/comparison.md` with ALKSNIS-test UPOS, FEATS-exact,
-slots, AUX/VERB accuracy, and CPU inference tokens/sec.
+By default this keeps the previous single configuration:
+`--heads combined --poolings first`. Use comma lists to run a full cross:
+
+```sh
+uv run --with transformers --with datasets --with accelerate --with torch \
+  local/tagger-hf/compare_encoders.py \
+  --models VSSA-SDSA/LT-MLKM-modernBERT,EMBEDDIA/litlat-bert \
+  --heads combined,factored \
+  --poolings first,last,first_last
+```
+
+The agreed six-cell preset is:
+
+```sh
+uv run --with transformers --with datasets --with accelerate --with torch \
+  local/tagger-hf/compare_encoders.py --recommended
+```
+
+It runs ModernBERT with `combined/first`, `combined/last`,
+`combined/first_last`, and `factored/last`; LitLat BERT with `combined/last`;
+and XLM-R with `combined/first` as the baseline. Each cell uses the same
+hyperparameters. Failures are logged and do not stop the remaining cells.
+Successful runs append a row to `local/tagger-hf/runs/comparison.md` with
+model, head, pooling, ALKSNIS-test UPOS, FEATS-exact, slots, AUX/VERB
+accuracy, and CPU inference tokens/sec.
 
 CPU smoke path:
 
@@ -116,24 +161,37 @@ uv run --with transformers --with datasets --with accelerate --with torch \
   local/tagger-hf/compare_encoders.py --smoke
 ```
 
-Smoke mode assumes the prepared dataset already exists, then trains
-`distilbert-base-multilingual-cased` with `--max-train-sentences 400` and
-`--max-steps 60`, evaluates the best checkpoint, and appends the comparison row.
+Smoke mode assumes the prepared dataset already exists, then trains two tiny
+cells: `distilbert-base-multilingual-cased` with `combined/first` and with
+`factored/last`. Each uses `--max-train-sentences 400` and `--max-steps 60`,
+evaluates the best checkpoint, and appends comparison rows.
 
 ## Export ONNX INT8
 
-The ONNX export and sidecar consume `runs/<run-name>/best` unchanged:
+The ONNX export and sidecar consume `runs/<run-name>/best`, driven by
+`head_config.json`:
 
 ```sh
 uv run --with "optimum[onnxruntime]" --with transformers --with torch \
   local/tagger-hf/export_onnx.py \
-  --model-dir local/tagger-hf/runs/lt-mlkm-modernbert/best \
+  --model-dir local/tagger-hf/runs/lt-mlkm-modernbert__combined__first/best \
   --data-dir local/tagger-hf/data/combined \
   --output-dir local/tagger-hf/artifacts/lt-mlkm-modernbert-onnx
 ```
 
 The script exports FP32 ONNX under `fp32/`, dynamically quantizes it to INT8
-under `int8/`, and compares Torch and ONNX argmax labels on dev examples.
+under `int8/`, and compares assembled Torch and ONNX label strings on dev
+examples. Factored exports use one named ONNX output per slot.
+
+## Self-check
+
+```sh
+uv run local/tagger-hf/selfcheck.py
+```
+
+This lightweight check validates canonical FEATS ordering, factored
+slot-to-label round trips, and toy first/last subword pooling indices. It does
+not run prep, training, export, or smoke training.
 
 ## Serve
 
@@ -150,9 +208,10 @@ Then point the local app at:
 TAGGER_URL=http://127.0.0.1:8001
 ```
 
-The server tokenizes words with a regex, runs ONNX Runtime token
-classification, decodes each combined label into UPOS and FEATS, and emits
-CoNLL-U with `XPOS` set to `_`.
+The server tokenizes words with a regex, runs ONNX Runtime, applies the
+configured first/last/first-last pooling from `head_config.json`, decodes
+combined or factored outputs into `UPOS|FEATS`, and emits CoNLL-U with `XPOS`
+set to `_`.
 
 ## Lemma Caveat
 
