@@ -12,7 +12,14 @@ import random
 from pathlib import Path
 from typing import Iterable
 
-from metrics import combined_label
+from coverage_diff import (
+    FeatsToken,
+    coverage_rows,
+    filter_feats_keys,
+    format_coverage_table,
+    key_filter,
+)
+from metrics import combined_label, feats_string, parse_feats, split_label
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -27,6 +34,61 @@ ALKSNIS_FILES = {
 }
 MATAS_FILE = "MATAS3.conllu"
 VALID_SOURCES = {"matas", "alksnis"}
+COVERAGE_DELTA = 0.10
+
+# Scoring-slot label mode keeps this fixed UD FEATS key set:
+# Case, Gender, Number, Tense, Person, Voice, Degree, VerbForm, Mood, Reflex.
+# See coverage_diff.SLOT_FEATS_KEYS for the shared definition used by reports.
+
+# Jablonskis XPOS is dot-separated. Unknown segments are intentionally ignored;
+# existing UD FEATS values win and only missing mapped keys are repaired.
+JABLONSKIS_XPOS_TO_UD = {
+    # Case
+    "V": ("Case", "Nom"),
+    "K": ("Case", "Gen"),
+    "N": ("Case", "Dat"),
+    "G": ("Case", "Acc"),
+    "Įn": ("Case", "Ins"),
+    "Vt": ("Case", "Loc"),
+    "Š": ("Case", "Voc"),
+    "Il": ("Case", "Ill"),
+    # Gender
+    "vyr": ("Gender", "Masc"),
+    "mot": ("Gender", "Fem"),
+    "bevrd": ("Gender", "Neut"),
+    "bev": ("Gender", "Neut"),
+    # Number
+    "vns": ("Number", "Sing"),
+    "dgs": ("Number", "Plur"),
+    "dvisk": ("Number", "Dual"),
+    # Tense
+    "es": ("Tense", "Pres"),
+    "būt": ("Tense", "Past"),
+    "būt-k": ("Tense", "Past"),
+    "būt-d": ("Tense", "Past"),
+    "būs": ("Tense", "Fut"),
+    # Person
+    "1": ("Person", "1"),
+    "2": ("Person", "2"),
+    "3": ("Person", "3"),
+    # Mood
+    "tiesiog": ("Mood", "Ind"),
+    "tar": ("Mood", "Cnd"),
+    "liep": ("Mood", "Imp"),
+    # Voice
+    "veik": ("Voice", "Act"),
+    "neveik": ("Voice", "Pass"),
+    "reik": ("Voice", "Nec"),
+    # VerbForm
+    "asm": ("VerbForm", "Fin"),
+    "bndr": ("VerbForm", "Inf"),
+    "dlv": ("VerbForm", "Part"),
+    "pusd": ("VerbForm", "Conv"),
+    "padlv": ("VerbForm", "Ger"),
+    "būdn": ("VerbForm", "Part"),
+    # Reflex
+    "sngr": ("Reflex", "Yes"),
+}
 
 
 def parse_sources(value: str) -> list[str]:
@@ -51,15 +113,53 @@ def normalized_text(row: dict) -> str:
     return " ".join(str(text).casefold().split())
 
 
-def read_conllu(path: Path, sentence_prefix: str) -> list[dict]:
+def xpos_ud_feats(
+    xpos: str,
+    kept_keys: Iterable[str] | None,
+) -> dict[str, str]:
+    allowed = None if kept_keys is None else set(kept_keys)
+    feats: dict[str, str] = {}
+    for segment in (part for part in xpos.split(".") if part):
+        mapped = JABLONSKIS_XPOS_TO_UD.get(segment)
+        if mapped is None:
+            continue
+        key, value = mapped
+        if allowed is not None and key not in allowed:
+            continue
+        feats.setdefault(key, value)
+    return feats
+
+
+def label_from_parts(
+    upos: str,
+    raw_feats: str,
+    xpos: str,
+    kept_keys: Iterable[str] | None,
+    repair_from_xpos: bool,
+) -> str:
+    feats = parse_feats(raw_feats)
+    if repair_from_xpos:
+        for key, value in xpos_ud_feats(xpos, kept_keys).items():
+            feats.setdefault(key, value)
+    feats = filter_feats_keys(feats, kept_keys)
+    return combined_label(upos, feats_string(feats))
+
+
+def read_conllu(
+    path: Path,
+    sentence_prefix: str,
+    kept_keys: Iterable[str] | None,
+    repair_from_xpos: bool = False,
+) -> list[dict]:
     require_file(path)
     sentences: list[dict] = []
     text = ""
     tokens: list[str] = []
     labels: list[str] = []
+    raw_labels: list[str] = []
 
     def flush() -> None:
-        nonlocal text, tokens, labels
+        nonlocal text, tokens, labels, raw_labels
         if tokens:
             sentences.append(
                 {
@@ -67,11 +167,13 @@ def read_conllu(path: Path, sentence_prefix: str) -> list[dict]:
                     "text": text or " ".join(tokens),
                     "tokens": tokens,
                     "labels": labels,
+                    "_raw_labels": raw_labels,
                 }
             )
         text = ""
         tokens = []
         labels = []
+        raw_labels = []
 
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.rstrip("\n")
@@ -88,7 +190,16 @@ def read_conllu(path: Path, sentence_prefix: str) -> list[dict]:
         if len(columns) < 6 or not columns[0].isdigit():
             continue
         tokens.append(columns[1])
-        labels.append(combined_label(columns[3], columns[5]))
+        raw_labels.append(combined_label(columns[3], columns[5]))
+        labels.append(
+            label_from_parts(
+                upos=columns[3],
+                raw_feats=columns[5],
+                xpos=columns[4],
+                kept_keys=kept_keys,
+                repair_from_xpos=repair_from_xpos,
+            )
+        )
 
     flush()
     return sentences
@@ -123,7 +234,10 @@ def write_jsonl(path: Path, rows: Iterable[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="\n") as handle:
         for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
+            public_row = {
+                key: value for key, value in row.items() if not key.startswith("_")
+            }
+            handle.write(json.dumps(public_row, ensure_ascii=False, sort_keys=True))
             handle.write("\n")
 
 
@@ -146,6 +260,19 @@ def token_count(rows: Iterable[dict]) -> int:
 
 def labels_in(rows: Iterable[dict]) -> list[str]:
     return [label for row in rows for label in row["labels"]]
+
+
+def raw_labels_in(rows: Iterable[dict]) -> list[str]:
+    return [label for row in rows for label in row["_raw_labels"]]
+
+
+def coverage_tokens(rows: Iterable[dict]) -> list[FeatsToken]:
+    tokens: list[FeatsToken] = []
+    for row in rows:
+        for label in row["labels"]:
+            upos, feats = split_label(label)
+            tokens.append(FeatsToken(upos, feats))
+    return tokens
 
 
 def oov_label_stats(rows: Iterable[dict], train_labels: set[str]) -> tuple[int, int, float]:
@@ -174,6 +301,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         help="source corpus cache directory",
     )
     parser.add_argument(
+        "--matas-file",
+        type=Path,
+        help="MATAS CoNLL-U file; defaults to --raw-dir/MATAS3.conllu",
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         default=DEFAULT_OUT_DIR,
@@ -184,26 +316,58 @@ def main(argv: Iterable[str] | None = None) -> int:
         type=int,
         help="deterministic smoke limit after shuffling",
     )
+    parser.add_argument(
+        "--feats-keys",
+        choices=("slots", "all"),
+        default="slots",
+        help="FEATS keys kept in labels: scoring slots only or all keys",
+    )
+    parser.add_argument(
+        "--repair-from-xpos",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="fill missing MATAS UD FEATS from Jablonskis XPOS",
+    )
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     if args.max_train_sentences is not None and args.max_train_sentences < 1:
         parser.error("--max-train-sentences must be positive")
 
-    alksnis_dev = read_conllu(args.raw_dir / ALKSNIS_FILES["dev"], "alksnis-dev")
-    alksnis_test = read_conllu(args.raw_dir / ALKSNIS_FILES["test"], "alksnis-test")
+    kept_keys = key_filter(args.feats_keys)
+
+    alksnis_dev = read_conllu(
+        args.raw_dir / ALKSNIS_FILES["dev"],
+        "alksnis-dev",
+        kept_keys=kept_keys,
+    )
+    alksnis_test = read_conllu(
+        args.raw_dir / ALKSNIS_FILES["test"],
+        "alksnis-test",
+        kept_keys=kept_keys,
+    )
     heldout_keys = {normalized_text(row) for row in alksnis_dev + alksnis_test}
 
     train_rows: list[dict] = []
     matas_deduped_dropped = 0
     if "matas" in args.sources:
-        matas_rows = read_conllu(args.raw_dir / MATAS_FILE, "matas")
+        matas_path = args.matas_file if args.matas_file is not None else args.raw_dir / MATAS_FILE
+        matas_rows = read_conllu(
+            matas_path,
+            "matas",
+            kept_keys=kept_keys,
+            repair_from_xpos=args.repair_from_xpos,
+        )
         matas_rows, matas_deduped_dropped = dedupe_sentences(matas_rows)
         train_rows.extend(matas_rows)
 
     if "alksnis" in args.sources:
         train_rows.extend(
-            read_conllu(args.raw_dir / ALKSNIS_FILES["train"], "alksnis-train")
+            read_conllu(
+                args.raw_dir / ALKSNIS_FILES["train"],
+                "alksnis-train",
+                kept_keys=kept_keys,
+            )
         )
 
     train_rows, leaked_dropped = drop_leaks(train_rows, heldout_keys)
@@ -216,6 +380,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     write_jsonl(args.out / "dev.jsonl", alksnis_dev)
     write_jsonl(args.out / "test.jsonl", alksnis_test)
 
+    all_raw_labels = (
+        raw_labels_in(train_rows) + raw_labels_in(alksnis_dev) + raw_labels_in(alksnis_test)
+    )
     all_labels = labels_in(train_rows) + labels_in(alksnis_dev) + labels_in(alksnis_test)
     write_labels(args.out / "labels.json", all_labels)
 
@@ -224,15 +391,34 @@ def main(argv: Iterable[str] | None = None) -> int:
     test_oov, test_total, test_rate = oov_label_stats(alksnis_test, train_label_set)
 
     print(f"sources: {','.join(args.sources)}")
+    print(f"feats keys: {args.feats_keys}")
+    print(f"repair from XPOS: {'on' if args.repair_from_xpos else 'off'}")
     if "matas" in args.sources:
         print(f"matas duplicate sentences dropped: {matas_deduped_dropped:,}")
     print(f"leakage guard dropped training sentences: {leaked_dropped:,}")
     print_split_stats("train", train_rows)
     print_split_stats("dev", alksnis_dev)
     print_split_stats("test", alksnis_test)
-    print(f"label set: {len(set(all_labels)):,}")
+    print(f"label set before: {len(set(all_raw_labels)):,}")
+    print(f"label set after: {len(set(all_labels)):,}")
     print(f"dev OOV-label rate: {dev_oov:,}/{dev_total:,} ({dev_rate:.2%})")
     print(f"test OOV-label rate: {test_oov:,}/{test_total:,} ({test_rate:.2%})")
+    print(
+        "post-prep FEATS coverage: train vs ALKSNIS dev "
+        f"(|delta| >= {COVERAGE_DELTA:.0%}, kept keys)"
+    )
+    print(
+        format_coverage_table(
+            coverage_rows(
+                coverage_tokens(train_rows),
+                coverage_tokens(alksnis_dev),
+                keys=kept_keys,
+            ),
+            "train",
+            "alksnis-dev",
+            min_delta=COVERAGE_DELTA,
+        )
+    )
     print(f"wrote {args.out}")
     return 0
 

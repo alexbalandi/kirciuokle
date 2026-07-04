@@ -19,3 +19,5 @@ local/tagger-hf/runs/
 # local replica dictionary data (not distributed - see README License section)
 local/data/
 .scratch/
+
+.venv-train/
