@@ -168,16 +168,11 @@ The code in this repository is released into the public domain under
 [The Unlicense](LICENSE) — use it however you wish, no attribution
 required.
 
-Note that the *data sources* keep their own terms: accentuation answers
-come from the VDU kirčiuoklė service, and the UDPipe `lithuanian-alksnis`
-model is CC BY-NC-SA (non-commercial). For that reason the dictionary
-contents themselves are not distributed with this repository — you warm
-your own instance via normal use or `scripts/seed_dictionary.py`.
+Data sources, corpora, services, and model artifacts keep their own terms.
+Dictionary contents are not distributed with this repository — you warm your
+own instance via normal use or `scripts/seed_dictionary.py`.
 
-## Credits
+## Attributions
 
-Accentuation data: [VDU kirčiuoklė](https://kalbu.vdu.lt/mokymosi-priemones/kirciuoklis/)
-(Vytautas Magnus University) — the same database behind
-[kirtis.info](https://kirtis.info), which inspired this project. Tagging:
-[UDPipe 2](https://ufal.mff.cuni.cz/udpipe/2) by ÚFAL, Charles University,
-via the LINDAT/CLARIN infrastructure.
+See [ATTRIBUTIONS/README.md](ATTRIBUTIONS/README.md) for the full list of
+upstream services, corpora, models, benchmark tools, licenses, and citations.

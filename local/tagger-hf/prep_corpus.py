@@ -132,9 +132,12 @@ def xpos_ud_feats(
 
 # The accent pipeline consumes VDU's label space, and Lithuanian traditional
 # grammar (hence VDU) has no determiner category — everything is įvardis
-# (PRON). ALKSNIS says DET where MATAS says PRON for the same words:
-# contradictory supervision the model should not learn. Normalize to PRON.
-VDU_UPOS_NORMALIZATION = {"DET": "PRON"}
+# (PRON) — and no auxiliary category — all verbs are veiksmažodis (vksm.).
+# ALKSNIS says DET/AUX where MATAS says PRON/VERB for the same words:
+# contradictory supervision the model should not learn. The scoring
+# projection merges both pairs anyway; the yra→būti lemma need is covered
+# by the sidecar shim (see server.py lemma_for).
+VDU_UPOS_NORMALIZATION = {"DET": "PRON", "AUX": "VERB"}
 
 
 def label_from_parts(

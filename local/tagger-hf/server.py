@@ -190,13 +190,69 @@ def to_conllu(text: str, sentences: list[list[Word]], labels: list[str]) -> str:
     return "\n".join(lines)
 
 
+def conllu_sentences(data: str) -> list[list[str]]:
+    """Token FORMs per sentence from a pre-tokenized CoNLL-U skeleton."""
+    sentences: list[list[str]] = []
+    current: list[str] = []
+    for line in data.splitlines():
+        if not line.strip():
+            if current:
+                sentences.append(current)
+                current = []
+            continue
+        if line.startswith("#"):
+            continue
+        columns = line.split("\t")
+        if len(columns) >= 2 and columns[0].isdigit():
+            current.append(columns[1])
+    if current:
+        sentences.append(current)
+    return sentences
+
+
+def tag_conllu(data: str) -> str:
+    """UDPipe-style input=conllu mode: tag the given tokens, exact alignment."""
+    sentences = conllu_sentences(data)
+    forms = [form for sentence in sentences for form in sentence]
+    labels = predict_labels(forms, runtime()) if forms else []
+    lines: list[str] = []
+    label_index = 0
+    for sentence_index, sentence in enumerate(sentences, start=1):
+        lines.append(f"# sent_id = {sentence_index}")
+        lines.append(f"# text = {' '.join(sentence)}")
+        for token_index, form in enumerate(sentence, start=1):
+            upos, feats = split_label(labels[label_index])
+            label_index += 1
+            lines.append(
+                "\t".join(
+                    [
+                        str(token_index),
+                        form,
+                        lemma_for(form, upos),
+                        upos,
+                        "_",
+                        feats if feats else "_",
+                        "_",
+                        "_",
+                        "_",
+                        "_",
+                    ]
+                )
+            )
+        lines.append("")
+    return "\n".join(lines)
+
+
 async def process_request(
     data: str,
     tokenizer: str = "",
     tagger: str = "",
     model: str = "lithuanian-alksnis",
+    input_format: str = "",
 ) -> dict[str, str]:
     del tokenizer, tagger, model
+    if input_format == "conllu":
+        return {"result": tag_conllu(data)}
     sentences = split_sentences(data)
     forms = [word.form for sentence in sentences for word in sentence]
     labels = predict_labels(forms, runtime()) if forms else []
@@ -211,8 +267,9 @@ if app is not None:
         tokenizer: str = Form(""),
         tagger: str = Form(""),
         model: str = Form("lithuanian-alksnis"),
+        input: str = Form(""),
     ) -> dict[str, str]:
-        return await process_request(data, tokenizer, tagger, model)
+        return await process_request(data, tokenizer, tagger, model, input)
 
 
 def main(argv: Iterable[str] | None = None) -> int:
