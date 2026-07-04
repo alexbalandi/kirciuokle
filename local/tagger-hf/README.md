@@ -10,6 +10,22 @@ The default base model is `VSSA-SDSA/LT-MLKM-modernBERT` (Apache-2.0,
 Lithuanian ModernBERT with a native LT tokenizer). The fallback model is
 `xlm-roberta-base`.
 
+## Training data
+
+- **UD_Lithuanian-ALKSNIS** (used by `prep_alksnis.py`): 2,341 train
+  sentences / 47,641 tokens (+11.5k dev, +10.8k test). Small, but it is
+  the exact corpus the production tagger (UDPipe 2) and Stanza trained
+  on — same data, hopefully a better Lithuanian encoder.
+- **MATAS** (the upgrade path): VDU's manually checked morphologically
+  annotated corpus, ~1.69M words / 144k sentences, distributed via
+  CLARIN-LT (v1.0 marked "Publicly Available" under the PUB CLARIN-LT
+  EULA — read the license before use) and offered in UD tagset among
+  others: https://clarin.vdu.lt/xmlui/handle/20.500.11821/9 (v3.0:
+  https://clarin.vdu.lt/xmlui/handle/20.500.11821/61). 35× ALKSNIS,
+  gold-quality, from the same VDU lab as the kirčiuoklė. Validate the
+  UD export's FEATS completeness on a sample, then extend
+  `prep_alksnis.py` to ingest it alongside ALKSNIS.
+
 ## 1. Prepare ALKSNIS
 
 From the repository root:
