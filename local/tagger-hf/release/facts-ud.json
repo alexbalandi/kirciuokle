@@ -1,0 +1,26 @@
+{
+  "variant": "ud",
+  "variant_description": "Strict-UD flavor: emits DET and AUX per Universal Dependencies conventions. Produced by classifier-head surgery from the -vdu base plus a short fine-tune on UD_Lithuanian-ALKSNIS.",
+  "full_test_bench": {
+    "slots": "89.1%",
+    "upos": "92.5%",
+    "aux_verb": "93.4%",
+    "tokens_per_second_cpu_int8": 874,
+    "udpipe_reference_slots": "89.2%",
+    "udpipe_reference_tokens_per_second": 605,
+    "protocol": "684-sentence UD_Lithuanian-ALKSNIS gold test, raw-text input, letter-token alignment, VDU-convention slots projection (DET/PRON and AUX/VERB merged; slots = POS family + Case/Gender/Number/Tense/Person/Voice/Degree)"
+  },
+  "conll18_official": {
+    "upos_f1": "94.02",
+    "ufeats_f1": "65.89 (by design: the model emits only the accentuation scoring slots, not full UD FEATS)",
+    "lemmas_f1": "49.67 (by design: no lemmatizer; form-as-lemma except yra→būti)",
+    "udpipe_reference_upos_f1": "95.15",
+    "protocol": "gold tokenization, official conll18_ud_eval.py"
+  },
+  "conll18_vdu_projection": {
+    "upos_f1": "97.12 (UDPipe reference: 95.44)",
+    "ufeats_f1": "91.50 (UDPipe reference: 90.69)"
+  },
+  "lineage": "Fully permissive: gold MATAS v3.0 (CC BY 4.0) + gold UD_Lithuanian-ALKSNIS (CC BY-SA 4.0), UD FEATS reconstructed deterministically from MATAS's Jablonskis XPOS, remaining contextual gaps filled by iterated constrained-decoding self-training (no UDPipe or other NC-licensed model anywhere in the lineage), base encoder EMBEDDIA/litlat-bert (CC BY-SA 4.0).",
+  "speed_hardware": "ONNX Runtime INT8, single CPU thread pool, consumer laptop (measured alongside network-served UDPipe at 605 tok/s)"
+}

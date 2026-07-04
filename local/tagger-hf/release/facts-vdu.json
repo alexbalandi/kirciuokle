@@ -1,0 +1,19 @@
+{
+  "variant": "vdu",
+  "variant_description": "Accentuation-optimized flavor: UPOS normalized to Lithuanian traditional grammar categories (DET folded into PRON, AUX into VERB — the VDU dictionary's label space). This is the variant used by the Kirčiuoklė accentuation pipeline.",
+  "full_test_bench": {
+    "slots": "86.4%",
+    "upos": "90.6%",
+    "aux_verb": "94.1%",
+    "tokens_per_second_cpu_int8": 880,
+    "udpipe_reference_slots": "89.2%",
+    "protocol": "684-sentence UD_Lithuanian-ALKSNIS gold test, raw-text input, letter-token alignment, VDU-convention slots projection"
+  },
+  "accentuation_quality": {
+    "sample_text_choices_vs_production": "20/20 identical",
+    "wikipedia_corpus_choices_vs_production": "323/370 (86.5%) — equal to the internal UDPipe-taught reference model; remaining disagreements split both ways on manual review",
+    "note": "For the accentuation task this variant matches the best internal model; the treebank slots number is lower than the -ud variant's because this variant deliberately keeps corpus-independent conventions rather than ALKSNIS-specific annotation habits."
+  },
+  "lineage": "Fully permissive: gold MATAS v3.0 (CC BY 4.0) + gold UD_Lithuanian-ALKSNIS (CC BY-SA 4.0), UD FEATS reconstructed deterministically from MATAS's Jablonskis XPOS, remaining contextual gaps filled by iterated constrained-decoding self-training (no UDPipe or other NC-licensed model anywhere in the lineage), base encoder EMBEDDIA/litlat-bert (CC BY-SA 4.0).",
+  "speed_hardware": "ONNX Runtime INT8, single CPU thread pool, consumer laptop"
+}

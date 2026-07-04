@@ -77,30 +77,30 @@ form-as-lemma and slots-only features by design).
 
 | backend | upos | lemma | feats | **slots** | aux/v | tok/s |
 |---|---|---|---|---|---|---|
-| **fine-tuned litlat-bert (ONNX INT8, local CPU)** | 90.5% | n/a | n/a | **92.1%** | **97.4%** | **882** |
+| **released `-ud` variant (ONNX INT8, local CPU)** | 92.5% | n/a | n/a | **89.1%** | 93.4% | **874** |
+| **released `-vdu` variant (accentuation flavor)** | 90.6% | n/a | n/a | 86.4% | 94.1% | 880 |
 | `lindat` (UDPipe 2 mBERT — prod) | 94.3% | 91.7% | 88.4% | **89.0%** | 96.4% | 637 (network) |
 | `stanza` (lt, local CPU) | 90.6% | 90.3% | 84.3% | **84.7%** | 94.4% | 425 |
 | `trankit` (XLM-R) | — | — | — | — | — | not viable |
 
-The fine-tuned model (recipe in `local/tagger-hf/`, trained on
-XPOS-repaired + teacher-filled MATAS v3.0 + ALKSNIS with VDU-normalized
-labels) beats the production tagger by 3.1pp on the accentuation metric
-and resolves copular *yra → būti* natively. Its UPOS number is lower
-against raw treebank gold mostly due to residual convention differences
-that the slots projection is designed to absorb.
+Released weights (CC BY-SA 4.0, fully NC-free lineage):
+https://huggingface.co/alexbalandi/litlat-bert-lithuanian-morphology (strict
+UD) and https://huggingface.co/alexbalandi/litlat-bert-lithuanian-morphology-vdu
+(accentuation flavor; 20/20 sample and 323/370 corpus accent choices vs
+production). Numbers above are one-shot on the full 684-sentence gold test;
+UDPipe reference on the same protocol: slots 89.2%, 605 tok/s. Official
+CoNLL-18 gold-tokenization: ours UPOS 94.0 vs UDPipe 95.2; VDU-convention
+projection: ours UPOS 97.1 / UFeats 91.5 vs UDPipe 95.4 / 90.7.
 
 Trankit verdict: the 2021 codebase no longer installs against current
 Python/transformers (needs `--python 3.10 --with "transformers==4.30.2"
 --with "numpy<2" --with six` just to import), and its model host
 (`nlp.uoregon.edu`) was unreachable when tested — treat it as abandoned.
 
-The path to beating UDPipe 2 on CPU is `local/tagger-hf/`: fine-tune
-`VSSA-SDSA/LT-MLKM-modernBERT` (Apache-2.0 Lithuanian ModernBERT, native
-LT tokenizer) on ALKSNIS joint UPOS+FEATS labels, export to ONNX INT8 via
-optimum, and serve it through the same UDPipe REST contract. Start with
-`local/tagger-hf/README.md` for the prep, fine-tune, export, and sidecar
-recipe; gate any switch on this benchmark plus the repo's accentuation
-parity eval.
+The full training recipe lives in `local/tagger-hf/README.md` (encoder
+verdict: EMBEDDIA/litlat-bert beat the Lithuanian ModernBERT by 5.4pp on
+identical data — measure, don't assume). Gate any tagger change on this
+benchmark plus the repo's accentuation parity eval.
 
 ## Local checks
 
