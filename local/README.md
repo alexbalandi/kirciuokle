@@ -54,6 +54,41 @@ docker compose -f local/docker-compose.udpipe2.yml up --build
 You can also point `TAGGER_URL` at LINDAT or any future service that returns
 `{"result": "<conllu>"}` from `/process`.
 
+## Tagger backends & benchmarking
+
+Use `scripts/bench_taggers.py` to compare UDPipe-compatible taggers against
+the UD_Lithuanian-ALKSNIS test set:
+
+```sh
+uv run scripts/bench_taggers.py --backends lindat --limit 400
+uv run --with stanza scripts/bench_taggers.py --backends stanza --limit 400
+```
+
+Measured on the 400-sentence gold test set (2026-07). `slots` is the
+metric that matters for accentuation: exact match of the scoring
+projection (POS family + case/gender/number/tense/person/voice/degree)
+that drives homograph disambiguation. `aux/v` is the AUX-vs-VERB
+distinction that powers the yra→yrà lemma exception.
+
+| backend | upos | lemma | feats | **slots** | aux/v | tok/s |
+|---|---|---|---|---|---|---|
+| `lindat` (UDPipe 2 mBERT — prod) | 94.3% | 91.7% | 88.4% | **89.0%** | 96.4% | 669 (network) |
+| `stanza` (lt, local CPU) | 90.6% | 90.3% | 84.3% | **84.7%** | 94.4% | 425 |
+| `trankit` (XLM-R) | — | — | — | — | — | not viable |
+
+Trankit verdict: the 2021 codebase no longer installs against current
+Python/transformers (needs `--python 3.10 --with "transformers==4.30.2"
+--with "numpy<2" --with six` just to import), and its model host
+(`nlp.uoregon.edu`) was unreachable when tested — treat it as abandoned.
+
+The path to beating UDPipe 2 on CPU is `local/tagger-hf/`: fine-tune
+`VSSA-SDSA/LT-MLKM-modernBERT` (Apache-2.0 Lithuanian ModernBERT, native
+LT tokenizer) on ALKSNIS joint UPOS+FEATS labels, export to ONNX INT8 via
+optimum, and serve it through the same UDPipe REST contract. Start with
+`local/tagger-hf/README.md` for the prep, fine-tune, export, and sidecar
+recipe; gate any switch on this benchmark plus the repo's accentuation
+parity eval.
+
 ## Local checks
 
 ```sh
