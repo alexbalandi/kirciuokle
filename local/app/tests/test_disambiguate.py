@@ -79,6 +79,12 @@ def test_parse_mi_longest_first_and_score_weights() -> None:
     assert score_tags(parse_mi("bdv., mot. g., vns. gal."), context) == 2
 
 
+def test_det_tokens_score_as_pron_against_vdu_pronoun_variants() -> None:
+    context = token_tags(token("tas", "tas", "DET"))
+
+    assert score_tags(parse_mi("įv."), context) == 4
+
+
 def test_pick_variant_uses_lemma_exception_before_scoring() -> None:
     variants = [
         {"form": "ỹra", "info": "vksm., es. l., 3 asm.", "mi": ["vksm., es. l., 3 asm."]},

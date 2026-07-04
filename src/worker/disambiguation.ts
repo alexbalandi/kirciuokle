@@ -186,6 +186,9 @@ export function tokenTags(token: Token): TagSlots {
     tags.pos = token.feats.VerbForm === "Part" ? "PART_VERB" : "VERB";
   } else if (token.upos === "NOUN" || token.upos === "PROPN") {
     tags.pos = "NOUN";
+  } else if (token.upos === "DET") {
+    // POS family follows VDU conventions: no DET in Lithuanian traditional grammar; see docs/SPEC13.md.
+    tags.pos = "PRON";
   } else if (token.upos === "CCONJ" || token.upos === "SCONJ") {
     tags.pos = "CCONJ";
   } else {

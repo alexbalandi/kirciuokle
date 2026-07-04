@@ -130,13 +130,23 @@ def xpos_ud_feats(
     return feats
 
 
+# The accent pipeline consumes VDU's label space, and Lithuanian traditional
+# grammar (hence VDU) has no determiner category — everything is įvardis
+# (PRON). ALKSNIS says DET where MATAS says PRON for the same words:
+# contradictory supervision the model should not learn. Normalize to PRON.
+VDU_UPOS_NORMALIZATION = {"DET": "PRON"}
+
+
 def label_from_parts(
     upos: str,
     raw_feats: str,
     xpos: str,
     kept_keys: Iterable[str] | None,
     repair_from_xpos: bool,
+    normalize_vdu: bool = False,
 ) -> str:
+    if normalize_vdu:
+        upos = VDU_UPOS_NORMALIZATION.get(upos, upos)
     feats = parse_feats(raw_feats)
     if repair_from_xpos:
         for key, value in xpos_ud_feats(xpos, kept_keys).items():
@@ -150,6 +160,7 @@ def read_conllu(
     sentence_prefix: str,
     kept_keys: Iterable[str] | None,
     repair_from_xpos: bool = False,
+    normalize_vdu: bool = False,
 ) -> list[dict]:
     require_file(path)
     sentences: list[dict] = []
@@ -198,6 +209,7 @@ def read_conllu(
                 xpos=columns[4],
                 kept_keys=kept_keys,
                 repair_from_xpos=repair_from_xpos,
+                normalize_vdu=normalize_vdu,
             )
         )
 
@@ -328,6 +340,13 @@ def main(argv: Iterable[str] | None = None) -> int:
         default=True,
         help="fill missing MATAS UD FEATS from Jablonskis XPOS",
     )
+    parser.add_argument(
+        "--normalize-vdu",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="normalize UPOS toward VDU conventions in all splits (DET->PRON; "
+        "Lithuanian grammar and the VDU dictionary have no determiner category)",
+    )
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -340,11 +359,13 @@ def main(argv: Iterable[str] | None = None) -> int:
         args.raw_dir / ALKSNIS_FILES["dev"],
         "alksnis-dev",
         kept_keys=kept_keys,
+        normalize_vdu=args.normalize_vdu,
     )
     alksnis_test = read_conllu(
         args.raw_dir / ALKSNIS_FILES["test"],
         "alksnis-test",
         kept_keys=kept_keys,
+        normalize_vdu=args.normalize_vdu,
     )
     heldout_keys = {normalized_text(row) for row in alksnis_dev + alksnis_test}
 
@@ -357,6 +378,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             "matas",
             kept_keys=kept_keys,
             repair_from_xpos=args.repair_from_xpos,
+            normalize_vdu=args.normalize_vdu,
         )
         matas_rows, matas_deduped_dropped = dedupe_sentences(matas_rows)
         train_rows.extend(matas_rows)
@@ -367,6 +389,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 args.raw_dir / ALKSNIS_FILES["train"],
                 "alksnis-train",
                 kept_keys=kept_keys,
+                normalize_vdu=args.normalize_vdu,
             )
         )
 
@@ -393,6 +416,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     print(f"sources: {','.join(args.sources)}")
     print(f"feats keys: {args.feats_keys}")
     print(f"repair from XPOS: {'on' if args.repair_from_xpos else 'off'}")
+    print(f"VDU UPOS normalization: {'on' if args.normalize_vdu else 'off'}")
     if "matas" in args.sources:
         print(f"matas duplicate sentences dropped: {matas_deduped_dropped:,}")
     print(f"leakage guard dropped training sentences: {leaked_dropped:,}")

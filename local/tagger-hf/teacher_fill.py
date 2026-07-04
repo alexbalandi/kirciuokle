@@ -36,6 +36,12 @@ BATCH_SIZE = 80
 DEFAULT_RPS = 1.0
 DEFAULT_PROGRESS_EVERY = 5_000
 FILL_KEYS = ("Number", "Person", "Reflex")
+BUTI_UPOS_KEY = "ButiUpos(copula->AUX)"
+
+# When enabled, tokens whose gold LEMMA is "būti" but UPOS is VERB also take
+# the teacher's UPOS (MATAS labels copular būti VERB; UD/ALKSNIS say AUX,
+# and the accent pipeline derives lemma būti from the AUX signal).
+FIX_BUTI_UPOS = False
 
 
 @dataclass
@@ -59,7 +65,7 @@ class Stats:
     filled: int = 0
     failed: int = 0
     fill_counts: dict[str, int] = field(
-        default_factory=lambda: {key: 0 for key in FILL_KEYS}
+        default_factory=lambda: {key: 0 for key in (*FILL_KEYS, BUTI_UPOS_KEY)}
     )
 
 
@@ -128,7 +134,10 @@ def parse_sentence(index: int, lines: list[str]) -> Sentence:
             continue
         token = TokenLine(line_index, columns)
         tokens.append(token)
-        if columns[0].isdigit() and gap_keys(columns[3], parse_feats(columns[5])):
+        if columns[0].isdigit() and (
+            gap_keys(columns[3], parse_feats(columns[5]))
+            or (FIX_BUTI_UPOS and columns[2] == "būti" and columns[3] == "VERB")
+        ):
             has_gap = True
     return Sentence(index=index, lines=lines, tokens=tokens, has_gap=has_gap)
 
@@ -227,10 +236,20 @@ def apply_teacher(sentence: Sentence, teacher_rows: list[list[str]]) -> dict[str
         if token.columns[0] != teacher_columns[0] or token.columns[1] != teacher_columns[1]:
             return None
 
-    fill_counts = {key: 0 for key in FILL_KEYS}
+    fill_counts = {key: 0 for key in (*FILL_KEYS, BUTI_UPOS_KEY)}
     for token, teacher_columns in zip(sentence.tokens, teacher_rows):
         if not token.columns[0].isdigit():
             continue
+
+        if (
+            FIX_BUTI_UPOS
+            and token.columns[2] == "būti"
+            and token.columns[3] == "VERB"
+            and teacher_columns[3] == "AUX"
+        ):
+            token.columns[3] = "AUX"
+            fill_counts[BUTI_UPOS_KEY] += 1
+            sentence.lines[token.line_index] = "\t".join(token.columns)
 
         gold_feats = parse_feats(token.columns[5])
         keys = gap_keys(token.columns[3], gold_feats)
@@ -404,7 +423,16 @@ def main(argv: Iterable[str] | None = None) -> int:
         default=DEFAULT_PROGRESS_EVERY,
         help="print progress after this many processed sentences",
     )
+    parser.add_argument(
+        "--fix-buti-upos",
+        action="store_true",
+        help="also take the teacher's UPOS for gold-VERB tokens with lemma būti "
+        "(MATAS labels copular būti VERB; UD says AUX)",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
+
+    global FIX_BUTI_UPOS
+    FIX_BUTI_UPOS = args.fix_buti_upos
 
     stats = run_fill(
         input_path=args.input,
@@ -420,7 +448,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     print(f"sentences filled: {stats.filled:,}")
     print(f"sentences failed: {stats.failed:,}")
     print("per-key fill counts:")
-    for key in FILL_KEYS:
+    for key in (*FILL_KEYS, BUTI_UPOS_KEY):
         print(f"  {key}: {stats.fill_counts[key]:,}")
     print(f"wrote {args.output}")
     return 0

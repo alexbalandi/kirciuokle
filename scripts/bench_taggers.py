@@ -178,6 +178,9 @@ def token_tags(token: Token) -> dict[str, str]:
         tags["pos"] = "PART_VERB" if token.feats.get("VerbForm") == "Part" else "VERB"
     elif token.upos in ("NOUN", "PROPN"):
         tags["pos"] = "NOUN"
+    elif token.upos == "DET":
+        # POS family follows VDU conventions: no DET in Lithuanian traditional grammar; see docs/SPEC13.md.
+        tags["pos"] = "PRON"
     elif token.upos in ("CCONJ", "SCONJ"):
         tags["pos"] = "CCONJ"
     else:

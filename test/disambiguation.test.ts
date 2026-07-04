@@ -117,6 +117,12 @@ describe("MI parsing and scoring", () => {
     expect(scoreTags(parseMi("bdv., vyr. g., vns. vard."), context)).toBe(10);
     expect(scoreTags(parseMi("bdv., mot. g., vns. gal."), context)).toBe(2);
   });
+
+  it("scores DET tokens as PRON against VDU pronoun variants", () => {
+    const context = tokenTags(token("tas", "tas", "DET"));
+
+    expect(scoreTags(parseMi("įv."), context)).toBe(4);
+  });
 });
 
 describe("variant picking", () => {

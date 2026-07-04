@@ -70,6 +70,10 @@ projection (POS family + case/gender/number/tense/person/voice/degree)
 that drives homograph disambiguation. `aux/v` is the AUX-vs-VERB
 distinction that powers the yra→yrà lemma exception.
 
+Note: the `slots` metric now merges DET into PRON per VDU conventions.
+Previously published numbers (UDPipe 89.0, Stanza 84.7, ours 87.4)
+predate this change and will be re-baselined by the orchestrator.
+
 | backend | upos | lemma | feats | **slots** | aux/v | tok/s |
 |---|---|---|---|---|---|---|
 | `lindat` (UDPipe 2 mBERT — prod) | 94.3% | 91.7% | 88.4% | **89.0%** | 96.4% | 669 (network) |
