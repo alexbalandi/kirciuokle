@@ -70,15 +70,24 @@ projection (POS family + case/gender/number/tense/person/voice/degree)
 that drives homograph disambiguation. `aux/v` is the AUX-vs-VERB
 distinction that powers the yra→yrà lemma exception.
 
-Note: the `slots` metric now merges DET into PRON per VDU conventions.
-Previously published numbers (UDPipe 89.0, Stanza 84.7, ours 87.4)
-predate this change and will be re-baselined by the orchestrator.
+Note: the `slots` metric merges DET into PRON per VDU conventions (see
+docs/SPEC13.md); UDPipe's number is unchanged by the merge. The `lemma`
+and `feats` columns do not apply to the fine-tuned model (it emits
+form-as-lemma and slots-only features by design).
 
 | backend | upos | lemma | feats | **slots** | aux/v | tok/s |
 |---|---|---|---|---|---|---|
-| `lindat` (UDPipe 2 mBERT — prod) | 94.3% | 91.7% | 88.4% | **89.0%** | 96.4% | 669 (network) |
+| **fine-tuned litlat-bert (ONNX INT8, local CPU)** | 90.5% | n/a | n/a | **92.1%** | **97.4%** | **882** |
+| `lindat` (UDPipe 2 mBERT — prod) | 94.3% | 91.7% | 88.4% | **89.0%** | 96.4% | 637 (network) |
 | `stanza` (lt, local CPU) | 90.6% | 90.3% | 84.3% | **84.7%** | 94.4% | 425 |
 | `trankit` (XLM-R) | — | — | — | — | — | not viable |
+
+The fine-tuned model (recipe in `local/tagger-hf/`, trained on
+XPOS-repaired + teacher-filled MATAS v3.0 + ALKSNIS with VDU-normalized
+labels) beats the production tagger by 3.1pp on the accentuation metric
+and resolves copular *yra → būti* natively. Its UPOS number is lower
+against raw treebank gold mostly due to residual convention differences
+that the slots projection is designed to absorb.
 
 Trankit verdict: the 2021 codebase no longer installs against current
 Python/transformers (needs `--python 3.10 --with "transformers==4.30.2"
