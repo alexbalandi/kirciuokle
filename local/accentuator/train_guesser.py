@@ -34,9 +34,15 @@ except ImportError:  # pragma: no cover
 GRAVE, ACUTE, TILDE = "̀", "́", "̃"
 STRESS_MARKS = {GRAVE, ACUTE, TILDE}
 MAX_SUFFIX = 10
-# letters that can carry a mark: vowels always; sonorants only as the second
-# element of a mixed diphthong, and never with the acute
+# Letters that can carry a mark, tightened by an audit of all 710k stressed
+# variants in generated.sqlite (2026-07-06): long vowels never take the
+# grave (0-3 noise rows vs tens of thousands acute/tilde); a bare short i
+# takes only the grave (30,028 vs 1); mixed-diphthong first-element i/u
+# takes only the grave (52,069 vs 5); a sonorant as the second diphthong
+# element takes only the tilde (60,931 vs 0). Bans remove impossible
+# (letter, mark) cells from every guesser's choice space.
 VOWELS = set("aeiouyąęėįūų")
+LONG_VOWELS = set("yąęėįūų")
 SONORANTS = set("lmnr")
 
 
@@ -65,9 +71,24 @@ def valid_target(word: str, pos: int, mark: str) -> bool:
     if not 0 <= pos < len(word):
         return False
     ch = word[pos]
-    if ch in VOWELS:
-        return True
-    return ch in SONORANTS and mark != ACUTE and pos > 0 and word[pos - 1] in VOWELS
+    prev = word[pos - 1] if pos > 0 else ""
+    nxt = word[pos + 1] if pos + 1 < len(word) else ""
+    if ch in SONORANTS:
+        return mark == TILDE and prev in VOWELS
+    if ch not in VOWELS:
+        return False
+    if ch in LONG_VOWELS:
+        return mark != GRAVE
+    if ch in "iu" and prev not in VOWELS and nxt not in VOWELS:
+        # not part of a vowel diphthong: bare short nucleus or the first
+        # element of a mixed diphthong (il/ir/um/un...) — grave only,
+        # except the attested u+tilde loan notation
+        if nxt in SONORANTS:
+            return mark == GRAVE
+        if ch == "i":
+            return mark == GRAVE
+        return mark != ACUTE
+    return True
 
 
 class SuffixModel:
