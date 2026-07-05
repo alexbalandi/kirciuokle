@@ -159,7 +159,7 @@ textarea {
   max-height: 62vh;
   margin-top: 0;
   resize: none;
-  overflow: hidden;
+  overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 14px;

@@ -102,6 +102,32 @@ taggerNoticeClose.addEventListener("click", () => {
   taggerNotice.hidden = true;
 });
 
+// Keep the input and the result scrolled to the same relative position —
+// the texts are identical, so proportional sync keeps the same passage
+// visible on both sides. The induced scroll event on the synced element is
+// swallowed via the ignore set (no timers — they stall in background tabs).
+const scrollIgnore = new Set<HTMLElement>();
+
+function syncScroll(source: HTMLElement, target: HTMLElement): void {
+  if (scrollIgnore.delete(source)) {
+    return;
+  }
+  const sourceMax = source.scrollHeight - source.clientHeight;
+  const targetMax = target.scrollHeight - target.clientHeight;
+  if (sourceMax <= 0 || targetMax <= 0) {
+    return;
+  }
+  const next = (source.scrollTop / sourceMax) * targetMax;
+  if (Math.abs(target.scrollTop - next) < 1) {
+    return;
+  }
+  scrollIgnore.add(target);
+  target.scrollTop = next;
+}
+
+textarea.addEventListener("scroll", () => syncScroll(textarea, resultOutput));
+resultOutput.addEventListener("scroll", () => syncScroll(resultOutput, textarea));
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closePopover();
