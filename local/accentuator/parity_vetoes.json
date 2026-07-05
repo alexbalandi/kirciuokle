@@ -32,6 +32,7 @@
     "netvarka": "kaikki keeps stem stress (netvar̃ka); standard retracts to the negation prefix (nẽtvarka)",
     "paplūdimys": "kaikki writes acute prefix (páplūdimio) in retracted cells; standard pãplūdimio",
     "pirmadienis": "kaikki lemma accent pirmadiẽnis; standard pirmãdienis (fixed on -mã-)",
+    "paminti": "kaikki's minti page mixes two etymologies (mìna trample / mẽna remember); synthesis over it is unreliable",
     "patrikas": "the name Patrikas, not an -ika derivative; VDU declines it mobile (patrikaĩ)",
     "pirštinė": "kaikki class 2 yields pirštinès; standard pir̃štinė is class 1 (pir̃štines)",
     "planas": "kaikki class 1 keeps plãnai; standard plãnas is class 4 (planaĩ, planùs)",
@@ -43,6 +44,10 @@
     "tunelis": "loanword in -elis, not a diminutive (tùnelis); the -ẽlis rule must not fire",
     "vidus": "kaikki writes long ĩ (vĩdų); standard vìdų has a short i (class 4)",
     "žmona": "kaikki circumflex in retracted cells (žmõną); standard acute (žmóną)"
+  },
+  "lemma_cells": {
+    "_readme": "Tense-level exclusions: cells whose tags intersect the list are dropped for the lemma (suffix-matched, so 'vesti' also covers nuvesti/išvesti).",
+    "vesti": ["future", "imperative", "conditional"]
   },
   "norm_deltas": {
     "_readme": "Words where our output follows VLKK (the normative authority) against the VDU cache; counted as NORM-DELTA, not DISJOINT.",
@@ -72,6 +77,7 @@
     "lyg": "closed-class draft carries lỹg; dictionaries give lýg — pending VLKK adjudication",
     "miegot": "kaikki apocope row miẽgot; standard shortening keeps the acute (miegót)",
     "niekur": "closed-class draft carries niekur̃; standard niẽkur — pending VLKK adjudication",
+    "pajuokavau": "kaikki juokauti 1sg row juokãvau; standard mobile juokavaũ — inherited by synthesis",
     "rodos": "kaikki particle entry rõdos; standard ródos (from ródosi)",
     "vesiu": "kaikki writes long ẽ in vesti s-stem cells (vẽsiu); standard short è (vèsiu)",
     "vesk": "kaikki writes long ẽ in vesti s-stem cells (vẽsk); standard short è (vèsk)"

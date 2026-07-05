@@ -94,14 +94,28 @@ VERB_PREFIXES = tuple(
 )
 
 
-def load_vetoes(path: Path = DEFAULT_VETOES) -> dict[str, dict[str, str]]:
+def load_vetoes(path: Path = DEFAULT_VETOES) -> dict[str, dict]:
     if not path.exists():
-        return {"lemmas": {}, "words": {}}
+        return {"lemmas": {}, "words": {}, "lemma_cells": {}}
     raw = json.loads(path.read_text(encoding="utf-8"))
     return {
         "lemmas": dict(raw.get("lemmas") or {}),
         "words": dict(raw.get("words") or {}),
+        "lemma_cells": {
+            k: v.get("tenses", v) if isinstance(v, dict) else v
+            for k, v in (raw.get("lemma_cells") or {}).items()
+        },
     }
+
+
+def _cell_vetoed(lemma: str, tags: Iterable[str], vetoed_cells: dict | None) -> bool:
+    if not vetoed_cells:
+        return False
+    for key, tenses in vetoed_cells.items():
+        if lemma == key or lemma.endswith(key):
+            if set(tags) & set(tenses):
+                return True
+    return False
 
 
 def matched_verb_prefix(lemma: str) -> str | None:
@@ -190,6 +204,41 @@ def _retract_to_prefix(form: str, third_person: str) -> str | None:
 # them (VDU: nebegãli, nebegaliù), tikėti does not (VDU: nètikiu).
 STRONG_PRESENT_EXCEPTIONS = frozenset(("gulėti", "turėti", "galėti"))
 
+# (base lemma, tense) -> weak? — read off kaikki's real prefixed entries
+# (àtnešė => nešti past weak; ištráukė => traukti past strong). Acute pasts
+# split lexically (pàbaigė weak vs ištráukė strong), so evidence overrides
+# the criteria wherever it exists.
+_WEAK_EVIDENCE: dict[tuple[str, str], bool] = {}
+
+
+def load_weak_evidence(
+    db: sqlite3.Connection, vetoed_lemmas: dict[str, str] | None = None
+) -> None:
+    _WEAK_EVIDENCE.clear()
+    votes: dict[tuple[str, str], Counter[bool]] = {}
+    bases = {l for (l,) in db.execute("SELECT DISTINCT lemma FROM verbs")}
+    for lemma, present_3, past_3 in db.execute(
+        "SELECT DISTINCT lemma, present_3, past_3 FROM verbs"
+    ):
+        if vetoed_lemmas and lemma in vetoed_lemmas:
+            continue  # known-bad entries (nekęsti) must not vote
+        prefix = matched_verb_prefix(lemma)
+        if not prefix or prefix in ("ne", "nebe", "tebe", "per", "persi"):
+            # negation is not prefix evidence (negalė́ti vs nugalė́ti differ),
+            # and per- is always stressed regardless of root strength
+            continue
+        base = lemma[len(prefix):]
+        if base not in bases:
+            continue
+        for tense, principal in (("present", present_3), ("past", past_3)):
+            form = normalize_lt(principal or "")
+            index = stressed_base_index(form)
+            if index is None:
+                continue
+            votes.setdefault((base, tense), Counter())[index < len(prefix)] += 1
+    for key, counter in votes.items():
+        _WEAK_EVIDENCE[key] = counter.most_common(1)[0][0]
+
 
 def _weak_present_root(lemma: str, present_3: str, past_3: str) -> bool:
     """Kushnir 2019 §4.4.5 (123): which present roots are weak.
@@ -201,7 +250,12 @@ def _weak_present_root(lemma: str, present_3: str, past_3: str) -> bool:
     """
 
     if lemma in STRONG_PRESENT_EXCEPTIONS:
+        # lexical exceptions outrank prefixed-entry evidence: nugalė́ti is
+        # genuinely weak (nùgali) while negalė́ti stays strong (negãli)
         return False
+    evidence = _WEAK_EVIDENCE.get((lemma, "present"))
+    if evidence is not None:
+        return evidence
     p3 = normalize_lt(present_3)
     key = lower_key(p3)
     if key.endswith("o"):
@@ -238,6 +292,16 @@ def _weak_present_root(lemma: str, present_3: str, past_3: str) -> bool:
         and pst[vowel] == "i"
         and vowel + 1 < len(pst)
         and pst[vowel + 1] == nxt
+    ):
+        return True
+    # ... or an n-infix present (skreñda/skrìdo, rañda/rãdo — weak:
+    # àtskrenda, sùrado; m-infix stays strong: sutam̃pa)
+    if (
+        nxt == "n"
+        and vowel + 2 < len(stripped)
+        and vowel + 1 < len(pst)
+        and pst[vowel] in "aeiu"
+        and pst[vowel + 1] == stripped[vowel + 2]
     ):
         return True
     # ... or -aR- stems of -ėti verbs (kal̃ba : kalbė́ti)
@@ -290,7 +354,14 @@ def _weak_root_possible(lemma: str, tense: str, present_3: str, past_3: str) -> 
     pasts in -o (kalbė́jo, mókino) fail the -ė test on their own.
     """
 
+    evidence = _WEAK_EVIDENCE.get((lemma, tense))
+    if evidence is not None:
+        return evidence
     if tense == "past":
+        if first_stress_mark(normalize_lt(past_3)) == "acute":
+            # acute pasts split lexically (pàbaigė weak vs ištráukė strong);
+            # without prefixed-entry evidence, default to strong
+            return False
         return lower_key(past_3).endswith("ė") and not lemma.endswith("yti")
     return not lower_key(present_3).endswith("o")
 
@@ -618,6 +689,7 @@ def generate_verbs(
     grouped: dict[str, dict[tuple[str, str], Variant]],
     limit: int | None,
     vetoed_lemmas: dict[str, str] | None = None,
+    vetoed_cells: dict | None = None,
 ) -> int:
     query = """
         SELECT DISTINCT v.lemma, v.accented_infinitive, v.present_3, v.past_3, m.conjugation_template
@@ -631,57 +703,211 @@ def generate_verbs(
             break
         if vetoed_lemmas and lemma in vetoed_lemmas:
             continue
-        prefix = matched_verb_prefix(lemma)
         form_rows = rows_for_lemma(db, lemma, "verb")
         forms_by_cell = {
             key: entries
             for key, entries in build_forms_by_cell(form_rows).items()
             if is_generation_verb_cell(parse_tags(key))
+            and not _cell_vetoed(lemma, parse_tags(key), vetoed_cells)
         }
         if not forms_by_cell:
             continue
-        info = {
-            "forms_by_cell": forms_by_cell,
-            "stripped_lemma": strip_accents(infinitive),
-            "conjugation_template": template,
-        }
-        for key in sorted(forms_by_cell):
-            tags = parse_tags(key)
-            for form, out_tags in accent_verb(infinitive, present_3, past_3, tags, info):
-                resolved, rule = resolve_verb_form(prefix, out_tags, form, lemma, present_3, past_3)
-                if resolved is None:
-                    continue
-                provenance = f"open-accentuator:kaikki:{lemma}:verb:{key}"
-                if rule:
-                    provenance += f":rule={rule}"
-                add_variant(
-                    grouped,
-                    form=resolved,
-                    pos="verb",
-                    tags=out_tags,
-                    provenance=provenance,
-                )
-                tag_set = set(out_tags)
-                if "participle" in tag_set or "necessitative" in tag_set:
-                    for decl_form, decl_tags in decline_participle(resolved, tag_set, present_3):
-                        add_variant(
-                            grouped,
-                            form=decl_form,
-                            pos="verb",
-                            tags=decl_tags,
-                            provenance=f"{provenance}:rule=participle-declension",
-                        )
-                if not lemma.startswith(("ne", "nebe")) and not tag_set & CASE_TAGS:
-                    negated = negated_forms(resolved, out_tags, lemma, prefix, present_3, past_3)
-                    for negated_form in negated or []:
-                        add_variant(
-                            grouped,
-                            form=negated_form,
-                            pos="verb",
-                            tags=out_tags,
-                            provenance=f"{provenance}:rule=negation",
-                        )
+        _emit_verb_forms(
+            grouped, lemma, infinitive, present_3, past_3, forms_by_cell, template,
+        )
         count += 1
+    return count
+
+
+def _emit_verb_forms(
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    lemma: str,
+    infinitive: str,
+    present_3: str,
+    past_3: str,
+    forms_by_cell: dict[str, list[dict[str, object]]],
+    template: str | None = None,
+    source: str = "kaikki",
+) -> None:
+    prefix = matched_verb_prefix(lemma)
+    info = {
+        "forms_by_cell": forms_by_cell,
+        "stripped_lemma": strip_accents(infinitive),
+        "conjugation_template": template,
+    }
+    for key in sorted(forms_by_cell):
+        tags = parse_tags(key)
+        for form, out_tags in accent_verb(infinitive, present_3, past_3, tags, info):
+            resolved, rule = resolve_verb_form(prefix, out_tags, form, lemma, present_3, past_3)
+            if resolved is None:
+                continue
+            provenance = f"open-accentuator:{source}:{lemma}:verb:{key}"
+            if rule:
+                provenance += f":rule={rule}"
+            add_variant(
+                grouped,
+                form=resolved,
+                pos="verb",
+                tags=out_tags,
+                provenance=provenance,
+            )
+            tag_set = set(out_tags)
+            if "participle" in tag_set or "necessitative" in tag_set:
+                for decl_form, decl_tags in decline_participle(resolved, tag_set, present_3):
+                    add_variant(
+                        grouped,
+                        form=decl_form,
+                        pos="verb",
+                        tags=decl_tags,
+                        provenance=f"{provenance}:rule=participle-declension",
+                    )
+            if not lemma.startswith(("ne", "nebe")) and not tag_set & CASE_TAGS:
+                negated = negated_forms(resolved, out_tags, lemma, prefix, present_3, past_3)
+                for negated_form in negated or []:
+                    add_variant(
+                        grouped,
+                        form=negated_form,
+                        pos="verb",
+                        tags=out_tags,
+                        provenance=f"{provenance}:rule=negation",
+                    )
+
+
+# Prefixes safe for paradigm synthesis: short-vowel stress targets (pà-,
+# atì-, ìš-). per- (always stressed) and long į- need their own treatment.
+SYNTH_PREFIXES = ("ap", "api", "at", "ati", "iš", "nu", "pa", "par", "pra", "pri", "su", "už")
+
+
+def _prefix_grave(prefix: str) -> str:
+    for i in range(len(prefix) - 1, -1, -1):
+        if prefix[i] in VOWELS:
+            return normalize_lt(prefix[: i + 1] + "̀" + prefix[i + 1:])
+    return prefix
+
+
+def _prefixed_form(
+    form: str,
+    tags: Iterable[str],
+    weak_present: bool,
+    weak_past: bool,
+    prefix: str,
+    prefix_grave: str,
+) -> str | None:
+    """One base-verb form carried onto a prefixed verb (Kushnir §4.4.2).
+
+    Strong tenses and all infinitive-stem forms keep the base accent with an
+    unstressed prefix; weak finite tenses retract onto the prefix; weak-stem
+    non-finite forms are skipped except the past active participle, whose
+    root always keeps the accent (§4.6.2).
+    """
+
+    tag_set = set(tags)
+    if "frequentative" in tag_set:
+        weak = False
+    elif "present" in tag_set:
+        weak = weak_present
+    elif "past" in tag_set:
+        weak = weak_past
+    else:
+        weak = False
+    if not weak:
+        return prefix + form
+    if tag_set & NONFINITE_VERB_TAGS:
+        if "active" in tag_set and "past" in tag_set:
+            return prefix + form
+        return None
+    return prefix_grave + strip_accents(form)
+
+
+def generate_prefixed_verbs(
+    db: sqlite3.Connection,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    vetoed_lemmas: dict[str, str] | None = None,
+    wordlist: Path | None = None,
+    vetoed_cells: dict | None = None,
+) -> int:
+    """Synthesize prefixed-verb paradigms from unprefixed bases.
+
+    Only combos attested in the frequency wordlist are generated, and real
+    kaikki entries always win. The synthesized cells run through the same
+    rule path as observed verbs, so metatony, participle declension, and
+    negation all apply to them.
+    """
+
+    if wordlist is None:
+        wordlist = DATA_DIR / DEFAULT_WORDLIST_NAME
+    if not wordlist.exists():
+        return 0
+    words = {
+        line.split()[0]
+        for line in wordlist.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
+    existing = {l for (l,) in db.execute("SELECT DISTINCT lemma FROM verbs")}
+    count = 0
+    for lemma, infinitive, present_3, past_3 in db.execute(
+        "SELECT DISTINCT lemma, accented_infinitive, present_3, past_3 FROM verbs"
+    ):
+        if matched_verb_prefix(lemma) or lemma.endswith("tis"):
+            continue  # bases only; reflexive morphology differs (pasi-)
+        if vetoed_lemmas and lemma in vetoed_lemmas:
+            continue
+        if not (infinitive and present_3 and past_3):
+            continue
+        weak_present = _weak_present_root(lemma, present_3, past_3)
+        weak_past = _weak_root_possible(lemma, "past", present_3, past_3)
+        base_cells = {
+            key: entries
+            for key, entries in build_forms_by_cell(rows_for_lemma(db, lemma, "verb")).items()
+            if is_generation_verb_cell(parse_tags(key))
+            and not _cell_vetoed(lemma, parse_tags(key), vetoed_cells)
+        }
+        if not base_cells:
+            continue
+        base_keys = (
+            strip_accents(normalize_lt(infinitive)),
+            strip_accents(normalize_lt(present_3)),
+            strip_accents(normalize_lt(past_3)),
+        )
+        for prefix in SYNTH_PREFIXES:
+            combo = prefix + lemma
+            if combo in existing or (vetoed_lemmas and combo in vetoed_lemmas):
+                continue
+            if not any(prefix + base in words for base in base_keys):
+                continue
+            grave = _prefix_grave(prefix)
+            cells: dict[str, list[dict[str, object]]] = {}
+            for key, entries in base_cells.items():
+                tags = parse_tags(key)
+                out = []
+                for entry in entries:
+                    moved = _prefixed_form(
+                        str(entry["form"]), tags, weak_present, weak_past, prefix, grave,
+                    )
+                    if moved:
+                        out.append({"form": moved, "tags": list(tags)})
+                if out:
+                    cells[key] = out
+            if not cells:
+                continue
+            new_p3 = _prefixed_form(
+                normalize_lt(present_3), ("present", "third-person"),
+                weak_present, weak_past, prefix, grave,
+            )
+            new_pst3 = _prefixed_form(
+                normalize_lt(past_3), ("past", "third-person"),
+                weak_present, weak_past, prefix, grave,
+            )
+            _emit_verb_forms(
+                grouped,
+                combo,
+                prefix + normalize_lt(infinitive),
+                new_p3 or prefix + normalize_lt(present_3),
+                new_pst3 or prefix + normalize_lt(past_3),
+                cells,
+                source="prefix-rule",
+            )
+            count += 1
     return count
 
 
@@ -1085,9 +1311,13 @@ def generate_dictionary(
     source = sqlite3.connect(lexicon)
     grouped: dict[str, dict[tuple[str, str], Variant]] = defaultdict(dict)
     try:
+        load_weak_evidence(source, vetoes["lemmas"])
         vlkk_count, vlkk_lemmas = generate_vlkk_names(source, grouped)
         nominal_count = generate_nominals(source, grouped, limit, vetoes["lemmas"], vlkk_lemmas)
-        verb_count = generate_verbs(source, grouped, limit, vetoes["lemmas"])
+        verb_count = generate_verbs(source, grouped, limit, vetoes["lemmas"], vetoes["lemma_cells"])
+        prefixed_count = generate_prefixed_verbs(
+            source, grouped, vetoes["lemmas"], vetoed_cells=vetoes["lemma_cells"],
+        )
         other_count = generate_other(source, grouped, vetoes["lemmas"])
         closed_count = generate_closed(source, grouped)
         degree_count = generate_degrees(source, grouped, vetoes["lemmas"])
@@ -1100,6 +1330,7 @@ def generate_dictionary(
         "vlkk_names": vlkk_count,
         "nominal_lemmas": nominal_count,
         "verb_lemmas": verb_count,
+        "prefixed_verbs": prefixed_count,
         "other_lemmas": other_count,
         "closed_rows": closed_count,
         "degree_lemmas": degree_count,
