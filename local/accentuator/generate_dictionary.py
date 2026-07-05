@@ -26,6 +26,7 @@ try:  # pragma: no cover
         DATA_DIR,
         DEFAULT_GENERATED,
         DEFAULT_LEXICON,
+        DEFAULT_VDU_SQLITE,
         DEFAULT_VETOES,
         FINITE_VERB_TAGS,
         NONFINITE_VERB_TAGS,
@@ -59,6 +60,7 @@ except ImportError:  # pragma: no cover
         DATA_DIR,
         DEFAULT_GENERATED,
         DEFAULT_LEXICON,
+        DEFAULT_VDU_SQLITE,
         DEFAULT_VETOES,
         FINITE_VERB_TAGS,
         NONFINITE_VERB_TAGS,
@@ -875,13 +877,9 @@ def generate_prefixed_verbs(
 
     if wordlist is None:
         wordlist = DATA_DIR / DEFAULT_WORDLIST_NAME
-    if not wordlist.exists():
+    words = load_candidate_words(wordlist)
+    if not words:
         return 0
-    words = {
-        line.split()[0]
-        for line in wordlist.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    }
     existing = {l for (l,) in db.execute("SELECT DISTINCT lemma FROM verbs")}
     count = 0
     for lemma, infinitive, present_3, past_3 in db.execute(
@@ -1023,6 +1021,32 @@ def generate_closed(db: sqlite3.Connection, grouped: dict[str, dict[tuple[str, s
 
 
 DEFAULT_WORDLIST_NAME = "lt_50k.txt"
+
+
+def load_candidate_words(wordlist: Path) -> set[str]:
+    """lt_50k frequency words plus VDU-cache word keys.
+
+    The VDU cache contributes keys only, keeping the candidate expansion
+    provenance-clean: no accent data is read.
+    """
+
+    words: set[str] = set()
+    if wordlist.exists():
+        words = {
+            line.split()[0]
+            for line in wordlist.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        }
+    if DEFAULT_VDU_SQLITE.exists():
+        try:
+            vdu = sqlite3.connect(DEFAULT_VDU_SQLITE)
+            try:
+                words.update(str(word) for (word,) in vdu.execute("SELECT word FROM words") if word)
+            finally:
+                vdu.close()
+        except (OSError, sqlite3.Error):
+            pass
+    return words
 
 # Adjectives with suppletive degree stems.
 DEGREE_STEM_OVERRIDES = {"didelis": "did", "didis": "did"}
@@ -1625,13 +1649,9 @@ def generate_derived(
 
     if wordlist is None:
         wordlist = DATA_DIR / DEFAULT_WORDLIST_NAME
-    if not wordlist.exists():
+    words = sorted(load_candidate_words(wordlist))
+    if not words:
         return 0
-    words = [
-        line.split()[0]
-        for line in wordlist.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
     tables = build_class_tables(db)
     rules = load_rules()
     known = {l for (l,) in db.execute("SELECT DISTINCT lemma FROM nominals")}
@@ -1660,6 +1680,61 @@ def generate_derived(
             emitted = True
         if emitted:
             count += 1
+    return count
+
+
+APOCOPE_INFINITIVE_LABEL = "vksm., bendr."
+APOCOPE_2SG_IMPERATIVE_LABEL = "vksm., vns., liep., 2 asm."
+
+
+def _apocope_label(label: str) -> bool:
+    return APOCOPE_INFINITIVE_LABEL in label or APOCOPE_2SG_IMPERATIVE_LABEL in label
+
+
+def _drop_final_base_i(form: str) -> str | None:
+    clusters: list[list[str]] = []
+    for ch in unicodedata.normalize("NFD", form):
+        if unicodedata.combining(ch) and clusters:
+            clusters[-1].append(ch)
+        else:
+            clusters.append([ch])
+    if not clusters or clusters[-1][0].lower() != "i":
+        return None
+    return normalize_lt("".join("".join(cluster) for cluster in clusters[:-1]))
+
+
+def generate_apocope(grouped: dict[str, dict[tuple[str, str], Variant]]) -> int:
+    original_words = set(grouped)
+    count = 0
+    for source_word, variants in list(grouped.items()):
+        if source_word.endswith("tis") or not source_word.endswith(("ti", "ki")):
+            continue
+        for variant in list(variants.values()):
+            label = str(variant.get("info") or "")
+            if not _apocope_label(label):
+                continue
+            form = normalize_lt(str(variant.get("form") or ""))
+            stripped = strip_accents(form)
+            if stressed_base_index(form) == len(stripped) - 1:
+                continue
+            shortened = _drop_final_base_i(form)
+            if not shortened:
+                continue
+            shortened = normalize_notation(normalize_lt(shortened))
+            if not has_stress(shortened) or count_stress_marks(shortened) > 1:
+                continue
+            word = lower_key(shortened)
+            if not word or word in original_words:
+                continue
+            key = (shortened, label)
+            if key not in grouped[word]:
+                count += 1
+            grouped[word][key] = {
+                "form": shortened,
+                "info": label,
+                "mi": [label],
+                "provenance": f"open-accentuator:apocope:{source_word}",
+            }
     return count
 
 
@@ -1740,6 +1815,7 @@ def generate_dictionary(
         generate_buti(grouped)
         vlkk_rec_count = generate_vlkk_recommended(source, grouped, vetoes["lemmas"])
         derived_count = generate_derived(source, grouped, vetoes["lemmas"])
+        apocope_count = generate_apocope(grouped)
     finally:
         source.close()
     words = write_generated(output, grouped, vetoes["words"])
@@ -1757,6 +1833,7 @@ def generate_dictionary(
         "negated_adjectives": neg_adj_count,
         "vlkk_recommended": vlkk_rec_count,
         "derived_lemmas": derived_count,
+        "apocope_forms": apocope_count,
         "vetoed_lemmas": len(vetoes["lemmas"]),
         "vetoed_words": len(vetoes["words"]),
         "words": words,
