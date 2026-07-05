@@ -191,6 +191,36 @@ def _weak_root_possible(lemma: str, tense: str, present_3: str, past_3: str) -> 
     return not lower_key(present_3).endswith("o")
 
 
+# Root-extending suffixes whose -t- participles keep a frozen strong stem
+# (Kushnir 2019 (204)/(208): matýtas, kalbė́tas, dainúotas ...).
+EXTENDED_ROOT_INFINITIVES = ("yti", "ėti", "oti", "uoti", "auti", "inti", "enti")
+CONVERB_ENDINGS = ("damas", "dama", "dami", "damos", "damasis", "damasi", "damiesi", "damosi")
+
+
+def _resolve_nonfinite(
+    prefix: str | None,
+    tag_set: set[str],
+    form: str,
+    lemma: str,
+) -> tuple[str | None, str | None]:
+    stripped = strip_accents(form)
+    if "adverbial" in tag_set and not tag_set & {"present", "past", "future", "participle"}:
+        if stripped.endswith(CONVERB_ENDINGS):
+            # Converb (§4.5): the prefix is never stressed except per-.
+            index = stressed_base_index(form)
+            if prefix and not prefix.startswith("per") and index is not None and index < len(prefix):
+                return None, "converb with stressed prefix (invalid per Kushnir §4.5)"
+            return form, None
+        return None, "bare adverbial (būdinys) accent undecidable"
+    if ("passive" in tag_set and "past" in tag_set) or "necessitative" in tag_set:
+        # §4.7.2: the -t- participle copies the past stem's accent position and
+        # is mobile at word level; kaikki copies the infinitive stem instead.
+        # Only extended-root verbs are frozen-strong and safe to keep.
+        if not lemma.endswith(EXTENDED_ROOT_INFINITIVES):
+            return None, "primary-verb -t- participle mobile/retracted (Kushnir §4.7.2)"
+    return form, None
+
+
 def resolve_verb_form(
     prefix: str | None,
     tags: Iterable[str],
@@ -207,6 +237,8 @@ def resolve_verb_form(
     """
 
     tag_set = set(tags)
+    if tag_set & NONFINITE_VERB_TAGS:
+        return _resolve_nonfinite(prefix, tag_set, form, lemma)
     if "future" in tag_set and "third-person" in tag_set:
         if _future_third_metatony_risk(form):
             fixed = _metatonize_future(form)
@@ -274,6 +306,30 @@ def title_case_form(form: str | None) -> str | None:
     if not form:
         return None
     return form[:1].upper() + form[1:]
+
+
+_MARK_RANK = {"circumflex": 0, "acute": 1, "grave": 2, None: 3}
+
+
+def default_form_for(variants: list[Variant]) -> str | None:
+    """Pick the headword-like variant: leftmost stress, circumflex-first ties.
+
+    Matches how dictionaries head their entries (the citation reading tends to
+    carry the earliest stress; at the same syllable a circumflex reading heads
+    the entry before acute/grave ones).
+    """
+
+    if not variants:
+        return None
+    forms = sorted(
+        {str(v["form"]) for v in variants},
+        key=lambda f: (
+            index if (index := stressed_base_index(f)) is not None else 99,
+            _MARK_RANK.get(first_stress_mark(f), 3),
+            f,
+        ),
+    )
+    return forms[0]
 
 
 def accent_type_for(variants: list[Variant]) -> str:
@@ -370,12 +426,11 @@ def generate_nominals(
 
 
 def is_generation_verb_cell(tags: Iterable[str]) -> bool:
+    # Non-finite head forms (participles, gerunds, converbs) are observed
+    # kaikki facts like the finite cells; Kushnir (2019 §4.5-4.7) confirms
+    # their accent derives from the same stem allomorphs.
     tag_set = set(tags)
-    if "infinitive" in tag_set:
-        return True
-    if tag_set & NONFINITE_VERB_TAGS:
-        return False
-    return bool(tag_set & FINITE_VERB_TAGS)
+    return bool(tag_set & (FINITE_VERB_TAGS | NONFINITE_VERB_TAGS))
 
 
 def generate_verbs(
@@ -428,6 +483,50 @@ def generate_verbs(
                 )
         count += 1
     return count
+
+
+OTHER_POS = ("adv", "intj", "prep", "conj", "particle")
+ORPHAN_NOMINAL_POS = ("noun", "adj", "name", "pron", "num", "det")
+
+
+def generate_other(
+    db: sqlite3.Connection,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    vetoed_lemmas: dict[str, str] | None = None,
+) -> int:
+    """Emit observed rows for POS with no paradigm engine.
+
+    Covers adverbs, interjections, prepositions, conjunctions, particles, and
+    nominal-POS lemmas that carry forms but no stress class (duals like abù,
+    pronominal oddments) — pure observed kaikki facts, no generation.
+    """
+
+    placeholders = ",".join("?" for _ in OTHER_POS)
+    nominal_placeholders = ",".join("?" for _ in ORPHAN_NOMINAL_POS)
+    query = f"""
+        SELECT lemma, pos, accented, tags FROM forms
+        WHERE pos IN ({placeholders})
+           OR (pos IN ({nominal_placeholders})
+               AND NOT EXISTS (
+                   SELECT 1 FROM nominals n WHERE n.lemma = forms.lemma AND n.pos = forms.pos
+               ))
+        ORDER BY lemma, pos, tags, accented
+    """
+    seen: set[tuple[str, str]] = set()
+    for lemma, pos, accented, tags in db.execute(query, (*OTHER_POS, *ORPHAN_NOMINAL_POS)):
+        if vetoed_lemmas and lemma in vetoed_lemmas:
+            continue
+        tag_tuple = parse_tags(tags)
+        cell = cell_key(tag_tuple) or "canonical"
+        add_variant(
+            grouped,
+            form=accented,
+            pos=pos,
+            tags=tag_tuple or ("canonical",),
+            provenance=f"open-accentuator:kaikki:{lemma}:{pos}:{cell}",
+        )
+        seen.add((lemma, pos))
+    return len(seen)
 
 
 def generate_closed(db: sqlite3.Connection, grouped: dict[str, dict[tuple[str, str], Variant]]) -> int:
@@ -483,7 +582,7 @@ def write_generated(
                 {"form": v["form"], "info": v["info"], "mi": v["mi"]}
                 for v in variants
             ]
-            default_form = str(public_variants[0]["form"]) if public_variants else None
+            default_form = default_form_for(variants)
             accent_type = accent_type_for(public_variants)
             provenance = ";".join(sorted({str(v["provenance"]) for v in variants}))
             rows.append(
@@ -520,6 +619,7 @@ def generate_dictionary(
     try:
         nominal_count = generate_nominals(source, grouped, limit, vetoes["lemmas"])
         verb_count = generate_verbs(source, grouped, limit, vetoes["lemmas"])
+        other_count = generate_other(source, grouped, vetoes["lemmas"])
         closed_count = generate_closed(source, grouped)
     finally:
         source.close()
@@ -527,6 +627,7 @@ def generate_dictionary(
     return {
         "nominal_lemmas": nominal_count,
         "verb_lemmas": verb_count,
+        "other_lemmas": other_count,
         "closed_rows": closed_count,
         "vetoed_lemmas": len(vetoes["lemmas"]),
         "vetoed_words": len(vetoes["words"]),

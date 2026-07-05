@@ -93,6 +93,12 @@ TAG_ORDER = {
     "first-person": 50,
     "second-person": 51,
     "third-person": 52,
+    "active": 60,
+    "passive": 61,
+    "participle": 62,
+    "adverbial": 63,
+    "necessitative": 64,
+    "be-prefix": 65,
 }
 
 TAG_LABELS = {
@@ -125,6 +131,12 @@ TAG_LABELS = {
     "first-person": "1 asm.",
     "second-person": "2 asm.",
     "third-person": "3 asm.",
+    "active": "veik. r.",
+    "passive": "neveik. r.",
+    "participle": "dlv.",
+    "adverbial": "pusd./pad.",
+    "necessitative": "reik.",
+    "be-prefix": "be-",
 }
 
 POS_LABELS = {

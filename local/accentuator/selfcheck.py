@@ -290,6 +290,16 @@ def check_verb_rules() -> None:
         (None, past_1sg, "nešiaũ", "nešti", "nẽša", "nẽšė"): "nešiaũ",
         # acute on an ending-stressed 1sg is invalid notation — skipped
         (None, past_1sg, "elgiaúsi", "elgtis", "el̃giasi", "el̃gėsi"): None,
+        # non-finite rows: converbs keep their observed accent unless the
+        # prefix is stressed (Kushnir §4.5); būdinys rows are undecidable;
+        # -t- participles of primary verbs are mobile/retracted (§4.7.2),
+        # extended-root verbs are frozen and safe
+        (None, ("adverbial",), "nèšdamas", "nešti", "nẽša", "nẽšė"): "nèšdamas",
+        ("nu", ("adverbial",), "nùnešdamas", "nunešti", "nùneša", "nùnešė"): None,
+        (None, ("adverbial",), "krìste", "kristi", "kriñta", "krìto"): None,
+        ("pa", ("past", "participle", "passive"), "palìktas", "palikti", "paliẽka", "palìko"): None,
+        (None, ("past", "participle", "passive"), "matýtas", "matyti", "mãto", "mãtė"): "matýtas",
+        (None, ("present", "active", "participle"), "nẽšantis", "nešti", "nẽša", "nẽšė"): "nẽšantis",
     }
     for (prefix, tags, form, lemma, prs3, pst3), expected in expect.items():
         resolved, rule = resolve_verb_form(prefix, tags, normalize_lt(form), lemma, prs3, pst3)
