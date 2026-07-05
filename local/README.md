@@ -102,13 +102,15 @@ this benchmark plus the repo's accentuation parity eval.
 accentology; plan in `docs/PLAN-open-accentuator.md`). Standalone
 artifacts only — the replica's dictionary chain is unchanged. Full
 architecture, module inventory, rule sources, and QA methodology:
-`docs/ACCENTUATOR.md`. Parity vs the VDU cache (10,015 words): 61%
-covered, 82% of covered exact, **zero hard disagreements** — every
-adjudicated divergence is either repaired by a published rule (notation
-normalization; future-tense metatony; verb stress retraction and
-participle constraints per Kushnir 2019; self-accented suffix rules per
-the VDU 2010 monograph, see `ATTRIBUTIONS/`) or excluded with a reason
-in `local/accentuator/parity_vetoes.json`.
+`docs/ACCENTUATOR.md`. Parity vs the VDU cache (10,015 words): 62%
+covered, 82% of covered exact, **zero unadjudicated disagreements** —
+every divergence is repaired by a published rule (notation
+normalization; future-tense metatony; verb stress retraction,
+participle constraints and declension per Kushnir 2019; self-accented
+suffix rules per the VDU 2010 monograph, see `ATTRIBUTIONS/`), excluded
+with a reason in `local/accentuator/parity_vetoes.json`, or recorded as
+a NORM-DELTA where the VLKK names database backs our form against the
+cache.
 
 ## Local checks
 

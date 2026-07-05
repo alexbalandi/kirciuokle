@@ -46,11 +46,12 @@ reports/parity-vdu.md ──► adjudication ──► parity_vetoes.json (+ rul
 
 | # | module | what it emits | accent source |
 |---|--------|---------------|---------------|
-| 1 | `generate_nominals` | observed case forms of the 5.8k class-marked noun/adj/name/pron/num lemmas | kaikki inflection tables (observed facts) |
-| 2 | `generate_verbs` | observed finite + non-finite verb forms, filtered/repaired by `resolve_verb_form` | kaikki tables + published rules (below) |
-| 3 | `generate_other` | observed forms for adverbs, interjections, prepositions, conjunctions, particles, and nominal lemmas without a stress class | kaikki (observed facts) |
-| 4 | `generate_closed` | 208 closed-class headwords | our draft, pending VLKK review |
-| 5 | `generate_derived` | full paradigms for unknown lemmas that parse as base + self-accented suffix | VDU 2010 App. C suffix table + endings induced from kaikki |
+| 1 | `generate_vlkk_names` | given names: fetched singular paradigms + induced plurals; kaikki name entries defer to these | vardai.vlkk.lt (normative authority; fetched by `fetch_vlkk_names.py`) |
+| 2 | `generate_nominals` | observed case forms of the 5.8k class-marked noun/adj/name/pron/num lemmas | kaikki inflection tables (observed facts) |
+| 3 | `generate_verbs` | observed finite + non-finite verb forms, filtered/repaired by `resolve_verb_form` | kaikki tables + published rules (below) |
+| 4 | `generate_other` | observed forms for adverbs, interjections, prepositions, conjunctions, particles, and nominal lemmas without a stress class | kaikki (observed facts) |
+| 5 | `generate_closed` | 208 closed-class headwords | our draft, pending VLKK review |
+| 6 | `generate_derived` | full paradigms for unknown lemmas that parse as base + self-accented suffix | VDU 2010 App. C suffix table + endings induced from kaikki |
 
 Every emitted form passes through `add_variant`, which applies
 `normalize_notation` (repositions marks written in nonstandard places —
@@ -119,9 +120,12 @@ Provenance strings on every entry encode the tier:
 
 `parity_report.py` compares every VDU-cache word (10,015 positives) against
 the artifact: EXACT (same variant set + default), DEFAULT-MATCH,
-OVERLAP (shared variants), DISJOINT (no shared variant — hard disagreement),
-UNCOVERED. The standing quality gate is **DISJOINT = 0**: every hard
-disagreement must be adjudicated (rule fix or veto) before committing.
+OVERLAP (shared variants), NORM-DELTA (no shared variant but VLKK — the
+declared normative authority — backs our form; listed with reasons in
+`parity_vetoes.json` under `norm_deltas`), DISJOINT (unadjudicated hard
+disagreement), UNCOVERED. The standing quality gate is **DISJOINT = 0**:
+every hard disagreement must be adjudicated (rule fix, veto, or documented
+norm-delta) before committing.
 
 Current state (2026-07-05): covered 6,131/10,015 (61.2%), EXACT 5,058
 (82.5% of covered), DISJOINT 0. Most OVERLAP/DEFAULT-MATCH words are cases

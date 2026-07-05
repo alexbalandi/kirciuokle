@@ -198,6 +198,24 @@ and a citation when one is standard.
 }
 ```
 
+## VLKK vardai database (vardai.vlkk.lt)
+
+- What it is: the State Commission of the Lithuanian Language's database of
+  recommended given names with accented, declined, stress-classed forms.
+- License or terms: normative recommendations of a state institution; used
+  as the project's declared normative authority for given names, fetched
+  politely and cited.
+- How this project uses it: `local/accentuator/fetch_vlkk_names.py` collects
+  accented nominatives from the letter indexes and, for names attested in the
+  project's word lists, the kirčiuotė and singular paradigm from per-name
+  pages. Given names in the generated dictionary carry
+  `open-accentuator:vlkk-vardai:` provenance and take precedence over
+  Wiktionary name entries.
+- Attribution line: Given-name accentuation from the VLKK names database,
+  Valstybinė lietuvių kalbos komisija, https://vardai.vlkk.lt/.
+- Citation: Vardai VLKK, Valstybinė lietuvių kalbos komisija,
+  https://vardai.vlkk.lt/.
+
 ## Wiktionary via kaikki.org (wiktextract)
 
 - What it is: machine-readable English Wiktionary extractions by Tatu Ylonen's

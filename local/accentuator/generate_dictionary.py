@@ -14,10 +14,11 @@ import argparse
 import json
 import os
 import sqlite3
+import unicodedata
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Iterator
 
 try:  # pragma: no cover
     from ._common import (
@@ -32,6 +33,7 @@ try:  # pragma: no cover
         cell_key,
         count_stress_marks,
         first_stress_mark,
+        has_stress,
         lower_key,
         morphology_label,
         normalize_lt,
@@ -56,6 +58,7 @@ except ImportError:  # pragma: no cover
         cell_key,
         count_stress_marks,
         first_stress_mark,
+        has_stress,
         lower_key,
         morphology_label,
         normalize_lt,
@@ -193,6 +196,79 @@ def _weak_root_possible(lemma: str, tense: str, present_3: str, past_3: str) -> 
     if tense == "past":
         return lower_key(past_3).endswith("ė") and not lemma.endswith("yti")
     return not lower_key(present_3).endswith("o")
+
+
+# Participle declension: per Kushnir 2019 §4.6.1-4.6.2 the active participles
+# keep the accent fixed on the head's syllable through the whole paradigm
+# (pákeitė but pakeĩtęs -> pakeĩtusio; paválgiusiesiems), so declining an
+# observed head is purely mechanical. Ending maps: (case cells) x (m/f, sg/pl).
+_CASES = ("nominative", "genitive", "dative", "accusative", "instrumental", "locative")
+
+# head ends in -antis (present/future active): stem = head minus "is"... the
+# maps below replace the whole suffix portion after the invariant stem.
+PARTICIPLE_ENDINGS = {
+    "antis": {  # also matches -intis/-sintis heads via the trailing pattern
+        ("masculine", "singular"): ("antis", "ančio", "ančiam", "antį", "ančiu", "ančiame"),
+        ("masculine", "plural"): ("antys", "ančių", "antiems", "ančius", "ančiais", "ančiuose"),
+        ("feminine", "singular"): ("anti", "ančios", "ančiai", "ančią", "ančia", "ančioje"),
+        ("feminine", "plural"): ("ančios", "ančių", "ančioms", "ančias", "ančiomis", "ančiose"),
+    },
+    "ęs": {
+        ("masculine", "singular"): ("ęs", "usio", "usiam", "usį", "usiu", "usiame"),
+        ("masculine", "plural"): ("ę", "usių", "usiems", "usius", "usiais", "usiuose"),
+        ("feminine", "singular"): ("usi", "usios", "usiai", "usią", "usia", "usioje"),
+        ("feminine", "plural"): ("usios", "usių", "usioms", "usias", "usiomis", "usiose"),
+    },
+    "as": {  # passive participles (-tas, -mas) decline as fixed as-adjectives
+        ("masculine", "singular"): ("as", "o", "am", "ą", "u", "ame"),
+        ("masculine", "plural"): ("i", "ų", "iems", "us", "ais", "uose"),
+        ("feminine", "singular"): ("a", "os", "ai", "ą", "a", "oje"),
+        ("feminine", "plural"): ("os", "ų", "oms", "as", "omis", "ose"),
+    },
+}
+
+
+def decline_participle(form: str, tags: set[str], present_3: str) -> Iterator[tuple[str, tuple[str, ...]]]:
+    """Yield declined cells for a kept participle head, or nothing if unsafe.
+
+    Active participles and frozen passives are fixed-stem (Kushnir §4.6-4.7);
+    weak-stem present passives (kal̃biamas-type, non-o presents) go mobile at
+    word level and are skipped.
+    """
+
+    stripped = strip_accents(form)
+    if "active" in tags:
+        key = "antis" if stripped.endswith("antis") else "ęs" if stripped.endswith("ęs") else None
+    elif "passive" in tags or "necessitative" in tags:
+        key = "as" if stripped.endswith("as") else None
+        if key and "present" in tags and not lower_key(present_3).endswith("o"):
+            return  # weak present-passive stem — mobile, not derivable here
+    else:
+        return
+    if not key:
+        return
+    endings = PARTICIPLE_ENDINGS[key]
+    head_len = len(stripped) - len(key)
+    index = stressed_base_index(form)
+    if index is None or index >= head_len:
+        return  # suffix-accented head would need mobile handling
+    stem = _accented_prefix(form, head_len)
+    base_tags = tuple(t for t in tags if t not in ("masculine", "feminine", "singular", "plural"))
+    for (gender, number), forms in endings.items():
+        for case, ending in zip(_CASES, forms):
+            yield stem + ending, (*base_tags, gender, number, case)
+
+
+def _accented_prefix(accented: str, n_bases: int) -> str:
+    out: list[str] = []
+    base = -1
+    for ch in unicodedata.normalize("NFD", accented):
+        if not unicodedata.combining(ch):
+            base += 1
+            if base >= n_bases:
+                break
+        out.append(ch)
+    return normalize_lt("".join(out))
 
 
 # Root-extending suffixes whose -t- participles keep a frozen strong stem
@@ -386,6 +462,7 @@ def generate_nominals(
     grouped: dict[str, dict[tuple[str, str], Variant]],
     limit: int | None,
     vetoed_lemmas: dict[str, str] | None = None,
+    vlkk_name_lemmas: set[str] | None = None,
 ) -> int:
     query = """
         SELECT DISTINCT n.lemma, n.pos, n.accented_lemma, n.stress_class, m.declension_template
@@ -400,6 +477,8 @@ def generate_nominals(
             break
         if vetoed_lemmas and lemma in vetoed_lemmas:
             continue
+        if pos == "name" and vlkk_name_lemmas and lower_key(lemma) in vlkk_name_lemmas:
+            continue  # VLKK is authoritative for given names
         form_rows = rows_for_lemma(db, lemma, pos)
         forms_by_cell = {
             key: entries
@@ -485,6 +564,16 @@ def generate_verbs(
                     tags=out_tags,
                     provenance=provenance,
                 )
+                tag_set = set(out_tags)
+                if "participle" in tag_set or "necessitative" in tag_set:
+                    for decl_form, decl_tags in decline_participle(resolved, tag_set, present_3):
+                        add_variant(
+                            grouped,
+                            form=decl_form,
+                            pos="verb",
+                            tags=decl_tags,
+                            provenance=f"{provenance}:rule=participle-declension",
+                        )
         count += 1
     return count
 
@@ -562,6 +651,80 @@ def generate_closed(db: sqlite3.Connection, grouped: dict[str, dict[tuple[str, s
 
 
 DEFAULT_WORDLIST_NAME = "lt_50k.txt"
+VLKK_NAMES_FILE = "vlkk_names.json"
+
+
+def generate_vlkk_names(
+    db: sqlite3.Connection,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    names_path: Path | None = None,
+) -> tuple[int, set[str]]:
+    """Emit given names from the VLKK recommended-names database.
+
+    VLKK is the project's normative authority, so these paradigms take
+    precedence over kaikki name entries (returned set = lemmas the kaikki
+    name generator must skip). Names with a fetched kirčiuotė + singular
+    paradigm additionally get plural cells from the induced class tables;
+    names with only an accented nominative emit just that form.
+    """
+
+    if names_path is None:
+        names_path = DATA_DIR / VLKK_NAMES_FILE
+    if not names_path.exists():
+        return 0, set()
+    data = json.loads(names_path.read_text(encoding="utf-8"))
+    tables = build_class_tables(db)
+    count = 0
+    covered_lemmas: set[str] = set()
+    for name, entry in sorted(data.items()):
+        accented_nom = entry.get("accented")
+        # Only names with a fetched kirčiuotė + paradigm are trustworthy:
+        # letter-page nominatives alone miss variant sets of mobile names
+        # (Márkas/Markàs) and collide with common words (Ròjus vs rõjus).
+        if not accented_nom or not entry.get("cells") or not entry.get("class"):
+            continue
+        lemma = lower_key(name)
+        cells: dict[str, str] = dict(entry.get("cells") or {})
+        klass = entry.get("class")
+        emitted = False
+        if cells and klass:
+            # plural cells induced from the classed Wiktionary paradigms
+            nom_ending = next((e for e in ("ius", "as", "is", "ys", "us", "a", "ė") if lemma.endswith(e)), None)
+            table = tables.get((nom_ending, klass)) if nom_ending else None
+            if table:
+                stem_len = len(lemma) - len(nom_ending)
+                accented_gen = normalize_lt(cells.get("genitive") or "")
+                for cell, (ending, acc_ending) in table.items():
+                    if "plural" not in cell or cell in cells:
+                        continue
+                    gen_index = stressed_base_index(accented_gen) if accented_gen else None
+                    if acc_ending:
+                        cells[cell] = lemma[:stem_len] + acc_ending
+                    elif (
+                        accented_gen
+                        and gen_index is not None
+                        and gen_index < stem_len
+                        and strip_accents(accented_gen)[:stem_len] == lemma[:stem_len]
+                    ):
+                        # copy the stem accent of the stem-stressed genitive
+                        cells[cell] = _accented_prefix(accented_gen, stem_len) + ending
+        for cell, form in sorted(cells.items()):
+            if not has_stress(normalize_lt(form)):
+                continue
+            add_variant(
+                grouped,
+                form=form,
+                pos="name",
+                tags=parse_tags(cell) or ("canonical",),
+                provenance=f"open-accentuator:vlkk-vardai:{name}:{klass or '?'}:{cell}",
+            )
+            emitted = True
+        if emitted:
+            covered_lemmas.add(lemma)
+            count += 1
+    return count, covered_lemmas
+
+
 
 
 def generate_derived(
@@ -678,7 +841,8 @@ def generate_dictionary(
     source = sqlite3.connect(lexicon)
     grouped: dict[str, dict[tuple[str, str], Variant]] = defaultdict(dict)
     try:
-        nominal_count = generate_nominals(source, grouped, limit, vetoes["lemmas"])
+        vlkk_count, vlkk_lemmas = generate_vlkk_names(source, grouped)
+        nominal_count = generate_nominals(source, grouped, limit, vetoes["lemmas"], vlkk_lemmas)
         verb_count = generate_verbs(source, grouped, limit, vetoes["lemmas"])
         other_count = generate_other(source, grouped, vetoes["lemmas"])
         closed_count = generate_closed(source, grouped)
@@ -687,6 +851,7 @@ def generate_dictionary(
         source.close()
     words = write_generated(output, grouped, vetoes["words"])
     return {
+        "vlkk_names": vlkk_count,
         "nominal_lemmas": nominal_count,
         "verb_lemmas": verb_count,
         "other_lemmas": other_count,

@@ -14,9 +14,23 @@ from pathlib import Path
 from typing import Any
 
 try:  # pragma: no cover
-    from ._common import DEFAULT_GENERATED, DEFAULT_PARITY_REPORT, DEFAULT_VDU_SQLITE, normalize_lt, safe_relative
+    from ._common import (
+        DEFAULT_GENERATED,
+        DEFAULT_PARITY_REPORT,
+        DEFAULT_VDU_SQLITE,
+        DEFAULT_VETOES,
+        normalize_lt,
+        safe_relative,
+    )
 except ImportError:  # pragma: no cover
-    from _common import DEFAULT_GENERATED, DEFAULT_PARITY_REPORT, DEFAULT_VDU_SQLITE, normalize_lt, safe_relative
+    from _common import (
+        DEFAULT_GENERATED,
+        DEFAULT_PARITY_REPORT,
+        DEFAULT_VDU_SQLITE,
+        DEFAULT_VETOES,
+        normalize_lt,
+        safe_relative,
+    )
 
 
 def variant_set(raw: str) -> set[str]:
@@ -92,6 +106,11 @@ def write_report(
 ) -> dict[str, int]:
     generated = load_generated(generated_path)
     vdu_rows = load_vdu(vdu_path)
+    norm_deltas: dict[str, str] = {}
+    if DEFAULT_VETOES.exists():
+        norm_deltas = dict(
+            json.loads(DEFAULT_VETOES.read_text(encoding="utf-8")).get("norm_deltas") or {}
+        )
     counts: Counter[str] = Counter()
     disjoint_samples: list[dict[str, Any]] = []
 
@@ -101,6 +120,10 @@ def write_report(
             counts["UNCOVERED"] += 1
             continue
         bucket = bucket_entry(vdu_forms, vdu_default, gen["variants"], gen["default"])
+        if bucket == "DISJOINT" and word in norm_deltas:
+            # documented divergence where VLKK (the normative authority)
+            # backs our form against the VDU cache
+            bucket = "NORM-DELTA"
         counts[bucket] += 1
         if bucket == "DISJOINT" and len(disjoint_samples) < 120:
             disjoint_samples.append(
@@ -124,7 +147,7 @@ def write_report(
         "| bucket | count | percent |",
         "|---|---:|---:|",
     ]
-    for bucket in ("EXACT", "DEFAULT-MATCH", "OVERLAP", "DISJOINT", "UNCOVERED"):
+    for bucket in ("EXACT", "DEFAULT-MATCH", "OVERLAP", "NORM-DELTA", "DISJOINT", "UNCOVERED"):
         count = counts[bucket]
         pct = count / total if total else 0
         lines.append(f"| {bucket} | {count:,} | {pct:.1%} |")
