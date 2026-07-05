@@ -67,10 +67,11 @@ token-mass coverage expected.
 Every generated form carries its paradigm-cell morphology → variants get
 mi-style labels natively.
 
-**W3 — integration.** Generator emits a SQLite dictionary in the existing
-`words` schema (+ provenance). Replica dictionary chain becomes
-VDU-cache → open-generated → unknown, behind a flag. The accent pipeline
-code does not change.
+**W3 — integration (DEFERRED — explicitly out of scope for now).** No
+change to the running site or the replica's dictionary chain. The
+generator's output stays a standalone artifact (SQLite in the existing
+`words` schema, with provenance) used only by the W4 parity tooling.
+Wiring it into any serving path is a separate, later decision.
 
 **W4 — parity gate & divergence adjudication (the "make it tight" part).**
 1. Form-level: generate for every lemma in the D1 cache; diff all variants
