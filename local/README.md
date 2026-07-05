@@ -25,9 +25,8 @@ Provisioning options:
 
 - Warm naturally: keep `FALLBACK=vdu` and first-time misses are fetched from
   VDU and written to SQLite.
-- Preload from production: run the orchestrator-provided
-  `scripts/export_dictionary.py` once it exists; it writes
-  `local/data/words.sqlite`.
+- Preload from production: `uv run scripts/export_dictionary.py` writes
+  `local/data/words.sqlite` from the production D1.
 - Stay fully offline: set `FALLBACK=none`. Cache misses become
   `unknown: true`, the miss budget is disabled, and VDU is never called.
 
@@ -36,71 +35,74 @@ The dictionary data is not committed.
 ## Taggers
 
 The app calls `POST {TAGGER_URL}/process` with the UDPipe REST form fields
-`tokenizer`, `tagger`, `model`, and `data`. The default stack builds
-`local/tagger-stanza`, a CPU-only Stanza wrapper for Lithuanian ALKSNIS:
+`tokenizer`, `tagger`, `model`, and `data`. Options, best first:
 
-```sh
-TAGGER_URL=http://tagger:8001
-```
+1. **Our released models** (see below) served by the sidecar in
+   `local/tagger-hf/` — highest quality, fully local, permissive license.
+2. `local/tagger-stanza` — the default compose stack; CPU-only Stanza
+   wrapper, simplest to build, measurably weaker.
+3. `docker compose -f local/docker-compose.udpipe2.yml up --build` — the
+   official [`ufal/udpipe2-docker`](https://github.com/ufal/udpipe2-docker)
+   (exact production-tagger parity; models CC BY-NC-SA).
+4. Any URL returning `{"result": "<conllu>"}` from `/process` (e.g. the
+   public LINDAT service).
 
-Stanza-lt tags slightly below UDPipe 2 mBERT, which is the production tagger.
-For closer production parity, use the UDPipe 2 compose file, based on
-[`ufal/udpipe2-docker`](https://github.com/ufal/udpipe2-docker):
+## Released models
 
-```sh
-docker compose -f local/docker-compose.udpipe2.yml up --build
-```
+Three fine-tuned litlat-bert taggers, CC BY-SA 4.0, fully NC-free lineage
+(gold MATAS v3.0 + ALKSNIS + constrained-decoding self-training; recipe in
+`local/tagger-hf/README.md`):
 
-You can also point `TAGGER_URL` at LINDAT or any future service that returns
-`{"result": "<conllu>"}` from `/process`.
+| model | best for | emits |
+|---|---|---|
+| [litlat-bert-lithuanian-morphology](https://huggingface.co/alexbalandi/litlat-bert-lithuanian-morphology) | highest UPOS/slots accuracy, UD categories | UPOS (incl. DET/AUX) + core FEATS |
+| [litlat-bert-lithuanian-morphology-full](https://huggingface.co/alexbalandi/litlat-bert-lithuanian-morphology-full) | complete annotations | full UD FEATS + lemmas |
+| [litlat-bert-lithuanian-morphology-vdu](https://huggingface.co/alexbalandi/litlat-bert-lithuanian-morphology-vdu) | accentuation pipelines | traditional-grammar categories (DET→PRON, AUX→VERB) |
 
-## Tagger backends & benchmarking
+## Benchmarks
 
-Use `scripts/bench_taggers.py` to compare UDPipe-compatible taggers against
-the UD_Lithuanian-ALKSNIS test set:
+All numbers one-shot on the **full 684-sentence** UD_Lithuanian-ALKSNIS
+gold test (2026-07). `slots` = exact match of the agreement-feature
+projection (POS family + Case/Gender/Number/Tense/Person/Voice/Degree)
+that drives homograph disambiguation; DET/PRON and AUX/VERB merge inside
+the projection (docs/SPEC13.md). `lemma`/`feats` are n/a where a model
+does not emit them by design.
 
-```sh
-uv run scripts/bench_taggers.py --backends lindat --limit 400
-uv run --with stanza scripts/bench_taggers.py --backends stanza --limit 400
-```
+| backend | upos | lemma | feats | **slots** | tok/s |
+|---|---|---|---|---|---|
+| `-ud` (ONNX INT8, local CPU) | 92.5% | n/a | n/a | **89.1%** | 874 |
+| `-full` (ONNX INT8, local CPU) | 91.4% | **94.2%** | 80.3% | 86.3% | 921 |
+| `-vdu` (accentuation flavor) | 90.6% | n/a | n/a | 86.4% | 880 |
+| UDPipe 2 (prod, via network) | 95.1% | 92.5% | 88.7% | **89.2%** | 605 |
+| Stanza-lt (local CPU)¹ | 90.6% | 90.3% | 84.3% | 84.7% | 425 |
+| Trankit (XLM-R) | — | — | — | — | not viable² |
 
-Measured on the 400-sentence gold test set (2026-07). `slots` is the
-metric that matters for accentuation: exact match of the scoring
-projection (POS family + case/gender/number/tense/person/voice/degree)
-that drives homograph disambiguation. `aux/v` is the AUX-vs-VERB
-distinction that powers the yra→yrà lemma exception.
+Official CoNLL-18 (gold tokenization): `-ud` UPOS 94.0; `-full` UPOS 93.2 /
+UFeats 84.1 / **Lemmas 94.7 (vs UDPipe 92.9)**; UDPipe reference UPOS 95.2 /
+UFeats 89.1. Accentuation quality (`-vdu`, agreement of homograph stress
+choices with production): 20/20 on the sample text, 323/370 on the
+Wikipedia corpus — equal to the internal UDPipe-taught reference.
 
-Note: the `slots` metric merges DET into PRON per VDU conventions (see
-docs/SPEC13.md); UDPipe's number is unchanged by the merge. The `lemma`
-and `feats` columns do not apply to the fine-tuned model (it emits
-form-as-lemma and slots-only features by design).
+¹ Stanza measured on the 400-sentence subset.
+² The 2021 Trankit codebase no longer installs against current
+Python/transformers and its model host (`nlp.uoregon.edu`) was unreachable
+when tested — treat it as abandoned.
 
-| backend | upos | lemma | feats | **slots** | aux/v | tok/s |
-|---|---|---|---|---|---|---|
-| **released `-ud` variant (ONNX INT8, local CPU)** | 92.5% | n/a | n/a | **89.1%** | 93.4% | **874** |
-| **released `-vdu` variant (accentuation flavor)** | 90.6% | n/a | n/a | 86.4% | 94.1% | 880 |
-| `lindat` (UDPipe 2 mBERT — prod) | 94.3% | 91.7% | 88.4% | **89.0%** | 96.4% | 637 (network) |
-| `stanza` (lt, local CPU) | 90.6% | 90.3% | 84.3% | **84.7%** | 94.4% | 425 |
-| `trankit` (XLM-R) | — | — | — | — | — | not viable |
+Reproduce with `uv run scripts/bench_taggers.py --backends lindat
+[--lindat-url http://127.0.0.1:8001/process] --limit 684` and
+`uv run local/tagger-hf/eval_conll18.py --tagger-url …`. Encoder verdict
+from the bake-off: EMBEDDIA/litlat-bert beat the Lithuanian ModernBERT by
+5.4pp on identical data — measure, don't assume. Gate any tagger change on
+this benchmark plus the repo's accentuation parity eval.
 
-Released weights (CC BY-SA 4.0, fully NC-free lineage):
-https://huggingface.co/alexbalandi/litlat-bert-lithuanian-morphology (strict
-UD) and https://huggingface.co/alexbalandi/litlat-bert-lithuanian-morphology-vdu
-(accentuation flavor; 20/20 sample and 323/370 corpus accent choices vs
-production). Numbers above are one-shot on the full 684-sentence gold test;
-UDPipe reference on the same protocol: slots 89.2%, 605 tok/s. Official
-CoNLL-18 gold-tokenization: ours UPOS 94.0 vs UDPipe 95.2; VDU-convention
-projection: ours UPOS 97.1 / UFeats 91.5 vs UDPipe 95.4 / 90.7.
+## Open accentuator (experimental, not wired into serving)
 
-Trankit verdict: the 2021 codebase no longer installs against current
-Python/transformers (needs `--python 3.10 --with "transformers==4.30.2"
---with "numpy<2" --with six` just to import), and its model host
-(`nlp.uoregon.edu`) was unreachable when tested — treat it as abandoned.
-
-The full training recipe lives in `local/tagger-hf/README.md` (encoder
-verdict: EMBEDDIA/litlat-bert beat the Lithuanian ModernBERT by 5.4pp on
-identical data — measure, don't assume). Gate any tagger change on this
-benchmark plus the repo's accentuation parity eval.
+`local/accentuator/` builds an accentuation dictionary from open sources
+(Wiktionary accent classes + a paradigm engine implementing published
+accentology; plan in `docs/PLAN-open-accentuator.md`). Standalone
+artifacts only — the replica's dictionary chain is unchanged. First parity
+vs the VDU cache: 85.1% exact on covered words, 1.0% hard disagreement;
+adjudication ongoing.
 
 ## Local checks
 
