@@ -1020,6 +1020,28 @@ def generate_closed(db: sqlite3.Connection, grouped: dict[str, dict[tuple[str, s
     return count
 
 
+def generate_closed_extra(grouped: dict[str, dict[tuple[str, str], Variant]]) -> int:
+    path = Path(__file__).parent / "closed_class_extra.json"
+    if not path.exists():
+        return 0
+    entries = json.loads(path.read_text(encoding="utf-8")).get("words") or {}
+    count = 0
+    for word, entry in sorted(entries.items()):
+        emitted = False
+        for form in entry["forms"]:
+            add_variant(
+                grouped,
+                form=form,
+                pos=entry["pos"],
+                tags=(),
+                provenance=f"open-accentuator:closed-extra:{word}",
+            )
+            emitted = True
+        if emitted:
+            count += 1
+    return count
+
+
 DEFAULT_WORDLIST_NAME = "lt_50k.txt"
 
 
@@ -1807,6 +1829,7 @@ def generate_dictionary(
         )
         other_count = generate_other(source, grouped, vetoes["lemmas"])
         closed_count = generate_closed(source, grouped)
+        closed_extra_count = generate_closed_extra(grouped)
         degree_count = generate_degrees(source, grouped, vetoes["lemmas"])
         imas_count = generate_deverbal_imas(source, grouped, vetoes["lemmas"])
         iskas_count = generate_iskas(source, grouped, vetoes["lemmas"])
@@ -1826,6 +1849,7 @@ def generate_dictionary(
         "prefixed_verbs": prefixed_count,
         "other_lemmas": other_count,
         "closed_rows": closed_count,
+        "closed_extra": closed_extra_count,
         "degree_lemmas": degree_count,
         "imas_lemmas": imas_count,
         "iskas_lemmas": iskas_count,
