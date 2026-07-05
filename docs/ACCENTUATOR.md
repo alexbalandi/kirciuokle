@@ -147,6 +147,25 @@ where VDU lists additional accent-class variants (`Ãnglija`/`Anglijà`) that
 Wiktionary has no facts for. The uncovered mass is dominated by lemmas
 absent from Wiktionary whose suffix does not determine their accent.
 
+## The guesser tier (separate artifact)
+
+The residue no open source covers (internationalisms, rare lemmas — the
+slice that structurally needs DLKŽ) is handled by a clearly-separated
+lowest-confidence tier: `guess_uncovered.py` runs the BSD-licensed
+`phonology_engine` (LIEPA's accentuation components, which answer arbitrary
+words) over uncovered wordlist/VDU keys and writes `data/guesses.sqlite`
+with `liepa-guess` provenance. Benchmarked against the VDU cache: 87.9%
+exact-variant and 95.3% stress-position agreement on exactly the
+dictionary-gap words. Because ~12% of guesses disagree with VDU, this tier
+is **never merged into the main artifact** — the main dictionary keeps its
+zero-disagreement gate, and consumers opt into guesses knowingly.
+
+Literature grounding the approach: Kasparaitis (2000, dictionary-based);
+Anbinderis & Kasparaitis (2010, decision trees over letter patterns, 95.5%);
+Mackevič (2026, VU MSc): a transformer beats rule tools on word-level stress
+but loses to VDU's Kirčiuoklis on contextual disambiguation — consistent
+with our architecture (rules + dictionary first, guesser last).
+
 ## Planned levers (not yet implemented)
 
 - **VLKK name recommendations** as a data source for proper names (official

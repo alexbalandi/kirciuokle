@@ -149,13 +149,21 @@ and a citation when one is standard.
 
 ## LIEPA phonology_engine
 
-- What it is: a Lithuanian phonology/accentuation engine from the LIEPA
-  ecosystem.
-- License or terms: upstream terms remain with the LIEPA project.
-- How this project uses it: evaluated offline as an accentuation-engine
-  candidate.
-- Attribution line: Offline accentuation candidate from LIEPA phonology_engine.
-- Citation: LIEPA project resources, https://liepa.rastija.lt/.
+- What it is: a Lithuanian accentuation/phonology engine — the Python package
+  `phonology_engine` (BSD license) wrapping the native text-processing and
+  stress components of the LIEPA speech synthesizer.
+- License or terms: the package is BSD-licensed; the wrapped native
+  components originate from the state-funded LIEPA project.
+- How this project uses it: the open accentuator's lowest-confidence
+  **guesser tier** (`local/accentuator/guess_uncovered.py`) for words no open
+  dictionary source covers. Benchmarked against the VDU cache: 87.9%
+  exact-variant / 95.3% stress-position agreement on dictionary-gap words.
+  Guesses live in a separate artifact with `liepa-guess` provenance and are
+  never merged into the zero-disagreement main dictionary.
+- Attribution line: Guess-tier accentuation by phonology_engine (BSD),
+  wrapping LIEPA speech-synthesizer components, https://github.com/aleksas/phonology_engine.
+- Citation: LIEPA project resources, https://liepa.rastija.lt/;
+  phonology_engine, https://pypi.org/project/phonology-engine/.
 
 ## hermitdave/FrequencyWords
 
