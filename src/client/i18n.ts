@@ -18,6 +18,7 @@ export type UiStrings = {
   legendLabel: string;
   legendResolved: string;
   legendAmbiguous: string;
+  legendUser: string;
   legendUnknown: string;
   taggerNotice: string;
   unknownTitle: string;
@@ -45,6 +46,7 @@ export const UI: Record<Lang, UiStrings> = {
     legendLabel: "Žymėjimas",
     legendResolved: "Parinkta pagal kontekstą",
     legendAmbiguous: "Keli variantai",
+    legendUser: "Jūsų pasirinkta",
     legendUnknown: "Žodyne nerasta",
     taggerNotice:
       "Kontekstinė analizė nepasiekiama — dviprasmiškiems žodžiams parinktos numatytosios formos.",
@@ -71,6 +73,7 @@ export const UI: Record<Lang, UiStrings> = {
     legendLabel: "Legend",
     legendResolved: "Chosen by context",
     legendAmbiguous: "Multiple variants",
+    legendUser: "Chosen by you",
     legendUnknown: "Not in dictionary",
     taggerNotice:
       "Contextual analysis is unavailable — default forms were chosen for ambiguous words.",
@@ -97,6 +100,7 @@ export const UI: Record<Lang, UiStrings> = {
     legendLabel: "Обозначения",
     legendResolved: "Выбрано по контексту",
     legendAmbiguous: "Несколько вариантов",
+    legendUser: "Выбрано пользователем",
     legendUnknown: "Нет в словаре",
     taggerNotice:
       "Контекстный анализ недоступен — для неоднозначных слов выбраны формы по умолчанию.",

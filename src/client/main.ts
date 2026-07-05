@@ -53,6 +53,7 @@ const legend = getElement<HTMLDivElement>("legend");
 const legendLabel = getElement<HTMLSpanElement>("legend-label");
 const legendResolved = getElement<HTMLSpanElement>("legend-resolved");
 const legendAmbiguous = getElement<HTMLSpanElement>("legend-ambiguous");
+const legendUser = getElement<HTMLSpanElement>("legend-user");
 const legendUnknown = getElement<HTMLSpanElement>("legend-unknown");
 const siteFooter = getElement<HTMLElement>("site-footer");
 const metaDescription = document.querySelector<HTMLMetaElement>(
@@ -209,7 +210,11 @@ function renderResult(): void {
       button.className = [
         "token",
         "token-ambiguous",
-        part.resolvedBy && !part.userChosen ? "token-resolved" : "token-unresolved",
+        part.userChosen
+          ? "token-user"
+          : part.resolvedBy
+            ? "token-resolved"
+            : "token-unresolved",
       ].join(" ");
       button.textContent = visibleText;
       button.dataset.index = String(index);
@@ -425,6 +430,7 @@ function renderUi(): void {
   legendLabel.textContent = strings.legendLabel;
   legendResolved.textContent = strings.legendResolved;
   legendAmbiguous.textContent = strings.legendAmbiguous;
+  legendUser.textContent = strings.legendUser;
   legendUnknown.textContent = strings.legendUnknown;
   message.textContent = messageKey ? strings[messageKey] : "";
 

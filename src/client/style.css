@@ -17,6 +17,7 @@
   --resolved: #198754;
   --amber: #b7791f;
   --unknown: #7a817e;
+  --user: #2563eb;
   --shadow: 0 16px 42px rgb(23 33 36 / 12%);
 }
 
@@ -110,7 +111,7 @@ a {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(320px, 1.05fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
   align-items: start;
 }
@@ -137,12 +138,23 @@ a {
   text-transform: uppercase;
 }
 
+/* Both panel headers share one height so the text boxes start on the same
+   line regardless of what each header contains. */
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  margin: 0 0 10px;
+}
+
 textarea {
   display: block;
   width: 100%;
-  min-height: 220px;
-  max-height: 70vh;
-  margin-top: 10px;
+  min-height: 240px;
+  max-height: 62vh;
+  margin-top: 0;
   resize: none;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -221,12 +233,13 @@ button:disabled {
 }
 
 .result-panel {
-  min-height: 100%;
-  padding: 16px;
+  padding: 18px;
 }
 
-.result-toolbar {
-  margin-bottom: 14px;
+.result-toolbar .secondary-button {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 0.88rem;
 }
 
 .tagger-notice {
@@ -267,7 +280,7 @@ button:disabled {
 }
 
 .result-output {
-  min-height: 260px;
+  min-height: 240px;
   max-height: 62vh;
   overflow: auto;
   border: 1px solid var(--border);
@@ -311,6 +324,20 @@ button:disabled {
 .token-resolved {
   text-decoration-color: var(--resolved);
   text-decoration-thickness: 0.11em;
+}
+
+.token-user {
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-color: var(--user);
+  text-decoration-thickness: 0.12em;
+  text-underline-offset: 0.18em;
+}
+
+.token-user:hover,
+.token-user:focus-visible {
+  background: color-mix(in srgb, var(--user) 14%, transparent);
+  outline: none;
 }
 
 .token-unresolved:hover,
@@ -361,6 +388,10 @@ button:disabled {
 
 .legend-resolved {
   border-bottom-color: var(--resolved);
+}
+
+.legend-user {
+  border-bottom-color: var(--user);
 }
 
 .legend-unknown {
@@ -481,6 +512,7 @@ button:disabled {
     --resolved: #4ade80;
     --amber: #f6c453;
     --unknown: #a8b1ad;
+    --user: #7ab8ff;
     --shadow: 0 18px 50px rgb(0 0 0 / 35%);
   }
 

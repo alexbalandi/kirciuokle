@@ -25,7 +25,9 @@
 
       <section class="workspace" aria-labelledby="app-title">
         <form class="input-panel" id="accent-form">
-          <label class="field-label" for="source-text" id="input-label"></label>
+          <div class="panel-head">
+            <label class="field-label" for="source-text" id="input-label"></label>
+          </div>
           <textarea
             id="source-text"
             name="text"
@@ -41,7 +43,7 @@
         </form>
 
         <section class="result-panel" aria-labelledby="result-heading">
-          <div class="result-toolbar">
+          <div class="result-toolbar panel-head">
             <h2 id="result-heading"></h2>
             <button class="secondary-button" id="copy-button" type="button" disabled></button>
           </div>
@@ -54,6 +56,7 @@
             <span class="legend-heading" id="legend-label"></span>
             <span><i class="legend-line legend-resolved"></i><span id="legend-resolved"></span></span>
             <span><i class="legend-line legend-ambiguous"></i><span id="legend-ambiguous"></span></span>
+            <span><i class="legend-line legend-user"></i><span id="legend-user"></span></span>
             <span><i class="legend-line legend-unknown"></i><span id="legend-unknown"></span></span>
           </div>
         </section>
