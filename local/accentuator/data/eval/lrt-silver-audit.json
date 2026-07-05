@@ -1,0 +1,3071 @@
+{
+ "tiek": {
+  "accept": [
+   "tiẽk"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "nato": {
+  "accept": [
+   "nãto"
+  ],
+  "action": "replace",
+  "source": "VLKK vardynas (vlkk_names.json): Nãto",
+  "note": "Acronym NATO = Nãto (dict); silver left it unaccented."
+ },
+ "e": {
+  "accept": [
+   "è",
+   "é",
+   "ẽ"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (letter/interjection)",
+  "note": null
+ },
+ "išmoka": {
+  "accept": [
+   "išmóka"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "pasiekti": {
+  "accept": [
+   "pasíekti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "laikinai": {
+  "accept": [
+   "laĩkinai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "lengvai": {
+  "accept": [
+   "leñgvai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "nemažai": {
+  "accept": [
+   "nemãžai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "siekti": {
+  "accept": [
+   "siẽkti",
+   "síekti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "stipriai": {
+  "accept": [
+   "stìpriai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "panašiai": {
+  "accept": [
+   "panãšiai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "viešai": {
+  "accept": [
+   "viẽšai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "tinkluose": {
+  "accept": [
+   "tiñkluose"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['tiñkluose'] matches dict, not silver."
+ },
+ "ekspertai": {
+  "accept": [
+   "ekspèrtai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "aisiais": {
+  "accept": [],
+  "action": "exclude",
+  "source": null,
+  "note": "unresolved in audit"
+ },
+ "saulius": {
+  "accept": [
+   "sauliùs",
+   "sáulius"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "medicina": {
+  "accept": [
+   "medicìna"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "būtinai": {
+  "accept": [
+   "bū́tinai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "kaunas": {
+  "accept": [
+   "kaũnas"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "plačiai": {
+  "accept": [
+   "plãčiai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "suvokti": {
+  "accept": [
+   "suvókti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "kelis": {
+  "accept": [
+   "kẽlis"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "neryje": {
+  "accept": [
+   "nẽryje"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "veteranus": {
+  "accept": [
+   "vèteranus"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['vèteranus'] matches dict, not silver."
+ },
+ "vaidą": {
+  "accept": [
+   "váidą"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "statinius": {
+  "accept": [
+   "stãtinius"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['stãtinius'] matches dict, not silver."
+ },
+ "rimtai": {
+  "accept": [
+   "rìmtai"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "taurimas": {
+  "accept": [
+   "taũrimas"
+  ],
+  "action": "replace",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": "Proper name (VLKK ['Taũrimas']) = dict; silver not a valid reading of the name."
+ },
+ "bendrai": {
+  "accept": [
+   "beñdrai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "atidžiai": {
+  "accept": [
+   "atìdžiai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "siekiu": {
+  "accept": [
+   "síekiu"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "niekam": {
+  "accept": [
+   "niẽkam"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "abejo": {
+  "accept": [
+   "ãbejo"
+  ],
+  "action": "replace",
+  "source": "VDU/DLKŽ: abejo in \"be abejo\" is ãbejo",
+  "note": "Fixed phrase \"be abejo\" (no doubt); standard accent ãbejo (dict). Silver left unmarked."
+ },
+ "nerijus": {
+  "accept": [
+   "nèrijus"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "tinklų": {
+  "accept": [
+   "tiñklų"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['tinklù', 'tiñklų'] matches dict, not silver."
+ },
+ "tinklai": {
+  "accept": [
+   "tiñklai"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['tiñklai'] matches dict, not silver."
+ },
+ "metafora": {
+  "accept": [
+   "metaforà"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['metaforà', 'metàfora', 'metàforą'] matches dict, not silver."
+ },
+ "veteranų": {
+  "accept": [
+   "veteranų̃"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['veteranų̃', 'vèteranu'] matches dict, not silver."
+ },
+ "spektro": {
+  "accept": [
+   "spéktro"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['spéktro'] matches dict, not silver."
+ },
+ "rimtą": {
+  "accept": [
+   "rìmtą"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "ievos": {
+  "accept": [
+   "ievõs"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "vandenį": {
+  "accept": [
+   "vándenį"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "paskirtų": {
+  "accept": [
+   "paskìrtų"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "paskui": {
+  "accept": [
+   "paskuĩ"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "privačiai": {
+  "accept": [
+   "privãčiai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "įsiteisėjo": {
+  "accept": [
+   "įsiteisė́jo"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "formaliai": {
+  "accept": [
+   "formãliai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "nesuvokti": {
+  "accept": [
+   "nesuvókti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "būsima": {
+  "accept": [
+   "bū́sima"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "atverti": {
+  "accept": [
+   "atvérti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "pabrėžti": {
+  "accept": [
+   "pabrė́žti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "trumpai": {
+  "accept": [
+   "trum̃pai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "įvairiai": {
+  "accept": [
+   "įvaĩriai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "specialiai": {
+  "accept": [
+   "speciãliai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "šventai": {
+  "accept": [
+   "šveñtai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "nepaprastai": {
+  "accept": [
+   "nepàprastai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "neatsiimtų": {
+  "accept": [
+   "neatsiim̃tų"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "būsimam": {
+  "accept": [
+   "bū́simam"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (silver form is the only reading VDU produces for this spelling; dict accent not attested)",
+  "note": null
+ },
+ "taikyti": {
+  "accept": [
+   "taikýti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (silver form is the only reading VDU produces for this spelling; dict accent not attested)",
+  "note": null
+ },
+ "licencijos": {
+  "accept": [
+   "licèncijos"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['licèncijos'] matches dict, not silver."
+ },
+ "tinklais": {
+  "accept": [
+   "tiñklais"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['tiñklais'] matches dict, not silver."
+ },
+ "reitingus": {
+  "accept": [
+   "reitingùs"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['reitingùs'] matches dict, not silver."
+ },
+ "akademijos": {
+  "accept": [
+   "akàdemijos"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['akàdemijos'] matches dict, not silver."
+ },
+ "metaforų": {
+  "accept": [
+   "metàforų"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['metàforų'] matches dict, not silver."
+ },
+ "likučius": {
+  "accept": [
+   "likùčius"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['likùčius'] matches dict, not silver."
+ },
+ "dariaus": {
+  "accept": [
+   "dãriaus"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "teiginius": {
+  "accept": [
+   "teiginiùs"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['teiginiùs'] matches dict, not silver."
+ },
+ "rimtį": {
+  "accept": [
+   "rìmtį"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "mečio": {
+  "accept": [
+   "mèčio"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "ridas": {
+  "accept": [
+   "rìdas"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "taurimo": {
+  "accept": [
+   "taũrimo"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "taurimą": {
+  "accept": [
+   "taũrimą"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "anketoje": {
+  "accept": [
+   "añketoje"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['añketoje'] matches dict, not silver."
+ },
+ "metaforą": {
+  "accept": [
+   "metàforą"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['metaforà', 'metàfora', 'metàforą'] matches dict, not silver."
+ },
+ "finale": {
+  "accept": [
+   "finãle"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['finãle'] matches dict, not silver."
+ },
+ "rinkoje": {
+  "accept": [
+   "riñkoje"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['riñkoje'] matches dict, not silver."
+ },
+ "retai": {
+  "accept": [
+   "rètai",
+   "rẽtai"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "marios": {
+  "accept": [
+   "mãrios"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['mãrios'] matches dict, not silver."
+ },
+ "rimtas": {
+  "accept": [
+   "rim̃tas",
+   "rìmtas"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "audros": {
+  "accept": [
+   "audrõs",
+   "áudros"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "laisvai": {
+  "accept": [
+   "laĩsvai",
+   "láisvai"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "viltį": {
+  "accept": [
+   "vìltį"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "rinkų": {
+  "accept": [
+   "riñkų"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian declension paradigm",
+  "note": "Wiktionary paradigm cell ['riñkų'] matches dict, not silver."
+ },
+ "metis": {
+  "accept": [
+   "mètis"
+  ],
+  "action": "replace",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": "Proper name (VLKK ['Mètis']) = dict; silver not a valid reading of the name."
+ },
+ "davidas": {
+  "accept": [
+   "dãvidas"
+  ],
+  "action": "accept-also",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": null
+ },
+ "ira": {
+  "accept": [
+   "irà"
+  ],
+  "action": "replace",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": "Proper name (VLKK ['Irà', 'Ìra', 'Ìrą']) = dict; silver not a valid reading of the name."
+ },
+ "metį": {
+  "accept": [
+   "mètį"
+  ],
+  "action": "replace",
+  "source": "VLKK vardynas (vlkk_names.json)",
+  "note": "Proper name (VLKK ['Mèti', 'Mètį']) = dict; silver not a valid reading of the name."
+ },
+ "teikime": {
+  "accept": [
+   "teĩkime"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "išduotų": {
+  "accept": [
+   "išdúotų"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "įvesti": {
+  "accept": [
+   "įvèsti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "lėtines": {
+  "accept": [
+   "lė̃tines"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "populiariai": {
+  "accept": [
+   "populiãriai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "mielą": {
+  "accept": [
+   "míelą"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "lėtai": {
+  "accept": [
+   "lė̃tai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "sverti": {
+  "accept": [
+   "sver̃ti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "nuoširdžiai": {
+  "accept": [
+   "nuošir̃džiai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "akivaizdžiai": {
+  "accept": [
+   "akivaĩzdžiai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "mini": {
+  "accept": [
+   "minì"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "nesiekti": {
+  "accept": [
+   "nesiẽkti",
+   "nesíekti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "eksperto": {
+  "accept": [
+   "ekspèrto"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "rastų": {
+  "accept": [
+   "ràstų"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "susisiekti": {
+  "accept": [
+   "susisiẽkti",
+   "susisíekti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "nubausti": {
+  "accept": [
+   "nubaũsti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "lėtinių": {
+  "accept": [
+   "lė̃tinių"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "plaukus": {
+  "accept": [
+   "pláukus"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "pasaulinės": {
+  "accept": [
+   "pasáulinės"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "tiesimas": {
+  "accept": [
+   "tiẽsimas"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "sūri": {
+  "accept": [
+   "sū́ri",
+   "sū̃ri"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "atgyvena": {
+  "accept": [
+   "atgyvẽna"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "prijungti": {
+  "accept": [
+   "prijùngti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "priminsiu": {
+  "accept": [
+   "primìnsiu"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "priminti": {
+  "accept": [
+   "primìnti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "priversti": {
+  "accept": [
+   "priver̃sti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "galų": {
+  "accept": [
+   "galų̃"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "lubų": {
+  "accept": [
+   "lubų̃"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "pasaulinio": {
+  "accept": [
+   "pasáulinio"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "neįprastai": {
+  "accept": [
+   "neį̃prastai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "išorine": {
+  "accept": [
+   "išorinè"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "naujai": {
+  "accept": [
+   "naũjai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "ekspertu": {
+  "accept": [
+   "ekspèrtu"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "pietų": {
+  "accept": [
+   "pietų̃"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "kėliau": {
+  "accept": [
+   "kė́liau"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "kažkam": {
+  "accept": [
+   "kažkám"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "patogiai": {
+  "accept": [
+   "patõgiai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "nebematąs": {
+  "accept": [
+   "nebemãtąs"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "rytoj": {
+  "accept": [
+   "rytój"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "sąmoningas": {
+  "accept": [
+   "są́moningas"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "kristų": {
+  "accept": [
+   "krìstų"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "primintų": {
+  "accept": [
+   "primìntų"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "blogai": {
+  "accept": [
+   "blõgai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "suvokė": {
+  "accept": [
+   "sùvokė"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "ištirtų": {
+  "accept": [
+   "ištìrtų"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "pilnai": {
+  "accept": [
+   "pìlnai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "skirtų": {
+  "accept": [
+   "skìrtų"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "nematąs": {
+  "accept": [
+   "nemãtąs"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "paimti": {
+  "accept": [
+   "paim̃ti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "pigiai": {
+  "accept": [
+   "pìgiai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "išgirsti": {
+  "accept": [
+   "išgir̃sti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "ramiai": {
+  "accept": [
+   "rãmiai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "nežinomasis": {
+  "accept": [
+   "nežinomàsis"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "maksimaliai": {
+  "accept": [
+   "maksimãliai"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "nenorįs": {
+  "accept": [
+   "nenórįs"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "įsiteisėja": {
+  "accept": [
+   "įsiteisė́ja"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "neliktų": {
+  "accept": [
+   "nelìktų"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (independent morphological analyzer lists both readings)",
+  "note": null
+ },
+ "plėšrūnų": {
+  "accept": [
+   "plėšrū́nų"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (silver form is the only reading VDU produces for this spelling; dict accent not attested)",
+  "note": null
+ },
+ "būsimų": {
+  "accept": [
+   "bū́simų"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (silver form is the only reading VDU produces for this spelling; dict accent not attested)",
+  "note": null
+ },
+ "būsimi": {
+  "accept": [
+   "bū́simi"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (silver form is the only reading VDU produces for this spelling; dict accent not attested)",
+  "note": null
+ },
+ "ginčyti": {
+  "accept": [
+   "ginčýti"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (silver form is the only reading VDU produces for this spelling; dict accent not attested)",
+  "note": null
+ },
+ "nutarusi": {
+  "accept": [
+   "nùtarusi"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (silver form is the only reading VDU produces for this spelling; dict accent not attested)",
+  "note": null
+ },
+ "pasiveja": {
+  "accept": [
+   "pasivẽja"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent (silver form is the only reading VDU produces for this spelling; dict accent not attested)",
+  "note": null
+ },
+ "atidavus": {
+  "accept": [
+   "atìdavus"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian verb paradigm (atiduoti: past atìdavė)",
+  "note": "Past gerund of atiduoti; past atìdavė is prefix-stressed atì-, so atìdavus (dict) is correct; silver atidãvus wrong."
+ },
+ "gautomis": {
+  "accept": [
+   "gáutomis"
+  ],
+  "action": "replace",
+  "source": "en.wiktionary.org Lithuanian verb paradigm (gauti: part. gáutas)",
+  "note": "Past passive participle of gauti is gáutas (acute root); instr pl fem gáutomis (dict) correct; silver gautomìs wrong."
+ },
+ "šitoje": {
+  "accept": [
+   "šitõje"
+  ],
+  "action": "accept-also",
+  "source": "VDU kirčiuoklė word_accent",
+  "note": null
+ },
+ "liet": {
+  "accept": [
+   "líet"
+  ],
+  "action": "replace",
+  "source": "VDU kirčiuoklė word_accent",
+  "note": "Abbreviation/fragment \"liet\"; VDU accents it líet (in dict). Silver left unmarked. Corpus fragment, not a full word."
+ },
+ "macijauskas": {
+  "accept": [
+   "macijaũskas"
+  ],
+  "action": "replace",
+  "source": "Lithuanian surname pattern -auskas is AP2 circumflex (Macijaũskas)",
+  "note": "Surname; -auskas surnames are Macijaũskas (dict). Silver macijáuskas (acute) non-standard."
+ },
+ "faina": {
+  "accept": [
+   "fáina"
+  ],
+  "action": "accept-also",
+  "source": "colloquial/borrowing \"faina\"; VDU has no entry",
+  "note": null
+ },
+ "abudu": {
+  "accept": [
+   "abùdu"
+  ],
+  "action": "replace",
+  "source": "DLKŽ: abùdu (both, masc dual)",
+  "note": "Dual pronoun \"abudu\" = abùdu (dict). Silver left unmarked."
+ },
+ "times": {
+  "accept": [],
+  "action": "exclude",
+  "source": null,
+  "note": "unresolved in audit"
+ },
+ "m": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "d": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "jav": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: JAV (USA)"
+ },
+ "tūkst": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: tukst. (abbrev of tukstantis)"
+ },
+ "r": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "j": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "proc": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: proc. (percent abbrev)"
+ },
+ "mln": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: mln. (million abbrev)"
+ },
+ "k": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "lrt": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: LRT (broadcaster acronym)"
+ },
+ "g": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "v": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "lt": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: LT / .lt"
+ },
+ "i": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "l": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "safariland": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "t": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "lithuania": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "vrk": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: VRK (Central Electoral Commission)"
+ },
+ "babajanas": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "s": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "bns": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: BNS (news agency)"
+ },
+ "y": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "val": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: val. (hour abbrev)"
+ },
+ "instagramo": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "lggrtc": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: LGGRTC (genocide research centre acronym)"
+ },
+ "c": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "oržikauskas": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "Lithuanian surname Orzikauskas (-auskas); LT-morphology name, carries stress"
+ },
+ "b": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "vmvt": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: VMVT (food/vet service acronym)"
+ },
+ "bta": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: BTA (insurer/agency acronym)"
+ },
+ "lexus": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "spa": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: SPA (spa)"
+ },
+ "ąją": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "tokenizer artifact: long-form/ordinal grammatical ending split off (e.g. 130-asis, XX-oji); not a standalone word"
+ },
+ "lsdp": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: LSDP (party acronym)"
+ },
+ "kozič": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "tšk": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: tsk. (points abbrev)"
+ },
+ "pč": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: abbrev fragment"
+ },
+ "dr": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: dr. (doctor title abbrev)"
+ },
+ "toyota": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "š": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "vance": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "ųjų": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "tokenizer artifact: long-form/ordinal grammatical ending split off (e.g. 130-asis, XX-oji); not a standalone word"
+ },
+ "brešoje": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "osios": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "tokenizer artifact: long-form/ordinal grammatical ending split off (e.g. 130-asis, XX-oji); not a standalone word"
+ },
+ "asis": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "tokenizer artifact: long-form/ordinal grammatical ending split off (e.g. 130-asis, XX-oji); not a standalone word"
+ },
+ "km": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: km (kilometre)"
+ },
+ "h": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "vu": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: VU (Vilnius University)"
+ },
+ "tspmi": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: TSPMI (institute acronym)"
+ },
+ "mercedes": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "benz": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "karpova": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "n": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "stt": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: STT (special investigation service)"
+ },
+ "laf": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: LAF (org acronym)"
+ },
+ "jewish": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "pirmynatgal": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "hashtag/slogan concatenation (#LaisvePalestinai, paskyra PirmynAtgal); not a normal word token"
+ },
+ "instagramui": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "ąsias": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "tokenizer artifact: long-form/ordinal grammatical ending split off (e.g. 130-asis, XX-oji); not a standalone word"
+ },
+ "kabelkė": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "Lithuanian surname Kabelke; LT-morphology name, carries stress"
+ },
+ "kabelkės": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "genitive of surname Kabelke; LT name"
+ },
+ "the": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "group": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "eč": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "sub-word fragment (split from a Slavic-type surname syllable, e.g. -ovic); not a standalone word"
+ },
+ "ož": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "sub-word fragment (split from surname, e.g. Oz-ikauskas); not a standalone word"
+ },
+ "bormijus": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "kondratovičiaus": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "bvp": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: BVP (GDP acronym)"
+ },
+ "allegro": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "nebėra": {
+  "accept": [],
+  "action": "exclude",
+  "source": "LKZ(buti)/paradigm",
+  "note": "negated 3rd-person present of buti (there is none); genuine LT verb, normally accented"
+ },
+ "facebook": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "babajano": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "de": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: de (Latin de facto)"
+ },
+ "facto": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: facto (Latin de facto)"
+ },
+ "autokraitis": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "trento": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "monciškės": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "Lithuanian toponym Monciskes (near Sventoji/Palanga); LT place name, carries stress"
+ },
+ "monciškėse": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "locative pl. of Monciskes; LT toponym"
+ },
+ "os": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: os (ending fragment / foreign)"
+ },
+ "pwhl": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: PWHL (hockey league acronym)"
+ },
+ "egsta": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "comintela": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "telia": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "oji": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "tokenizer artifact: long-form/ordinal grammatical ending split off (e.g. 130-asis, XX-oji); not a standalone word"
+ },
+ "chvoleso": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "tebėra": {
+  "accept": [],
+  "action": "exclude",
+  "source": "LKZ(buti)/paradigm",
+  "note": "continuative 3rd-person present of buti (still is); genuine LT verb, normally accented"
+ },
+ "association": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "of": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "european": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "museums": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "aejm": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: AEJM (museums assoc. acronym)"
+ },
+ "instagramas": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "instagrame": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "antievangelija": {
+  "accept": [],
+  "action": "exclude",
+  "source": "LKZ(evangelija)",
+  "note": "anti- + evangelija; genuine adapted LT noun"
+ },
+ "ui": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "tokenizer artifact: long-form/ordinal grammatical ending split off (e.g. 130-asis, XX-oji); not a standalone word"
+ },
+ "tv": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: TV"
+ },
+ "mru": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: MRU (Mykolo Romerio univ.)"
+ },
+ "lat": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: appellate-court acronym / lat"
+ },
+ "alijeva": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "omonininkais": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "instrumental pl. of omonininkas (LT -ininkas derivation, OMON officer); genuine LT noun, should carry stress"
+ },
+ "f": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "single letter (initial / list marker / unit symbol); Lithuanian text leaves these unaccented"
+ },
+ "iv": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: IV (roman numeral / section IV)"
+ },
+ "įsigijant": {
+  "accept": [],
+  "action": "exclude",
+  "source": "paradigm(isigyti)",
+  "note": "present gerund of isigyti; genuine LT verb form, should carry stress"
+ },
+ "nederland": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "hong": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "kong": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "limited": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "warrenas": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "kandersas": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "malgožata": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "geben": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "alasijuje": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "bormijuje": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "rietyje": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "kšištof": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "lavrinovič": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "prat": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: prat. (extra-time / exercise abbrev)"
+ },
+ "le": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: le (foreign particle)"
+ },
+ "alasijus": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "saitama": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "tel": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "breša": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "san": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "juanas": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "puerto": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "vikipedijos": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "genitive of Vikipedija (fully adapted Wikipedia); should carry stress"
+ },
+ "ts": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: TS (party abbrev)"
+ },
+ "lkd": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: LKD (party abbrev)"
+ },
+ "ek": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: EK (European Commission)"
+ },
+ "super": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: super (prefix/particle fragment)"
+ },
+ "lvžkšs": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: LVZKSS (party acronym)"
+ },
+ "erius": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "tokenizer artifact: long-form/ordinal grammatical ending split off (e.g. 130-asis, XX-oji); not a standalone word"
+ },
+ "unesco": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: UNESCO"
+ },
+ "generalkomisaras": {
+  "accept": [],
+  "action": "exclude",
+  "source": "LKZ(komisaras)",
+  "note": "compound generalinis+komisaras; genuine adapted LT noun"
+ },
+ "doc": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: doc. (docent title abbrev)"
+ },
+ "pan": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: pan (fragment / pan-)"
+ },
+ "gupija": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "adapted zoological loanword (guppy), declined in LT; should carry stress"
+ },
+ "rotanu": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "instrumental of rotanas (fish rotan, adapted loanword); should carry stress"
+ },
+ "gupiją": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "accusative of gupija; adapted LT noun"
+ },
+ "gupijos": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "genitive of gupija; adapted LT noun"
+ },
+ "gupijų": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "genitive pl. of gupija; adapted LT noun"
+ },
+ "juodažiotis": {
+  "accept": [],
+  "action": "exclude",
+  "source": "LKZ(juodaziotis)",
+  "note": "genuine LT compound noun (fish name); LKZ headword juodaziotis"
+ },
+ "ameiurus": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "Latin genus name (Ameiurus melas) in a scientific binomial; not Lithuanian"
+ },
+ "cm": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: cm (centimetre)"
+ },
+ "kg": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: kg (kilogram)"
+ },
+ "reintrodukcija": {
+  "accept": [],
+  "action": "exclude",
+  "source": "LKZ(introdukcija)",
+  "note": "adapted term (re-introduction); rein- + introdukcija stem; genuine adapted LT noun"
+ },
+ "reintrodukciją": {
+  "accept": [],
+  "action": "exclude",
+  "source": "LKZ(introdukcija)",
+  "note": "accusative of reintrodukcija; adapted LT noun"
+ },
+ "el": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: el. (abbrev el. pastas)"
+ },
+ "info": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: info (abbrev / email local-part)"
+ },
+ "aad": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: AAD (aad.am.lt org acronym)"
+ },
+ "am": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: am (email host / a.m.)"
+ },
+ "depeche": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "mode": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "foje": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "iejų": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "tokenizer artifact: long-form/ordinal grammatical ending split off (e.g. 130-asis, XX-oji); not a standalone word"
+ },
+ "karapetas": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "gk": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: GK (clinic brand initials)"
+ },
+ "byung": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "chul": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "han": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "teltonikai": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "teltonikos": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "es": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: ES (European Union)"
+ },
+ "vdu": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: VDU (university acronym)"
+ },
+ "urm": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: URM (foreign ministry acronym)"
+ },
+ "tsmc": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: TSMC (chip maker acronym)"
+ },
+ "berakčiu": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "instrumental of berakcio (keyless); LT compound, should carry stress"
+ },
+ "daf": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: DAF (truck brand acronym)"
+ },
+ "schmitz": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "cargobull": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "bmw": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "berakčio": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "adjective/noun be-rakcio (keyless, LT compound be+raktas); genuine LT word, should carry stress"
+ },
+ "kasko": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: KASKO (motor insurance term, acronym-like, unadapted)"
+ },
+ "tendenitas": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "medical term (tendinitas/tendinitis, adapted); genuine LT noun, should carry stress"
+ },
+ "kapsulitas": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "medical term (capsulitis, adapted); genuine LT noun, should carry stress"
+ },
+ "mrt": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: MRT (MRI scan acronym)"
+ },
+ "youtube": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "dolomiti": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "energia": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "fiba": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: FIBA (basketball federation)"
+ },
+ "wolves": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "rota": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "fortuna": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "gradiali": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "marriott": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "hilton": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "pavilostą": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "accusative of Pavilosta (Latvian resort adapted & declined in LT); carries stress when adapted"
+ },
+ "monciškes": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "accusative pl. of Monciskes (missing length mark); LT toponym"
+ },
+ "talentė": {
+  "accept": [],
+  "action": "exclude",
+  "source": "LKZ(talentas)",
+  "note": "feminine of talentas (talented woman); genuine LT noun"
+ },
+ "iuoju": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "tokenizer artifact: long-form/ordinal grammatical ending split off (e.g. 130-asis, XX-oji); not a standalone word"
+ },
+ "hammarby": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "nhl": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: NHL (hockey league)"
+ },
+ "aktuaras": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "profession noun actuary, fully adapted to LT (-aras); should carry stress"
+ },
+ "ojo": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "tokenizer artifact: long-form/ordinal grammatical ending split off (e.g. 130-asis, XX-oji); not a standalone word"
+ },
+ "samsung": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "play": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "osioms": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "tokenizer artifact: long-form/ordinal grammatical ending split off (e.g. 130-asis, XX-oji); not a standalone word"
+ },
+ "rašmoro": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "afp": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: AFP (news agency)"
+ },
+ "truth": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "social": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "sullivanas": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "nancy": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "freedom": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "kvinipeko": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "priori": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: priori (Latin a priori)"
+ },
+ "savick": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "ų": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "orphan letter / grammatical ending fragment, not a word"
+ },
+ "nr": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: Nr. (number abbrev)"
+ },
+ "meficei": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "haskala": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "jacques": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "lipchitzo": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "kirshenblatt": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "gimblett": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "fishmanas": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "kt": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: kt. (etc. abbrev)"
+ },
+ "goiči": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "kitagavos": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "čijunei": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "zwartendijką": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "south": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "african": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "museum": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "gavinu": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "morrisu": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "maceva": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "štetlo": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "influencerių": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "genitive pl. of influenceris (adapted loanword influencer); should carry stress"
+ },
+ "airbnb": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "kovido": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "genitive of kovidas (Covid, fully adapted and declined); should carry stress"
+ },
+ "reelsus": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "accusative pl. of reelsas (adapted loanword reels); should carry stress"
+ },
+ "kuldyga": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "kuldygos": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "kuldygą": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign toponym (Italian/Latvian/US/Japanese/Yiddish etc.); left unaccented in this silver pass"
+ },
+ "vėpsyklomis": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "instrumental pl. of vepsykla (LT deverbal noun); genuine LT word, should carry stress"
+ },
+ "ofšorinės": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "adjective ofsorinis (offshore, adapted); genuine LT adjective, should carry stress"
+ },
+ "kokorai": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "šemelis": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "joe": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "bidenas": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "as": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "orphan fragment / mistokenized 'as' (as->as pronoun mis-set); no bounded token in corpus, treated as non-word"
+ },
+ "liamo": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "campbello": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "real": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "irish": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "republican": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "zelenskį": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "gideono": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "saaro": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "never": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "again": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "for": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "anyone": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "freepalestine": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "laisvėpalestinai": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "hashtag/slogan concatenation (#LaisvePalestinai, paskyra PirmynAtgal); not a normal word token"
+ },
+ "shift": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "payments": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "mcdonald": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "omon": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: OMON (police acronym, in quotes)"
+ },
+ "xxi": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: XXI (roman numeral)"
+ },
+ "alijevos": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "vmi": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: VMI (tax inspectorate acronym)"
+ },
+ "lajota": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "brand / organisation / social-platform name (often in quotes or Latin script); left unaccented"
+ },
+ "puchovič": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "lvat": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: LVAT (supreme admin court acronym)"
+ },
+ "xx": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: XX (roman numeral)"
+ },
+ "kondratovičiui": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "fiskalinė": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "adjective fiskalinis (fiscal, adapted Latinism); should carry stress"
+ },
+ "fiskalinio": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "genitive of fiskalinis; adapted LT adjective"
+ },
+ "jončas": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "Lithuanian surname Joncas; LT-morphology name, carries stress"
+ },
+ "tvc": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "abbreviation / acronym / unit / Latin particle: TVC (company initials)"
+ },
+ "solutions": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "pituškienę": {
+  "accept": [],
+  "action": "exclude",
+  "source": "corpus",
+  "note": "Lithuanian married-surname Pituskiene (-iene); LT name, carries stress"
+ },
+ "emmanuelio": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "macrono": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "foreign personal name (transcribed / partially adapted); conventionally left unaccented in this silver pass"
+ },
+ "financial": {
+  "accept": [],
+  "action": "unmarked-ok",
+  "source": null,
+  "note": "English/foreign-language word in an English phrase or quote; not adapted Lithuanian"
+ },
+ "o": {
+  "accept": [],
+  "action": "accept-any-observed",
+  "source": "corpus: contrastive conjunction, same function",
+  "note": "Conjunction õ x187 is standard; the 3 unstressed 'o' are the same conjunction left unaccented. Minor inconsistency; majority-correct õ."
+ },
+ "turbūt": {
+  "accept": [],
+  "action": "accept-any-observed",
+  "source": "corpus: adverb, invariant function across all contexts",
+  "note": "Adverb 'probably', same reading everywhere. turbū́t x13 correct; unstressed turbūt x1 is an inconsistency. Majority-correct turbū́t."
+ },
+ "įtariama": {
+  "accept": [],
+  "action": "accept-any-observed",
+  "source": "corpus context: all 7 occurrences are impersonal parenthetical 'kaip įtariama'/'Įtariama, kad' = neuter predicative",
+  "note": "6 tokens correctly į̃tariama (neuter, stem-stress). The 1 token tagged įtariamà (fem, ending-stress) is a UDPipe mis-tag: context 'pareigas, įtariama, suklastojo' is the same impersonal neuter. Majority-correct + always-correct form = į̃tariama."
+ },
+ "apsibrėžti": {
+  "accept": [
+   "apsibrė́žti"
+  ],
+  "action": "replace",
+  "source": "VDU word_accent: infinitive(vksm.,sngr.)=apsibrė́žti/apsibrė̃žti; participle=apsibrėžtì",
+  "note": "'valia aiškiai apsibrėžti' = infinitive. VDU vksm = apsibrė́žti (LIEPA). Silver apsibrėžtì is the masc.pl participle cell — wrong."
+ },
+ "atpažįstami": {
+  "accept": [
+   "atpažį́stami"
+  ],
+  "action": "accept-also",
+  "source": "VDU word_accent: adjective(bdv.vyr.g.dgs.vard) lists BOTH atpažį́stami and atpažįstamì",
+  "note": null
+ },
+ "atseikėti": {
+  "accept": [
+   "atseikė́ti"
+  ],
+  "action": "accept-also",
+  "source": "VDU word_accent: infinitive(vksm.) lists BOTH atséikėti and atseikė́ti",
+  "note": null
+ },
+ "didesnės": {
+  "accept": [
+   "didèsnė̃s"
+  ],
+  "action": "accept-also",
+  "source": "VDU word_accent: nom.pl=didèsnės, gen.sg=didesnė̃s",
+  "note": null
+ },
+ "esmės": {
+  "accept": [
+   "esmė̃s"
+  ],
+  "action": "replace",
+  "source": "VDU word_accent (kalbu.vdu.lt): gen.sg=esmė̃s, nom.pl=ẽsmės",
+  "note": "Context 'iš esmės' = gen.sg (prepositional). VDU gen.sg = esmė̃s (LIEPA). Silver ẽsmės is the nom.pl cell — wrong cell chosen by UDPipe."
+ },
+ "mentės": {
+  "accept": [
+   "meñtė̃s"
+  ],
+  "action": "accept-also",
+  "source": "VDU word_accent: gen.sg lists BOTH meñtės and mentė̃s",
+  "note": null
+ },
+ "nepagrįstų": {
+  "accept": [
+   "nepagrįstų̃"
+  ],
+  "action": "replace",
+  "source": "VDU word_accent: adj/participle gen.pl=nepagrįstų̃; subjunctive=nepagrį̃stų",
+  "note": "'kaip nepagrįstų politinės priklausomybės' = gen.pl adj. VDU gen.pl = nepagrįstų̃ (LIEPA). Silver nepagrį̃stų = subjunctive verb cell — wrong."
+ },
+ "nuvertėja": {
+  "accept": [
+   "nuvértė́ja"
+  ],
+  "action": "accept-also",
+  "source": "VDU word_accent: lists BOTH nuvertė́ja and nuvértėja for 3sg present",
+  "note": null
+ },
+ "pamerkti": {
+  "accept": [
+   "pamer̃kti"
+  ],
+  "action": "replace",
+  "source": "VDU word_accent: infinitive(vksm.)=pamer̃kti; participle=pamerktì",
+  "note": "'kojas pamerkti' = infinitive → correct pamer̃kti. Silver pamerktì is the participle cell (wrong); LIEPA pamér̃kti is malformed/not-VDU. Neither gave the correct infinitive form."
+ },
+ "pavaldžios": {
+  "accept": [
+   "paval̃džios"
+  ],
+  "action": "replace",
+  "source": "VDU word_accent: nom.pl=paval̃džios, gen.sg=pavaldžiõs",
+  "note": "'jai pavaldžios institucijos' = fem nom.pl (institucijos nom.pl subject). VDU nom.pl = paval̃džios (LIEPA). Silver pavaldžiõs = gen.sg — wrong cell."
+ },
+ "pažėrus": {
+  "accept": [
+   "pažė̃rus"
+  ],
+  "action": "accept-also",
+  "source": "VDU word_accent: padalyvis lists BOTH pažė́rus and pažė̃rus",
+  "note": null
+ },
+ "pažįstamų": {
+  "accept": [
+   "pažį́stamų"
+  ],
+  "action": "accept-also",
+  "source": "VDU word_accent: gen.pl lists BOTH pažį́stamų and pažįstamų̃",
+  "note": null
+ },
+ "profesionalių": {
+  "accept": [
+   "profesionalių̃"
+  ],
+  "action": "accept-also",
+  "source": "VDU word_accent: noun(dkt.)=profesionãlių, adjective(bdv.)=profesionalių̃",
+  "note": null
+ },
+ "sąmatinę": {
+  "accept": [
+   "są́matinę"
+  ],
+  "action": "accept-also",
+  "source": "VDU word_accent + LKŽ: są́matinis(1) and sąmatìnis(2) both attested",
+  "note": null
+ }
+}

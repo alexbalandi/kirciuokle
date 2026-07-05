@@ -43,6 +43,7 @@ DEFAULT_CORPUS = DATA_DIR / "eval" / "lrt-smoke.txt"
 DEFAULT_SILVER = DATA_DIR / "eval" / "lrt-smoke-silver.jsonl"
 DEFAULT_REPORT = REPORTS_DIR / "nodict-eval.md"
 DEFAULT_CKPT = DATA_DIR / "stress_nn2" / "stress_nn2.pt"
+DEFAULT_AUDIT = DATA_DIR / "eval" / "lrt-silver-audit.json"
 TAGGER_PRIMARY_MODEL = TAGGER_DIR / "release" / "hf-vdu"
 TAGGER_FALLBACK_MODEL = TAGGER_DIR / "artifacts" / "litlat-gen2-onnx" / "int8"
 TAGGER_READY_TEXT = "Vilnius yra grazus miestas."
@@ -92,8 +93,11 @@ class Metrics:
     type_exact: int
 
 
-def nfc(text: str | None) -> str:
-    return unicodedata.normalize("NFC", text or "")
+@dataclass(frozen=True)
+class AuditSummary:
+    excluded_tokens: int
+    foreign_unmarked_tokens: int
+    foreign_unmarked_ok: int
 
 
 def norm_form(text: str | None) -> str:
@@ -102,6 +106,71 @@ def norm_form(text: str | None) -> str:
 
 def word_key(text: str | None) -> str:
     return strip_accents(normalize_lt(text or "")).lower()
+
+
+def load_audit(path: Path | None) -> dict[str, dict[str, Any]]:
+    if path is None or not path.exists():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"audit file must be a JSON object: {path}")
+    audit: dict[str, dict[str, Any]] = {}
+    for raw_word, raw_entry in raw.items():
+        if not isinstance(raw_entry, dict):
+            continue
+        word = word_key(str(raw_word))
+        action = str(raw_entry.get("action") or "").strip()
+        accept = {
+            norm_form(str(form))
+            for form in (raw_entry.get("accept") or [])
+            if norm_form(str(form))
+        }
+        if word and action:
+            audit[word] = {"action": action, "accept": accept}
+    return audit
+
+
+def observed_silver_forms(silver: Iterable[Any]) -> dict[str, set[str]]:
+    observed: dict[str, set[str]] = {}
+    for token in silver:
+        word = word_key(getattr(token, "word", ""))
+        form = norm_form(getattr(token, "accented", ""))
+        if word and form:
+            observed.setdefault(word, set()).add(form)
+    return observed
+
+
+def audited_gold_forms(
+    word: str,
+    silver_form: str,
+    audit: dict[str, dict[str, Any]],
+    observed_forms: dict[str, set[str]],
+) -> tuple[str, set[str]]:
+    key = word_key(word)
+    raw_gold = {norm_form(silver_form)}
+    entry = audit.get(key)
+    if entry is None:
+        return "score", raw_gold
+
+    action = entry["action"]
+    accept = set(entry.get("accept") or set())
+    if action == "replace":
+        return "score", accept or raw_gold
+    if action == "accept-also":
+        return "score", raw_gold | accept
+    if action == "accept-any-observed":
+        return "score", set(observed_forms.get(key) or raw_gold)
+    if action == "exclude":
+        return "exclude", set()
+    if action == "unmarked-ok":
+        return "foreign-unmarked", set()
+    return "score", raw_gold
+
+
+def prediction_unmarked_or_abstained(word: str, predicted: str | None) -> bool:
+    if predicted is None:
+        return True
+    return word_key(predicted) == word_key(word) and stress_of(predicted) is None
 
 
 def has_letter(text: str) -> bool:
@@ -448,15 +517,21 @@ def bridge_label(
 
     best_label = ""
     best_score: int | None = None
-    best_filled = -1
+    best_spurious: int | None = None
     for candidate in candidates:
         score = disamb.score_tags(candidate.slots, context_slots)
-        if best_score is None or score > best_score or (
-            score == best_score and candidate.filled_slots > best_filled
+        # ties: prefer the label with the FEWEST slots absent from context —
+        # score_tags does not penalize a slot only one side fills, so a
+        # spurious "aukšt." on a noun label ties with the clean label
+        spurious = sum(1 for slot in candidate.slots if slot not in context_slots)
+        if (
+            best_score is None
+            or score > best_score
+            or (score == best_score and (best_spurious is None or spurious < best_spurious))
         ):
             best_label = candidate.label
             best_score = score
-            best_filled = candidate.filled_slots
+            best_spurious = spurious
     if best_score is None or best_score <= 0:
         best_label = ""
     cache[key] = best_label
@@ -617,7 +692,11 @@ def dict_predictions(
 
 
 def exact_match(predicted: str | None, silver: str) -> bool:
-    return predicted is not None and nfc(predicted) == nfc(silver)
+    return predicted is not None and norm_form(predicted) == norm_form(silver)
+
+
+def exact_match_any(predicted: str | None, gold_forms: set[str]) -> bool:
+    return predicted is not None and norm_form(predicted) in gold_forms
 
 
 def position_match(predicted: str | None, silver: str) -> bool:
@@ -632,39 +711,101 @@ def position_match(predicted: str | None, silver: str) -> bool:
     )
 
 
-def score_predictions(
+def position_match_any(predicted: str | None, gold_forms: set[str]) -> bool:
+    return any(position_match(predicted, gold_form) for gold_form in gold_forms)
+
+
+def _score_predictions(
     pipeline: str,
     confidence: str,
     rows: list[EvalRow],
     predictions: list[str | None],
-) -> Metrics:
+    audit: dict[str, dict[str, Any]] | None = None,
+    observed_forms: dict[str, set[str]] | None = None,
+) -> tuple[Metrics, AuditSummary]:
     answered = exact = position = 0
     type_seen: set[str] = set()
     answered_types = type_exact = 0
+    total_tokens = 0
+    excluded_tokens = 0
+    foreign_unmarked_tokens = 0
+    foreign_unmarked_ok = 0
     for row, predicted in zip(rows, predictions):
+        gold_forms = {norm_form(row.silver)}
+        if audit:
+            category, gold_forms = audited_gold_forms(
+                row.word,
+                row.silver,
+                audit,
+                observed_forms or {},
+            )
+            if category == "exclude":
+                excluded_tokens += 1
+                continue
+            if category == "foreign-unmarked":
+                foreign_unmarked_tokens += 1
+                if prediction_unmarked_or_abstained(row.word, predicted):
+                    foreign_unmarked_ok += 1
+                continue
+        total_tokens += 1
         if predicted is not None:
             answered += 1
-        if exact_match(predicted, row.silver):
+        if exact_match_any(predicted, gold_forms):
             exact += 1
-        if position_match(predicted, row.silver):
+        if position_match_any(predicted, gold_forms):
             position += 1
         if row.word in type_seen:
             continue
         type_seen.add(row.word)
         if predicted is not None:
             answered_types += 1
-        if exact_match(predicted, row.silver):
+        if exact_match_any(predicted, gold_forms):
             type_exact += 1
-    return Metrics(
-        pipeline=pipeline,
-        confidence=confidence,
-        total_tokens=len(rows),
-        answered_tokens=answered,
-        token_exact=exact,
-        token_position=position,
-        total_types=len(type_seen),
-        answered_types=answered_types,
-        type_exact=type_exact,
+    return (
+        Metrics(
+            pipeline=pipeline,
+            confidence=confidence,
+            total_tokens=total_tokens,
+            answered_tokens=answered,
+            token_exact=exact,
+            token_position=position,
+            total_types=len(type_seen),
+            answered_types=answered_types,
+            type_exact=type_exact,
+        ),
+        AuditSummary(
+            excluded_tokens=excluded_tokens,
+            foreign_unmarked_tokens=foreign_unmarked_tokens,
+            foreign_unmarked_ok=foreign_unmarked_ok,
+        ),
+    )
+
+
+def score_predictions(
+    pipeline: str,
+    confidence: str,
+    rows: list[EvalRow],
+    predictions: list[str | None],
+) -> Metrics:
+    metrics, _summary = _score_predictions(pipeline, confidence, rows, predictions)
+    return metrics
+
+
+def score_predictions_with_audit(
+    pipeline: str,
+    confidence: str,
+    rows: list[EvalRow],
+    predictions: list[str | None],
+    audit: dict[str, dict[str, Any]],
+    observed_forms: dict[str, set[str]],
+) -> tuple[Metrics, AuditSummary]:
+    return _score_predictions(
+        pipeline,
+        confidence,
+        rows,
+        predictions,
+        audit=audit,
+        observed_forms=observed_forms,
     )
 
 
@@ -694,6 +835,31 @@ def metric_rows(metrics: list[Metrics]) -> list[str]:
                     count_pct(item.token_exact, item.answered_tokens),
                     count_pct(item.token_position, item.answered_tokens),
                     count_pct(item.type_exact, item.answered_types),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
+def audit_summary_rows(metrics: list[Metrics], summaries: list[AuditSummary]) -> list[str]:
+    lines = [
+        "| pipeline | min confidence | excluded tokens | foreign-unmarked | desired unmarked/abstained |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    for item, summary in zip(metrics, summaries):
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    item.pipeline,
+                    item.confidence,
+                    f"{summary.excluded_tokens:,}",
+                    f"{summary.foreign_unmarked_tokens:,}",
+                    count_pct(
+                        summary.foreign_unmarked_ok,
+                        summary.foreign_unmarked_tokens,
+                    ),
                 ]
             )
             + " |"
@@ -734,7 +900,11 @@ def format_report(
     corpus_path: Path,
     silver_path: Path,
     generated_path: Path,
-    metrics: list[Metrics],
+    raw_metrics: list[Metrics],
+    audited_metrics: list[Metrics],
+    audit_path: Path,
+    audit_entry_count: int,
+    audit_summaries: list[AuditSummary],
     total_silver: int,
     aligned_count: int,
     skipped_silver: int,
@@ -756,12 +926,21 @@ def format_report(
         f"- skipped silver tokens: {skipped_silver:,} ({skip_rate:.2%})",
         f"- skipped tagger tokens: {skipped_tagger:,}",
         f"- label vocabulary: {label_count:,}",
+        f"- audit overlay: `{safe_relative(audit_path)}` ({audit_entry_count:,} entries)",
         "",
-        "## Pipelines",
+        "## Pipelines (Raw Silver)",
         "",
         "Token exact and position are measured over answered tokens. Type exact is measured over answered first-seen word types.",
         "",
-        *metric_rows(metrics),
+        *metric_rows(raw_metrics),
+        "",
+        "## Pipelines (Audited Silver)",
+        "",
+        *metric_rows(audited_metrics),
+        "",
+        "## Audit Diagnostics",
+        "",
+        *audit_summary_rows(audited_metrics, audit_summaries),
         "",
         "## Nodict Disagreements",
         "",
@@ -794,6 +973,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--silver", type=Path, default=DEFAULT_SILVER)
     parser.add_argument("--generated", type=Path, default=DEFAULT_GENERATED)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
+    parser.add_argument("--audit", type=Path, default=DEFAULT_AUDIT)
     parser.add_argument("--tagger-url", help="Existing UDPipe-compatible tagger URL.")
     parser.add_argument("--tagger-timeout", type=float, default=180.0)
     parser.add_argument("--request-timeout", type=float, default=180.0)
@@ -814,6 +994,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"missing {label}: {path}")
 
     silver = load_silver(args.silver)
+    audit = load_audit(args.audit)
+    observed_forms = observed_silver_forms(silver)
     corpus_text = args.corpus.read_text(encoding="utf-8")
     print(f"silver tokens: {len(silver):,}")
 
@@ -852,21 +1034,37 @@ def main(argv: list[str] | None = None) -> int:
     liepa = liepa_predictions(words)
     dictionary = dict_predictions(rows, entries, slot_cache)
 
-    metrics = [
+    raw_metrics = [
         score_predictions("nodict", "0", rows, nodict_0),
         score_predictions("nodict", "0.9", rows, nodict_09),
         score_predictions("nodict-uncond", "0", rows, nodict_uncond),
         score_predictions("liepa", "n/a", rows, liepa),
         score_predictions("dict", "n/a", rows, dictionary),
     ]
-    print_metrics(metrics)
+    audited_pairs = [
+        score_predictions_with_audit("nodict", "0", rows, nodict_0, audit, observed_forms),
+        score_predictions_with_audit("nodict", "0.9", rows, nodict_09, audit, observed_forms),
+        score_predictions_with_audit("nodict-uncond", "0", rows, nodict_uncond, audit, observed_forms),
+        score_predictions_with_audit("liepa", "n/a", rows, liepa, audit, observed_forms),
+        score_predictions_with_audit("dict", "n/a", rows, dictionary, audit, observed_forms),
+    ]
+    audited_metrics = [metrics for metrics, _summary in audited_pairs]
+    audit_summaries = [summary for _metrics, summary in audited_pairs]
+    print("raw silver metrics:")
+    print_metrics(raw_metrics)
+    print("audited silver metrics:")
+    print_metrics(audited_metrics)
 
     disagreements = nodict_disagreements(rows, nodict_0)
     report = format_report(
         corpus_path=args.corpus,
         silver_path=args.silver,
         generated_path=args.generated,
-        metrics=metrics,
+        raw_metrics=raw_metrics,
+        audited_metrics=audited_metrics,
+        audit_path=args.audit,
+        audit_entry_count=len(audit),
+        audit_summaries=audit_summaries,
         total_silver=len(silver),
         aligned_count=len(aligned),
         skipped_silver=skipped_silver,

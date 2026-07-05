@@ -80,8 +80,10 @@ def engine_accent(pe, word: str) -> str | None:
         return None
     # exactly one stress mark, or it is not an answer: LIEPA leaves unknown
     # names unmarked and occasionally emits double-marked forms (žaĩstà) —
-    # both must fall through the cascade as abstentions (LRT eval finding)
-    marks = sum(form.count(m) for m in MARKS.values())
+    # both must fall through the cascade as abstentions (LRT eval finding).
+    # count on NFD: composed letters (à = U+00E0) hide their marks from NFC
+    decomposed = unicodedata.normalize("NFD", form)
+    marks = sum(decomposed.count(m) for m in MARKS.values())
     return form if marks == 1 else None
 
 
@@ -93,7 +95,11 @@ class LiepaBackend:
 
         self.pe = PhonologyEngine()
 
-    def predict_many(self, words: list[str]) -> list[tuple[str, float | None] | None]:
+    def predict_many(
+        self,
+        words: list[str],
+        labels: list[str] | None = None,
+    ) -> list[tuple[str, float | None] | None]:
         return [
             (form, None) if form else None
             for form in (engine_accent(self.pe, word) for word in words)
@@ -113,7 +119,11 @@ class AnbinderisBackend:
 
         self.model = AnbinderisModel(load_training(DEFAULT_GENERATED))
 
-    def predict_many(self, words: list[str]) -> list[tuple[str, float | None] | None]:
+    def predict_many(
+        self,
+        words: list[str],
+        labels: list[str] | None = None,
+    ) -> list[tuple[str, float | None] | None]:
         return [
             (form, None) if form else None
             for form in (self.model.predict_form(word) for word in words)
@@ -154,11 +164,23 @@ class NNBackend:
         self.max_chars = MAX_CHARS
         self.min_confidence = min_confidence
 
-    def predict_many(self, words: list[str]) -> list[tuple[str, float | None] | None]:
+    def predict_many(
+        self,
+        words: list[str],
+        labels: list[str] | None = None,
+    ) -> list[tuple[str, float | None] | None]:
         out: list[tuple[str, float | None] | None] = [None] * len(words)
         positions = [i for i, word in enumerate(words) if len(word) <= self.max_chars]
         eligible = [words[i] for i in positions]
-        preds = self.batch_predict(self.model, self.tokenizer, self.char_vocab, eligible, self.device)
+        eligible_labels = None if labels is None else [labels[i] for i in positions]
+        preds = self.batch_predict(
+            self.model,
+            self.tokenizer,
+            self.char_vocab,
+            eligible,
+            self.device,
+            labels=eligible_labels,
+        )
         for i, pred in zip(positions, preds):
             if pred is None:
                 continue
@@ -175,8 +197,12 @@ class AgreementBackend:
         self.nn_backend = nn_backend
         self.liepa_backend = liepa_backend
 
-    def predict_many(self, words: list[str]) -> list[tuple[str, float | None] | None]:
-        nn_preds = self.nn_backend.predict_many(words)
+    def predict_many(
+        self,
+        words: list[str],
+        labels: list[str] | None = None,
+    ) -> list[tuple[str, float | None] | None]:
+        nn_preds = self.nn_backend.predict_many(words, labels=labels)
         liepa_preds = self.liepa_backend.predict_many(words)
         out: list[tuple[str, float | None] | None] = []
         for nn_pred, liepa_pred in zip(nn_preds, liepa_preds):
@@ -218,11 +244,15 @@ def build_backends(spec: str, min_confidence: float):
     return stages
 
 
-def run_cascade(backends, words: list[str]):
+def run_cascade(backends, words: list[str], labels: list[str] | None = None):
+    if labels is not None and len(labels) != len(words):
+        raise ValueError("labels length must match words length")
     results = [None] * len(words)
     remaining = list(range(len(words)))
     for backend in backends:
-        preds = backend.predict_many([words[i] for i in remaining])
+        remaining_words = [words[i] for i in remaining]
+        remaining_labels = None if labels is None else [labels[i] for i in remaining]
+        preds = backend.predict_many(remaining_words, labels=remaining_labels)
         next_remaining = []
         for i, pred in zip(remaining, preds):
             if pred is None:
