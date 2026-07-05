@@ -1085,6 +1085,111 @@ def generate_degrees(
 
 MIN_DEGREE_EVIDENCE = 25
 
+ISKAS_BASE_ENDINGS = ("ius", "as", "is", "ys", "us", "a", "ė")
+
+
+def generate_iskas(
+    db: sqlite3.Connection,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    vetoed_lemmas: dict[str, str] | None = None,
+    wordlist: Path | None = None,
+) -> int:
+    """-iškas adjectives and -iškai adverbs: fixed (class 1) paradigms whose
+    stem accent copies the base noun (vaĩkiškas ← vaĩkas, móteriškas ←
+    móteris); international bases without a Lithuanian source fall back to
+    the pretonic rule (dramãtiškas, idiòtiškas). Only wordlist-attested
+    derivatives are generated, and real kaikki entries win.
+    """
+
+    if wordlist is None:
+        wordlist = DATA_DIR / DEFAULT_WORDLIST_NAME
+    if not wordlist.exists():
+        return 0
+    words = {
+        line.split()[0]
+        for line in wordlist.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
+    known = {l for (l,) in db.execute("SELECT DISTINCT lemma FROM nominals")}
+    known |= {l for (l,) in db.execute("SELECT DISTINCT lemma FROM forms")}
+
+    # accented stems of potential bases (stress must sit inside the stem);
+    # oblique-stem nouns register via the accusative (asmuo -> ãsmen-), and
+    # -ias/-is stems also register their i-elided variant (vélnias -> véln-)
+    base_stems: dict[str, str] = {}
+
+    def register(stem: str, form: str) -> None:
+        index = stressed_base_index(form)
+        if (
+            len(stem) >= 2
+            and stem not in base_stems
+            and index is not None
+            and index < len(stem)
+            and strip_accents(form).startswith(stem)
+        ):
+            base_stems[stem] = _accented_prefix(form, len(stem))
+            if stem.endswith("i"):
+                base_stems.setdefault(stem[:-1], _accented_prefix(form, len(stem) - 1))
+
+    for lemma, accented, tags in db.execute(
+        """SELECT n.lemma, f.accented, f.tags FROM nominals n
+           JOIN forms f ON f.lemma = n.lemma AND f.pos = n.pos
+           WHERE n.pos IN ('noun', 'name', 'adj')
+           AND (f.tags LIKE '%accusative%' OR f.tags LIKE '%nominative%')"""
+    ):
+        form = normalize_lt(accented)
+        ending = next((e for e in ISKAS_BASE_ENDINGS if lemma.endswith(e)), None)
+        if ending:
+            register(lemma[: -len(ending)], form)
+        if "accusative" in tags and strip_accents(form)[-1:] in "ąįęų":
+            register(strip_accents(form)[:-1], form)
+
+    tables = build_class_tables(db)
+    adj_cells = {
+        cell: ending
+        for cell, (ending, acc) in (tables.get(("as", "1")) or {}).items()
+        if not acc and ("masculine" in cell or "feminine" in cell)
+    }
+    if not adj_cells:
+        return 0
+
+    # candidate -iškas lemmas attested in the wordlist
+    candidates = sorted({
+        w[: -len(suffix)] for w in words
+        for suffix in ("iškas", "iškai")
+        if w.endswith(suffix) and len(w) > len(suffix) + 2
+    })
+    count = 0
+    for stem in candidates:
+        lemma = stem + "iškas"
+        if lemma in known or (vetoed_lemmas and lemma in vetoed_lemmas):
+            continue
+        accented_stem = base_stems.get(stem)
+        if not accented_stem:
+            # no attested base — the pretonic guess proved disjoint-prone
+            # for native stems (milžìniškas vs mil̃žiniškas), so skip
+            continue
+        emitted = False
+        for cell, ending in sorted(adj_cells.items()):
+            add_variant(
+                grouped,
+                form=accented_stem + "išk" + ending,
+                pos="adj",
+                tags=parse_tags(cell),
+                provenance=f"open-accentuator:iskas-rule:{lemma}:adj:1:{cell}",
+            )
+            emitted = True
+        if emitted:
+            add_variant(
+                grouped,
+                form=accented_stem + "iškai",
+                pos="adv",
+                tags=("canonical",),
+                provenance=f"open-accentuator:iskas-rule:{lemma}:adv:canonical",
+            )
+            count += 1
+    return count
+
 # Deverbal -imas nouns: only the suffixal families whose accent is a plain
 # copy of the past-tense stem (mãtė -> mãtymas, kalbė́jo -> kalbė́jimas,
 # kirčiãvo -> kirčiãvimas). Primary verbs are lexically split (gė́rimas vs
@@ -1334,6 +1439,7 @@ def generate_dictionary(
         closed_count = generate_closed(source, grouped)
         degree_count = generate_degrees(source, grouped, vetoes["lemmas"])
         imas_count = generate_deverbal_imas(source, grouped, vetoes["lemmas"])
+        iskas_count = generate_iskas(source, grouped, vetoes["lemmas"])
         derived_count = generate_derived(source, grouped, vetoes["lemmas"])
     finally:
         source.close()
@@ -1347,6 +1453,7 @@ def generate_dictionary(
         "closed_rows": closed_count,
         "degree_lemmas": degree_count,
         "imas_lemmas": imas_count,
+        "iskas_lemmas": iskas_count,
         "derived_lemmas": derived_count,
         "vetoed_lemmas": len(vetoes["lemmas"]),
         "vetoed_words": len(vetoes["words"]),
