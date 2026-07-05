@@ -2,7 +2,9 @@ import type { AccentResponse, Part } from "../shared/types";
 import {
   alignTokens,
   matchCase,
+  pickReadingMi,
   pickVariant,
+  tokenTags,
   toPublicVariants,
   type AccentVariant,
 } from "./disambiguation";
@@ -275,6 +277,9 @@ function formatInformation(
 export type AccentTextOptions = {
   lookupVariants?: (word: string) => Promise<AccentVariant[]>;
   useTagger?: boolean;
+  /** Attach reading info to every covered word, not just ambiguous ones.
+      Only sensible when lookupVariants is a cheap in-memory lookup. */
+  attachInfoForAll?: boolean;
 };
 
 type TaggerResult =
@@ -304,9 +309,11 @@ export async function accentTextParts(
     taggerResult.tagger === "ok"
       ? alignTokens(textParts, taggerResult.tokens)
       : Array<TokenOrNull>(wordParts.length).fill(null);
-  const ambiguousWords = distinctAmbiguousWords(wordParts);
+  const wordsNeedingVariants = options.attachInfoForAll
+    ? distinctWordKeys(wordParts)
+    : distinctAmbiguousWords(wordParts);
   const variantsByWord = await fetchAmbiguousVariants(
-    ambiguousWords,
+    wordsNeedingVariants,
     options.lookupVariants ?? lookupWordVariants,
   );
 
@@ -321,7 +328,24 @@ export async function accentTextParts(
     wordIndex += 1;
 
     if (original.accentType !== "MULTIPLE_MEANING") {
-      return part;
+      if (!options.attachInfoForAll || part.unknown || !part.accented) {
+        return part;
+      }
+
+      // Plain word: attach the dictionary readings so the UI can show
+      // morphology on demand, and mark the reading the tagger matched.
+      const raw = variantsByWord.get(normalizeWordKey(original.string ?? "")) ?? [];
+      if (raw.length === 0) {
+        return part;
+      }
+
+      const enriched: Part = { ...part, variants: toPublicVariants(raw) };
+      const readingMi = token ? pickReadingMi(raw, tokenTags(token)) : undefined;
+      if (readingMi) {
+        enriched.chosenMi = readingMi;
+      }
+
+      return enriched;
     }
 
     const defaultForm = original.accented?.normalize("NFC") ?? part.accented;
@@ -341,14 +365,26 @@ export async function accentTextParts(
       publicVariants.map((variant) => variant.form.normalize("NFC")),
     );
 
+    const readingMi =
+      token && safeVariants.length > 0
+        ? pickReadingMi(
+            selectedVariant ? [selectedVariant] : safeVariants,
+            tokenTags(token),
+          )
+        : undefined;
+
     if (distinctForms.size <= 1) {
       // All readings share one accented form (e.g. põ as four prepositional
       // readings) — there is nothing to choose, so don't flag it.
       const resolved: Part = {
         ...part,
         accented: matchCase(accented, part.text).normalize("NFC"),
+        variants: publicVariants,
       };
       delete resolved.ambiguous;
+      if (readingMi) {
+        resolved.chosenMi = readingMi;
+      }
       return resolved;
     }
 
@@ -365,6 +401,10 @@ export async function accentTextParts(
 
     if (choice.resolvedBy) {
       chosenPart.resolvedBy = choice.resolvedBy;
+    }
+
+    if (readingMi) {
+      chosenPart.chosenMi = readingMi;
     }
 
     return chosenPart;
@@ -406,6 +446,18 @@ async function fetchTextAccentParts(text: string): Promise<VduTextPart[]> {
 
 function isWordPart(part: VduTextPart): boolean {
   return part.type === "WORD" || part.type === "NON_LT";
+}
+
+function distinctWordKeys(wordParts: VduTextPart[]): string[] {
+  const words = new Set<string>();
+
+  for (const part of wordParts) {
+    if (part.string) {
+      words.add(normalizeWordKey(part.string));
+    }
+  }
+
+  return [...words].sort();
 }
 
 function distinctAmbiguousWords(wordParts: VduTextPart[]): string[] {

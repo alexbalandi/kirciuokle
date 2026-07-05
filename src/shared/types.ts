@@ -6,6 +6,8 @@ export type Part = {
   resolvedBy?: "lemma" | "context";
   variants?: Variant[];
   chosen?: number;
+  /** The exact reading (mi label) the context tagger matched, if any. */
+  chosenMi?: string;
   unknown?: true;
 };
 

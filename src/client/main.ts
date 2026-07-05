@@ -140,7 +140,7 @@ document.addEventListener("click", (event) => {
     target instanceof Node &&
     activePopover &&
     !activePopover.contains(target) &&
-    !(target instanceof HTMLElement && target.closest(".token-ambiguous"))
+    !(target instanceof HTMLElement && target.closest(".token-ambiguous, .token-plain"))
   ) {
     closePopover();
   }
@@ -262,6 +262,23 @@ function renderResult(): void {
       return;
     }
 
+    if (part.variants && part.variants.length > 0) {
+      // Plain resolved word with dictionary readings: clickable for
+      // morphology info, but not underlined — it is not a choice.
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "token token-plain";
+      button.textContent = visibleText;
+      button.dataset.index = String(index);
+      button.setAttribute("aria-haspopup", "dialog");
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openVariantPopover(button, index);
+      });
+      resultOutput.append(button);
+      return;
+    }
+
     resultOutput.append(document.createTextNode(visibleText));
   });
 }
@@ -288,47 +305,71 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
     return;
   }
 
-  variants.forEach((variant, variantIndex) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "variant-option";
+  const interactive = Boolean(part.ambiguous);
 
-    if (part.chosen === variantIndex) {
-      button.classList.add("is-selected");
-      button.setAttribute("aria-current", "true");
+  variants.forEach((variant, variantIndex) => {
+    const option = document.createElement(interactive ? "button" : "div");
+    option.className = "variant-option";
+
+    if (interactive) {
+      (option as HTMLButtonElement).type = "button";
+    } else {
+      option.classList.add("variant-option--static");
+    }
+
+    if (interactive && part.chosen === variantIndex) {
+      option.classList.add("is-selected");
+      option.setAttribute("aria-current", "true");
     }
 
     const formText = document.createElement("strong");
     formText.textContent = variant.form.normalize("NFC");
-    button.append(formText);
+    option.append(formText);
 
     if (variant.info) {
+      // Mark the exact reading the tagger matched — only meaningful on the
+      // variant that is actually shown in the result.
+      const markChosen =
+        Boolean(part.chosenMi) &&
+        !part.userChosen &&
+        (!interactive || part.chosen === variantIndex);
       const info = document.createElement("span");
       info.className = "variant-info";
       variant.info.split("; ").forEach((reading) => {
         const row = document.createElement("span");
         row.className = "variant-reading";
+        if (markChosen && readingMatchesMi(reading, part.chosenMi!)) {
+          row.classList.add("is-chosen");
+          row.title = UI[lang].legendResolved;
+        }
         appendMorphologyInfo(row, morphologySegments(reading, lang));
         info.append(row);
       });
-      button.append(info);
+      option.append(info);
     }
 
-    button.addEventListener("click", () => {
-      renderedParts[index] = {
-        ...part,
-        chosen: variantIndex,
-        current: matchCase(variant.form.normalize("NFC"), part.text).normalize("NFC"),
-        userChosen: true,
-      };
-      closePopover();
-      renderResult();
-    });
+    if (interactive) {
+      option.addEventListener("click", () => {
+        renderedParts[index] = {
+          ...part,
+          chosen: variantIndex,
+          current: matchCase(variant.form.normalize("NFC"), part.text).normalize("NFC"),
+          userChosen: true,
+        };
+        closePopover();
+        renderResult();
+      });
+    }
 
-    popover.append(button);
+    popover.append(option);
   });
 
   positionPopover(popover, anchor);
+}
+
+function readingMatchesMi(reading: string, mi: string): boolean {
+  const trimmed = reading.trim();
+  return trimmed === mi || trimmed.startsWith(`${mi} - `);
 }
 
 function appendMorphologyInfo(

@@ -66,9 +66,19 @@ describe("local-first accentuation", () => {
 
     expect(local.source).toBe("local");
     expect(local.tagger).toBe(legacy.tagger);
-    expect(local.parts).toEqual(legacy.parts);
+    // the local path additionally attaches reading info to plain words —
+    // accentuation output itself must stay identical to the legacy path
+    const stripInfo = (parts: typeof local.parts) =>
+      parts.map(({ variants: _v, chosenMi: _m, ...rest }) => rest);
+    expect(stripInfo(local.parts)).toEqual(stripInfo(legacy.parts));
     expect(local.parts).toEqual([
-      { text: "Čia", accented: "Čià", type: "word" },
+      {
+        text: "Čia",
+        accented: "Čià",
+        type: "word",
+        variants: [{ form: "čià", info: "prv." }],
+        chosenMi: "prv.",
+      },
       { text: " ", type: "sep" },
       { text: "Velvet", type: "word", unknown: true },
       { text: " ", type: "sep" },
@@ -83,6 +93,7 @@ describe("local-first accentuation", () => {
           { form: "yrà", info: "vksm., es. l., 3 asm." },
         ],
         chosen: 1,
+        chosenMi: "vksm., es. l., 3 asm.",
       },
       { text: " ", type: "sep" },
       { text: "Москва", type: "word", unknown: true },
@@ -108,7 +119,15 @@ describe("local-first accentuation", () => {
     });
 
     expect(response.parts).toEqual([
-      { text: "Pasiekia", accented: "Pasíekia", type: "word" },
+      {
+        text: "Pasiekia",
+        accented: "Pasíekia",
+        type: "word",
+        variants: [
+          { form: "pasíekia", info: "vksm." },
+          { form: "pasiẽkia", info: "vksm." },
+        ],
+      },
     ]);
   });
 
@@ -128,10 +147,14 @@ describe("local-first accentuation", () => {
       useTagger: false,
     });
 
+    const kasVariants = [
+      { form: "kàs", info: "įv." },
+      { form: "kas", info: "dll." },
+    ];
     expect(response.parts).toEqual([
-      { text: "Kas", accented: "Kàs", type: "word" },
+      { text: "Kas", accented: "Kàs", type: "word", variants: kasVariants },
       { text: " ", type: "sep" },
-      { text: "kas", accented: "kàs", type: "word" },
+      { text: "kas", accented: "kàs", type: "word", variants: kasVariants },
     ]);
   });
 
@@ -161,6 +184,7 @@ describe("local-first accentuation", () => {
         text: "Alyta",
         accented: "Alytà",
         type: "word",
+        variants: [{ form: "Alytà", info: "dkt." }],
       },
     ]);
   });
@@ -193,7 +217,15 @@ describe("local-first accentuation", () => {
     });
 
     expect(response.parts).toEqual([
-      { text: "vilnius", accented: "vìlnius", type: "word" },
+      {
+        text: "vilnius",
+        accented: "vìlnius",
+        type: "word",
+        variants: [
+          { form: "vìlnius", info: "dkt." },
+          { form: "vil̃nius", info: "dkt." },
+        ],
+      },
       { text: " ", type: "sep" },
       {
         text: "Vilnius",
@@ -246,7 +278,12 @@ describe("local-first accentuation", () => {
       { text: " ", type: "sep" },
       { text: "V.", type: "word", unknown: true },
       { text: " ", type: "sep" },
-      { text: "kalba", accented: "kalbà", type: "word" },
+      {
+        text: "kalba",
+        accented: "kalbà",
+        type: "word",
+        variants: [{ form: "kalbà", info: "dkt." }],
+      },
       { text: " ", type: "sep" },
       { text: "XX", type: "word" },
       { text: " ", type: "sep" },
@@ -303,7 +340,12 @@ describe("local-first accentuation", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(response.parts).toEqual([
-      { text: "kalba", accented: "kalbà", type: "word" },
+      {
+        text: "kalba",
+        accented: "kalbà",
+        type: "word",
+        variants: [{ form: "kalbà", info: "dkt. - kalba" }],
+      },
     ]);
     expect(d1.getEntry("kalba")).toEqual({
       variants: [{ form: "kalbà", info: "dkt. - kalba", mi: ["dkt."] }],

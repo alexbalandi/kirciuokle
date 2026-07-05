@@ -253,6 +253,24 @@ export function scoreVariant(variant: AccentVariant, contextTags: TagSlots): num
   );
 }
 
+export function pickReadingMi(
+  variants: AccentVariant[],
+  contextTags: TagSlots,
+): string | undefined {
+  let best: { label: string; score: number } | null = null;
+
+  for (const variant of variants) {
+    for (const label of variant.mi) {
+      const score = scoreTags(parseMi(label), contextTags);
+      if (!best || score > best.score) {
+        best = { label, score };
+      }
+    }
+  }
+
+  return best && best.score > 0 ? best.label : undefined;
+}
+
 export function pickVariant(
   word: string,
   variants: AccentVariant[],

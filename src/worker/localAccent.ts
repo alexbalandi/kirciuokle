@@ -142,6 +142,7 @@ export async function accentTextLocalFirst(
     lookupVariants: async (word) =>
       entriesByWord.get(normalizeWordKey(word))?.variants ?? [],
     useTagger: options.useTagger,
+    attachInfoForAll: true,
   });
 
   return { ...parts, source: "local" };

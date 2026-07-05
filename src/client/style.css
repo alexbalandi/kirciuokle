@@ -371,6 +371,19 @@ button:disabled {
   text-underline-offset: 0.18em;
 }
 
+/* Plain resolved words open the info popover but carry no underline —
+   they are not a choice, just clickable. */
+.token-plain {
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.token-plain:hover,
+.token-plain:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: none;
+}
+
 .legend {
   align-items: center;
   justify-content: flex-start;
@@ -451,6 +464,14 @@ button:disabled {
   outline: none;
 }
 
+.variant-option--static {
+  cursor: default;
+}
+
+.variant-option--static:hover {
+  background: transparent;
+}
+
 .variant-option strong {
   font-weight: 800;
 }
@@ -465,6 +486,14 @@ button:disabled {
 .variant-option .variant-reading {
   display: block;
   padding: 3px 0 4px;
+}
+
+/* The exact reading the context tagger matched. */
+.variant-option .variant-reading.is-chosen {
+  background: color-mix(in srgb, var(--resolved) 10%, transparent);
+  border-radius: 4px;
+  padding-left: 7px;
+  box-shadow: inset 2px 0 0 var(--resolved);
 }
 
 .variant-option .variant-reading + .variant-reading {
