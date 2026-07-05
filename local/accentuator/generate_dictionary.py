@@ -1203,6 +1203,8 @@ BUTI_FORMS = [
     ("ẽsame", ("present", "first-person", "plural")),
     ("ẽsate", ("present", "second-person", "plural")),
     ("bùs", ("future", "third-person")),
+    ("nebė\u0303ra", ("present", "third-person")),
+    ("tebė\u0303ra", ("present", "third-person")),
     ("bū́siu", ("future", "first-person", "singular")),
     ("bū́si", ("future", "second-person", "singular")),
     ("bū́sime", ("future", "first-person", "plural")),
@@ -1511,7 +1513,7 @@ def generate_vlkk_names(
     db: sqlite3.Connection,
     grouped: dict[str, dict[tuple[str, str], Variant]],
     names_path: Path | None = None,
-) -> tuple[int, set[str]]:
+) -> tuple[int, set[str], int]:
     """Emit given names from the VLKK recommended-names database.
 
     VLKK is the project's normative authority, so these paradigms take
@@ -1524,10 +1526,19 @@ def generate_vlkk_names(
     if names_path is None:
         names_path = DATA_DIR / VLKK_NAMES_FILE
     if not names_path.exists():
-        return 0, set()
+        return 0, set(), 0
     data = json.loads(names_path.read_text(encoding="utf-8"))
     tables = build_class_tables(db)
+    letter_page_forms: dict[str, set[str]] = defaultdict(set)
+    for entry in data.values():
+        if entry.get("cells"):
+            continue
+        accented = entry.get("accented")
+        if not accented:
+            continue
+        letter_page_forms[strip_accents(accented).lower()].add(normalize_lt(accented))
     count = 0
+    disputed_count = 0
     covered_lemmas: set[str] = set()
     for name, entry in sorted(data.items()):
         accented_nom = entry.get("accented")
@@ -1541,6 +1552,11 @@ def generate_vlkk_names(
         klass = entry.get("class")
         emitted = False
         if cells and klass:
+            nominative = normalize_lt(cells.get("nominative") or "")
+            plain_nom = strip_accents(nominative).lower()
+            if any(form != nominative for form in letter_page_forms.get(plain_nom, ())):
+                disputed_count += 1
+                continue
             # plural cells induced from the classed Wiktionary paradigms
             nom_ending = next((e for e in ("ius", "as", "is", "ys", "us", "a", "ė") if lemma.endswith(e)), None)
             table = tables.get((nom_ending, klass)) if nom_ending else None
@@ -1575,7 +1591,7 @@ def generate_vlkk_names(
         if emitted:
             covered_lemmas.add(lemma)
             count += 1
-    return count, covered_lemmas
+    return count, covered_lemmas, disputed_count
 
 
 
@@ -1821,7 +1837,7 @@ def generate_dictionary(
     grouped: dict[str, dict[tuple[str, str], Variant]] = defaultdict(dict)
     try:
         load_weak_evidence(source, vetoes["lemmas"])
-        vlkk_count, vlkk_lemmas = generate_vlkk_names(source, grouped)
+        vlkk_count, vlkk_lemmas, vlkk_disputed_count = generate_vlkk_names(source, grouped)
         nominal_count = generate_nominals(source, grouped, limit, vetoes["lemmas"], vlkk_lemmas)
         verb_count = generate_verbs(source, grouped, limit, vetoes["lemmas"], vetoes["lemma_cells"])
         prefixed_count = generate_prefixed_verbs(
@@ -1844,6 +1860,7 @@ def generate_dictionary(
     words = write_generated(output, grouped, vetoes["words"])
     return {
         "vlkk_names": vlkk_count,
+        "vlkk_names_disputed": vlkk_disputed_count,
         "nominal_lemmas": nominal_count,
         "verb_lemmas": verb_count,
         "prefixed_verbs": prefixed_count,
