@@ -154,26 +154,42 @@ tier below.
 
 The residue no open source covers (internationalisms, rare lemmas — the
 slice that structurally needs DLKŽ) is handled by a clearly-separated
-lowest-confidence tier: `guess_uncovered.py` runs the BSD-licensed
-`phonology_engine` (LIEPA's accentuation components, which answer arbitrary
-words) over uncovered wordlist/VDU keys and writes `data/guesses.sqlite`
-with `liepa-guess` provenance. Benchmarked against the VDU cache: 87.9%
-exact-variant and 95.3% stress-position agreement on exactly the
-dictionary-gap words. Because ~12% of guesses disagree with VDU, this tier
-is **never merged into the main artifact** — the main dictionary keeps its
-zero-disagreement gate, and consumers opt into guesses knowingly.
+lowest-confidence tier: `guess_uncovered.py` writes `data/guesses.sqlite`
+for every uncovered wordlist/VDU key, with the answering backend recorded
+in per-word provenance. Because guesses can disagree with the norm, this
+tier is **never merged into the main artifact** — the main dictionary
+keeps its zero-disagreement gate, and consumers opt into guesses knowingly.
 
-Literature grounding the approach: Kasparaitis (2000, dictionary-based);
-Anbinderis & Kasparaitis (2010, decision trees over letter patterns, 95.5%);
-Mackevič (2026, VU MSc): a transformer beats rule tools on word-level stress
-but loses to VDU's Kirčiuoklis on contextual disambiguation — consistent
-with our architecture (rules + dictionary first, guesser last).
+Four backends were built and benchmarked on identical slices
+(`bench_guessers.py` → `reports/guesser-bench.md`; `held` = 10.7k in-domain
+held-out types, `gap` = 2,751 VDU-cache words the dictionary misses):
+
+| candidate | held exact | gap answered | gap exact (of answered) |
+|---|---:|---:|---:|
+| naive longest-suffix vote | 88.1% | 100% | 50.5% |
+| Anbinderis & Kasparaitis 2010 replica (`anbinderis_rules.py`) | 97.2% | 63.0% | 67.0% |
+| LIEPA `phonology_engine` (BSD) | 79.1% | 99.3% | 88.3% |
+| litlat-bert + char cross-attention head (`train_stress_nn.py`) | 97.9% | 100% | 59.5% (80.4% @conf≥0.95) |
+| **nn ∧ liepa agreement** | — | **50.5%** | **99.5%** |
+
+Reading: our own models dominate in-domain (they learned our dictionary),
+but the gap words are *lexical* — LIEPA wins there because its embedded
+DLKŽ-derived lexicon simply contains them. The production configuration is
+therefore the two-level cascade `nn&liepa+liepa`: where the neural model
+and LIEPA independently agree (half the gap), the guess is dictionary-grade
+(99.5%, provenance `agree-nn-liepa`); the disagreement residue falls back
+to LIEPA alone (76.4%, provenance `liepa-guess`). A fully-open stack (no
+LIEPA) is available as `anbinderis`/`nn` backends at an honest ~28pp cost
+on gap words.
+
+Literature grounding: Kasparaitis (2000, dictionary-based); Anbinderis &
+Kasparaitis (2010) — their 95.5% is token-level running text, i.e. mostly
+in-domain words, matching our replica's 97.2% held-out precision;
+Mackevič (2026, VU MSc): a transformer beats rule tools on word-level
+stress but loses to VDU's Kirčiuoklis on contextual disambiguation —
+consistent with our architecture (rules + dictionary first, guesser last).
 
 ## Planned levers (not yet implemented)
 
-- **Own-trained guesser** replacing phonology_engine: an Anbinderis-style
-  letter-pattern model (decision trees / char transformer) trained on our
-  own 566k-word open dictionary would make the guess tier fully open
-  end-to-end; evaluate on the VDU-uncovered slice as held-out QA.
 - **Closed-class VLKK review**: `lyg`, `niekur` and the rest of the
   closed-class draft await adjudication against normative sources.

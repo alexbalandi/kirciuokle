@@ -15,6 +15,8 @@ Candidates (each skipped gracefully when its runtime is missing):
 - `trie`       naive longest-suffix majority vote (train_guesser.py)
 - `anbinderis` faithful A&K 2010 end-bgn rules (anbinderis_rules.py)
 - `liepa`      phonology_engine, BSD-wrapped LIEPA components
+- `agree(nn,liepa)` agreement between nn@0 and LIEPA
+- `agree->liepa` agreement first, then LIEPA fallback
 - `nn`         litlat-bert + char cross-attention head (train_stress_nn.py
                checkpoint; reported at several confidence thresholds)
 
@@ -113,6 +115,38 @@ def candidate_nn(_train_pairs, threshold=0.0):
     return predict_many
 
 
+def _candidate_agreement(train_pairs, fallback_to_liepa=False):
+    nn_predict = candidate_nn(train_pairs, 0.0)
+    liepa_predict = candidate_liepa(train_pairs)
+
+    def predict_many(words):
+        nn_preds = nn_predict(words)
+        liepa_preds = [liepa_predict(w) for w in words]
+        out = []
+        for nn_form, liepa_form in zip(nn_preds, liepa_preds):
+            agreed = (
+                nn_form is not None
+                and liepa_form is not None
+                and unicodedata.normalize("NFC", nn_form) == unicodedata.normalize("NFC", liepa_form)
+            )
+            if agreed or fallback_to_liepa:
+                out.append(liepa_form)
+            else:
+                out.append(None)
+        return out
+
+    predict_many.batched = True
+    return predict_many
+
+
+def candidate_agree(train_pairs):
+    return _candidate_agreement(train_pairs)
+
+
+def candidate_agree_then_liepa(train_pairs):
+    return _candidate_agreement(train_pairs, fallback_to_liepa=True)
+
+
 def run_candidate(predict, rows):
     words = [w for w, _f in rows]
     if getattr(predict, "batched", False):
@@ -143,7 +177,13 @@ def main(argv=None) -> int:
     gap_rows = load_vdu_eval(DEFAULT_VDU_SQLITE, covered)
     print(f"train={len(train_pairs):,} held={len(held_rows):,} gap={len(gap_rows):,}")
 
-    candidates = [("trie", candidate_trie), ("anbinderis", candidate_anbinderis), ("liepa", candidate_liepa)]
+    candidates = [
+        ("trie", candidate_trie),
+        ("anbinderis", candidate_anbinderis),
+        ("liepa", candidate_liepa),
+        ("agree(nn,liepa)", candidate_agree),
+        ("agree->liepa", candidate_agree_then_liepa),
+    ]
     for thr in [float(t) for t in args.nn_thresholds.split(",")]:
         candidates.append((f"nn@{thr:g}", lambda tp, thr=thr: candidate_nn(tp, thr)))
 

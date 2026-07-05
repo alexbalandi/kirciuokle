@@ -15,6 +15,7 @@ that answers wins:
   own dictionary (fully open provenance; abstains on ambiguity).
 - `nn`: litlat-bert + char cross-attention head (train_stress_nn.py
   checkpoint; needs the .venv-train interpreter), `--min-confidence` gated.
+- `nn&liepa`: high-trust agreement between nn and LIEPA.
 
 Numbers per candidate: reports/guesser-bench.md. This tier is deliberately
 separate from generated.sqlite, which holds a zero-disagreement gate.
@@ -51,7 +52,17 @@ except ImportError:  # pragma: no cover
 
 MARKS = {"0": "̀", "1": "́", "2": "̃"}
 DEFAULT_GUESSES = DATA_DIR / "guesses.sqlite"
-BACKENDS = ("liepa", "anbinderis", "nn", "anbinderis+liepa", "nn+liepa", "anbinderis+nn+liepa")
+BACKENDS = (
+    "liepa",
+    "anbinderis",
+    "nn",
+    "anbinderis+liepa",
+    "nn+liepa",
+    "anbinderis+nn+liepa",
+    "nn&liepa",
+    "nn&liepa+liepa",
+    "nn&liepa+nn+liepa",
+)
 
 
 class BackendLoadError(Exception):
@@ -146,15 +157,53 @@ class NNBackend:
         return out
 
 
+class AgreementBackend:
+    name = "agree-nn-liepa"
+
+    def __init__(self, nn_backend: NNBackend, liepa_backend: LiepaBackend) -> None:
+        self.nn_backend = nn_backend
+        self.liepa_backend = liepa_backend
+
+    def predict_many(self, words: list[str]) -> list[tuple[str, float | None] | None]:
+        nn_preds = self.nn_backend.predict_many(words)
+        liepa_preds = self.liepa_backend.predict_many(words)
+        out: list[tuple[str, float | None] | None] = []
+        for nn_pred, liepa_pred in zip(nn_preds, liepa_preds):
+            if nn_pred is None or liepa_pred is None:
+                out.append(None)
+                continue
+            nn_form, nn_conf = nn_pred
+            liepa_form, _liepa_conf = liepa_pred
+            if unicodedata.normalize("NFC", nn_form) == unicodedata.normalize("NFC", liepa_form):
+                out.append((liepa_form, nn_conf))
+            else:
+                out.append(None)
+        return out
+
+
 def build_backends(spec: str, min_confidence: float):
+    cache = {}
     stages = []
+
+    def get_backend(name: str):
+        if name not in cache:
+            if name == "liepa":
+                cache[name] = LiepaBackend()
+            elif name == "anbinderis":
+                cache[name] = AnbinderisBackend()
+            elif name == "nn":
+                cache[name] = NNBackend(min_confidence)
+        return cache[name]
+
     for name in spec.split("+"):
         if name == "liepa":
-            stages.append(LiepaBackend())
+            stages.append(get_backend("liepa"))
         elif name == "anbinderis":
-            stages.append(AnbinderisBackend())
+            stages.append(get_backend("anbinderis"))
         elif name == "nn":
-            stages.append(NNBackend(min_confidence))
+            stages.append(get_backend("nn"))
+        elif name == "nn&liepa":
+            stages.append(AgreementBackend(get_backend("nn"), get_backend("liepa")))
     return stages
 
 
@@ -179,6 +228,8 @@ def run_cascade(backends, words: list[str]):
 def provenance(name: str, word: str, conf: float | None) -> str:
     if name == "nn":
         return f"open-accentuator:nn-guess:{word}:conf={conf:.3f}"
+    if name == "agree-nn-liepa":
+        return f"open-accentuator:agree-nn-liepa:{word}:conf={conf:.3f}"
     return f"open-accentuator:{name}-guess:{word}"
 
 
