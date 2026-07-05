@@ -141,11 +141,14 @@ disagreement), UNCOVERED. The standing quality gate is **DISJOINT = 0**:
 every hard disagreement must be adjudicated (rule fix, veto, or documented
 norm-delta) before committing.
 
-Current state (2026-07-05): covered 6,131/10,015 (61.2%), EXACT 5,058
-(82.5% of covered), DISJOINT 0. Most OVERLAP/DEFAULT-MATCH words are cases
+Current state (2026-07-05, full VLKK crawl folded in): dictionary 566,439
+words; covered 7,373/10,015 (73.6%), EXACT 6,013 (81.6% of covered),
+DISJOINT 0, NORM-DELTA 9. Most OVERLAP/DEFAULT-MATCH words are cases
 where VDU lists additional accent-class variants (`Ãnglija`/`Anglijà`) that
 Wiktionary has no facts for. The uncovered mass is dominated by lemmas
-absent from Wiktionary whose suffix does not determine their accent.
+absent from Wiktionary whose suffix does not determine their accent — the
+slice that structurally needs DLKŽ (closed) and is served by the guesser
+tier below.
 
 ## The guesser tier (separate artifact)
 
@@ -168,10 +171,9 @@ with our architecture (rules + dictionary first, guesser last).
 
 ## Planned levers (not yet implemented)
 
-- **VLKK name recommendations** as a data source for proper names (official
-  state documents are not copyright-protected in Lithuania).
-- **Participle declension**: decline participle heads through the adjectival
-  paradigms per Kushnir §4.6–4.7 (recovers `apgautì`-class variants).
-- **Base-dependent derivation** (Kushnir ch. 3 dominance): suffixes like
-  `-iškas` whose accent needs the base's accent — needs base lookup in the
-  kaikki lexicon.
+- **Own-trained guesser** replacing phonology_engine: an Anbinderis-style
+  letter-pattern model (decision trees / char transformer) trained on our
+  own 566k-word open dictionary would make the guess tier fully open
+  end-to-end; evaluate on the VDU-uncovered slice as held-out QA.
+- **Closed-class VLKK review**: `lyg`, `niekur` and the rest of the
+  closed-class draft await adjudication against normative sources.

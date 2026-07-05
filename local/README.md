@@ -102,8 +102,9 @@ this benchmark plus the repo's accentuation parity eval.
 accentology; plan in `docs/PLAN-open-accentuator.md`). Standalone
 artifacts only — the replica's dictionary chain is unchanged. Full
 architecture, module inventory, rule sources, and QA methodology:
-`docs/ACCENTUATOR.md`. Parity vs the VDU cache (10,015 words): 74%
-covered, 82% of covered exact, **zero unadjudicated disagreements** —
+`docs/ACCENTUATOR.md`. 566k-word dictionary; parity vs the VDU cache
+(10,015 words): 73.6% covered, 81.6% of covered exact, **zero
+unadjudicated disagreements** —
 every divergence is repaired by a published rule (notation
 normalization; future-tense metatony; verb stress retraction,
 participle constraints and declension per Kushnir 2019; self-accented
