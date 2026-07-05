@@ -124,6 +124,11 @@ def write_report(
             # documented divergence where VLKK (the normative authority)
             # backs our form against the VDU cache
             bucket = "NORM-DELTA"
+        if bucket == "DISJOINT" and "vlkk-rec" in str(gen["provenance"]) and ":headword" in str(gen["provenance"]):
+            # the word carries a form quoted verbatim from VLKK's
+            # recommended-stress list — the K-nn id in the provenance is the
+            # citation; table-derived cells (no ":headword") stay DISJOINT
+            bucket = "NORM-DELTA"
         counts[bucket] += 1
         if bucket == "DISJOINT" and len(disjoint_samples) < 120:
             disjoint_samples.append(

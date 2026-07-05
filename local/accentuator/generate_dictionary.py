@@ -44,7 +44,15 @@ try:  # pragma: no cover
         strip_accents,
     )
     from .paradigm_engine import MARK_BY_NAME, _apply_stress, accent_nominal, accent_verb, build_forms_by_cell
-    from .suffix_rules import _accented_tail, build_class_tables, derive_lemmas, load_rules, paradigm_for
+    from .suffix_rules import (
+        _accented_head,
+        _accented_tail,
+        _nom_ending,
+        build_class_tables,
+        derive_lemmas,
+        load_rules,
+        paradigm_for,
+    )
 except ImportError:  # pragma: no cover
     from _common import (
         CASE_TAGS,
@@ -69,7 +77,15 @@ except ImportError:  # pragma: no cover
         strip_accents,
     )
     from paradigm_engine import MARK_BY_NAME, _apply_stress, accent_nominal, accent_verb, build_forms_by_cell
-    from suffix_rules import _accented_tail, build_class_tables, derive_lemmas, load_rules, paradigm_for
+    from suffix_rules import (
+        _accented_head,
+        _accented_tail,
+        _nom_ending,
+        build_class_tables,
+        derive_lemmas,
+        load_rules,
+        paradigm_for,
+    )
 
 
 Variant = dict[str, object]
@@ -1518,6 +1534,81 @@ def generate_vlkk_names(
 
 
 
+GENDER_TAGS = {"masculine", "feminine", "neuter"}
+
+
+def generate_vlkk_recommended(
+    db: sqlite3.Connection,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    vetoed_lemmas: dict[str, str] | None = None,
+) -> int:
+    """VLKK recommended-stress-variants list — the normative arbiter tier.
+
+    Every accented form in the list is emitted verbatim (":headword" in the
+    provenance; parity auto-classifies VDU disagreements on these words as
+    NORM-DELTA since VLKK explicitly recommends them). Nominal variants
+    carrying a kirčiuotė whose headword is stem-stressed additionally get
+    full paradigms through the induced class tables: bare case/number cells
+    for nouns, gendered cells for entries with a feminine marker
+    (adjectives). Ending-stressed headwords (aikštė̃ 3) stay headword-only —
+    their stem accent is not recoverable from the list.
+    """
+
+    path = DATA_DIR / "vlkk_recommendations.json"
+    if not path.exists():
+        return 0
+    entries = json.loads(path.read_text(encoding="utf-8"))
+    tables = build_class_tables(db)
+    count = 0
+    for entry in entries:
+        head = entry["head"]
+        if vetoed_lemmas and head in vetoed_lemmas:
+            continue
+        emitted = False
+        for variant in entry["variants"]:
+            cls = variant.get("cls")
+            adj = bool(variant.get("feminine"))
+            is_triple = len(variant["forms"]) == 3 and cls is None
+            word_pos = variant.get("pos") or ("verb" if is_triple else "adj" if adj else "noun")
+            for accented in variant["forms"]:
+                add_variant(
+                    grouped,
+                    form=accented,
+                    pos=word_pos,
+                    tags=(),
+                    provenance=f"open-accentuator:vlkk-rec:{entry['rec']}:{head}:headword",
+                )
+                emitted = True
+            if not cls or is_triple or variant.get("pos"):
+                continue
+            lemma_accented = normalize_lt(variant["forms"][0])
+            lemma_plain = strip_accents(lemma_accented)
+            nom_end = _nom_ending(lemma_plain)
+            cells = tables.get((nom_end, cls)) if nom_end else None
+            if not cells:
+                continue
+            stem_len = len(lemma_plain) - len(nom_end)
+            index = stressed_base_index(lemma_accented)
+            if index is None or index >= stem_len:
+                continue
+            accented_stem = _accented_head(lemma_accented, stem_len)
+            plain_stem = lemma_plain[:stem_len]
+            for cell, (ending, acc_ending) in sorted(cells.items()):
+                if adj != bool(GENDER_TAGS & set(cell.split("|"))):
+                    continue
+                form = plain_stem + acc_ending if acc_ending else accented_stem + ending
+                add_variant(
+                    grouped,
+                    form=form,
+                    pos="adj" if adj else "noun",
+                    tags=parse_tags(cell),
+                    provenance=f"open-accentuator:vlkk-rec:{entry['rec']}:{head}:{cls}:{cell}",
+                )
+        if emitted:
+            count += 1
+    return count
+
+
 def generate_derived(
     db: sqlite3.Connection,
     grouped: dict[str, dict[tuple[str, str], Variant]],
@@ -1647,6 +1738,7 @@ def generate_dictionary(
         definite_count = generate_definite(source, grouped, vetoes["lemmas"])
         neg_adj_count = generate_negated_adjectives(source, grouped, vetoes["lemmas"])
         generate_buti(grouped)
+        vlkk_rec_count = generate_vlkk_recommended(source, grouped, vetoes["lemmas"])
         derived_count = generate_derived(source, grouped, vetoes["lemmas"])
     finally:
         source.close()
@@ -1663,6 +1755,7 @@ def generate_dictionary(
         "iskas_lemmas": iskas_count,
         "definite_lemmas": definite_count,
         "negated_adjectives": neg_adj_count,
+        "vlkk_recommended": vlkk_rec_count,
         "derived_lemmas": derived_count,
         "vetoed_lemmas": len(vetoes["lemmas"]),
         "vetoed_words": len(vetoes["words"]),
