@@ -760,6 +760,7 @@ def _emit_verb_forms(
             )
             tag_set = set(out_tags)
             if "participle" in tag_set or "necessitative" in tag_set:
+                negate_declined = not lemma.startswith(("ne", "nebe"))
                 for decl_form, decl_tags in decline_participle(resolved, tag_set, present_3):
                     add_variant(
                         grouped,
@@ -768,6 +769,16 @@ def _emit_verb_forms(
                         tags=decl_tags,
                         provenance=f"{provenance}:rule=participle-declension",
                     )
+                    if negate_declined:
+                        # declined participles are fixed-stem — negation is a
+                        # plain copy (neatitiñkančius)
+                        add_variant(
+                            grouped,
+                            form="ne" + decl_form,
+                            pos="verb",
+                            tags=decl_tags,
+                            provenance=f"{provenance}:rule=participle-declension:rule=negation",
+                        )
             if not lemma.startswith(("ne", "nebe")) and not tag_set & CASE_TAGS:
                 negated = negated_forms(resolved, out_tags, lemma, prefix, present_3, past_3)
                 for negated_form in negated or []:
@@ -1118,6 +1129,56 @@ DEFINITE_CELLS: dict[tuple[str, str, str], tuple[str | None, str, str | None, st
     ("feminine", "plural", "instrumental"): ("õsiomis", "osiomis", "iõsiomis", "iosiomis"),
     ("feminine", "plural", "locative"): ("õsiose", "osiose", "iõsiose", "iosiose"),
 }
+
+
+def generate_negated_adjectives(
+    db: sqlite3.Connection,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    vetoed_lemmas: dict[str, str] | None = None,
+    wordlist: Path | None = None,
+) -> int:
+    """ne- adjectives keep the base accent (negẽras, neáišku, nedìdelis).
+
+    Nouns are excluded — their negation retracts lexically (nẽtvarka vs
+    nelaĩmė). Only combos whose negated lemma is wordlist-attested emit.
+    """
+
+    if wordlist is None:
+        wordlist = DATA_DIR / DEFAULT_WORDLIST_NAME
+    if not wordlist.exists():
+        return 0
+    words = {
+        line.split()[0]
+        for line in wordlist.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
+    known = {l for (l,) in db.execute("SELECT DISTINCT lemma FROM nominals")}
+    count = 0
+    for lemma, in db.execute("SELECT DISTINCT lemma FROM nominals WHERE pos = 'adj'"):
+        if vetoed_lemmas and lemma in vetoed_lemmas:
+            continue
+        if lemma.startswith(("ne", "nebe")) or "ne" + lemma in known:
+            continue
+        if "ne" + lemma not in words:
+            continue
+        emitted = False
+        for accented, tags in db.execute(
+            "SELECT accented, tags FROM forms WHERE lemma = ? AND pos = 'adj'", (lemma,),
+        ):
+            tag_tuple = parse_tags(tags)
+            if not set(tag_tuple) & (CASE_TAGS | {"neuter"}):
+                continue
+            add_variant(
+                grouped,
+                form="ne" + normalize_lt(accented),
+                pos="adj",
+                tags=tag_tuple,
+                provenance=f"open-accentuator:kaikki:{lemma}:adj:negation:{cell_key(tag_tuple)}",
+            )
+            emitted = True
+        if emitted:
+            count += 1
+    return count
 
 
 def generate_definite(
@@ -1551,6 +1612,7 @@ def generate_dictionary(
         imas_count = generate_deverbal_imas(source, grouped, vetoes["lemmas"])
         iskas_count = generate_iskas(source, grouped, vetoes["lemmas"])
         definite_count = generate_definite(source, grouped, vetoes["lemmas"])
+        neg_adj_count = generate_negated_adjectives(source, grouped, vetoes["lemmas"])
         derived_count = generate_derived(source, grouped, vetoes["lemmas"])
     finally:
         source.close()
@@ -1566,6 +1628,7 @@ def generate_dictionary(
         "imas_lemmas": imas_count,
         "iskas_lemmas": iskas_count,
         "definite_lemmas": definite_count,
+        "negated_adjectives": neg_adj_count,
         "derived_lemmas": derived_count,
         "vetoed_lemmas": len(vetoes["lemmas"]),
         "vetoed_words": len(vetoes["words"]),
