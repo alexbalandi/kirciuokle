@@ -1,16 +1,16 @@
 # VDU Parity Report
 
 - VDU positives: 10,015
-- Generated covered: 6,251 (62.4%)
+- Generated covered: 6,538 (65.3%)
 
 | bucket | count | percent |
 |---|---:|---:|
-| EXACT | 5,100 | 50.9% |
-| DEFAULT-MATCH | 507 | 5.1% |
-| OVERLAP | 636 | 6.4% |
-| NORM-DELTA | 8 | 0.1% |
+| EXACT | 5,357 | 53.5% |
+| DEFAULT-MATCH | 521 | 5.2% |
+| OVERLAP | 651 | 6.5% |
+| NORM-DELTA | 9 | 0.1% |
 | DISJOINT | 0 | 0.0% |
-| UNCOVERED | 3,764 | 37.6% |
+| UNCOVERED | 3,477 | 34.7% |
 
 ## DISJOINT Samples
 

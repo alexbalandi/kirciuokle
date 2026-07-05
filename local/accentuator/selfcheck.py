@@ -30,7 +30,7 @@ try:  # pragma: no cover
     )
     from ._common import nfc, normalize_notation
     from .extract_lexicon import build_lexicon
-    from .generate_dictionary import matched_verb_prefix, resolve_verb_form
+    from .generate_dictionary import matched_verb_prefix, negated_forms, resolve_verb_form
     from .paradigm_engine import accent_nominal, accent_verb, build_forms_by_cell, normalize_cell
 except ImportError:  # pragma: no cover
     from _common import (
@@ -51,7 +51,7 @@ except ImportError:  # pragma: no cover
     )
     from _common import nfc, normalize_notation
     from extract_lexicon import build_lexicon
-    from generate_dictionary import matched_verb_prefix, resolve_verb_form
+    from generate_dictionary import matched_verb_prefix, negated_forms, resolve_verb_form
     from paradigm_engine import accent_nominal, accent_verb, build_forms_by_cell, normalize_cell
 
 
@@ -308,6 +308,30 @@ def check_verb_rules() -> None:
             raise AssertionError(
                 f"resolve_verb_form({prefix}, {tags}, {form!r}) = {resolved!r} ({rule}), expected {expected!r}"
             )
+
+    prs_3 = ("present", "third-person")
+    # (form, tags, lemma, present_3, past_3) -> expected ne-form
+    negation = {
+        # weak roots: the negation takes the stress (Kushnir §4.4.2)
+        ("nẽša", prs_3, "nešti", "nẽša", "nẽšė"): "nèneša",
+        ("per̃ka", prs_3, "pirkti", "per̃ka", "pir̃ko"): "nèperka",
+        ("kal̃ba", prs_3, "kalbėti", "kal̃ba", "kalbė́jo"): "nèkalba",
+        ("tìki", prs_3, "tikėti", "tìki", "tikė́jo"): "nètiki",
+        ("nẽšė", ("past", "third-person"), "nešti", "nẽša", "nẽšė"): "nènešė",
+        # strong roots: the accent stays put
+        ("dìrba", prs_3, "dirbti", "dìrba", "dìrbo"): "nedìrba",
+        ("miẽga", prs_3, "miegoti", "miẽga", "miegójo"): "nemiẽga",
+        ("žìno", prs_3, "žinoti", "žìno", "žinójo"): "nežìno",
+        ("gãli", prs_3, "galėti", "gãli", "galė́jo"): "negãli",
+        ("keĩčia", prs_3, "keisti", "keĩčia", "keĩtė"): "nekeĩčia",
+        ("tìko", ("past", "third-person"), "tikti", "tiñka", "tìko"): "netìko",
+        ("dir̃bs", ("future", "third-person"), "dirbti", "dìrba", "dìrbo"): "nedir̃bs",
+    }
+    for (form, tags, lemma, prs3, pst3), expected in negation.items():
+        result = negated_forms(normalize_lt(form), tags, lemma, None, prs3, pst3)
+        got = result[0] if result else None
+        if got != nfc(expected):
+            raise AssertionError(f"negated_forms({form!r}, {lemma}) = {got!r}, expected {expected!r}")
 
 
 def check_suffix_rules(db: sqlite3.Connection) -> None:

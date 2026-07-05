@@ -53,7 +53,8 @@
     "nikai": "VLKK vardai: Nikà class 2 (nìkai); VDU cache nikaĩ",
     "patrikai": "VLKK vardai: Pãtrikas class 1; VDU cache patrikaĩ",
     "poli": "VLKK vardai: Pòlis class 2 (voc. pòli); VDU cache põli",
-    "semas": "VLKK vardai: Sèmas class 2; VDU cache semàs"
+    "semas": "VLKK vardai: Sèmas class 2; VDU cache semàs",
+    "vili": "VLKK vardai: Vìlis class 2 (voc. vìli); VDU cache vilì"
   },
   "words": {
     "agentė": "suffix rule gives ageñtė (like ageñtas); VDU answers ãgentė — NORM-DELTA, pending adjudication",

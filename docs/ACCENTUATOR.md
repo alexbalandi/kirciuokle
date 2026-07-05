@@ -51,7 +51,18 @@ reports/parity-vdu.md ──► adjudication ──► parity_vetoes.json (+ rul
 | 3 | `generate_verbs` | observed finite + non-finite verb forms, filtered/repaired by `resolve_verb_form` | kaikki tables + published rules (below) |
 | 4 | `generate_other` | observed forms for adverbs, interjections, prepositions, conjunctions, particles, and nominal lemmas without a stress class | kaikki (observed facts) |
 | 5 | `generate_closed` | 208 closed-class headwords | our draft, pending VLKK review |
-| 6 | `generate_derived` | full paradigms for unknown lemmas that parse as base + self-accented suffix | VDU 2010 App. C suffix table + endings induced from kaikki |
+| 6 | `generate_degrees` | comparative/superlative paradigms for adjectives lacking observed rows | per-cell majorities induced from the 13k observed degree rows |
+| 7 | `generate_deverbal_imas` | -imas/-ymas action nouns from suffixal verbs (mãtymas, kalbė́jimas) | accent copied from the past-3 stem; primary verbs are lexically split and skipped |
+| 8 | `generate_derived` | full paradigms for unknown lemmas that parse as base + self-accented suffix | VDU 2010 App. C suffix table + endings induced from kaikki |
+
+`generate_verbs` additionally emits **negated counterparts** (ne-, nebe-) of
+finite forms, infinitives, and participle heads: the negation is stressed
+exactly when the tense's root allomorph is weak (nèkeitė, nèneša, nètiki)
+and unstressed otherwise (nežinaũ, nedìrba, nemiẽga) — Kushnir §4.4.2 with
+the §123 present-weakness criteria (short/lengthened plain stem vowels,
+per̃ka/pir̃ko alternation, kal̃ba-type -aR- in -ėti verbs; -o and -i-theme
+exceptions gulėti/turėti/galėti are strong; weak present-stem participles
+are skipped).
 
 Every emitted form passes through `add_variant`, which applies
 `normalize_notation` (repositions marks written in nonstandard places —

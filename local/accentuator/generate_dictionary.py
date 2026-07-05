@@ -15,7 +15,7 @@ import json
 import os
 import sqlite3
 import unicodedata
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Iterator
@@ -44,7 +44,7 @@ try:  # pragma: no cover
         strip_accents,
     )
     from .paradigm_engine import MARK_BY_NAME, _apply_stress, accent_nominal, accent_verb, build_forms_by_cell
-    from .suffix_rules import build_class_tables, derive_lemmas, load_rules, paradigm_for
+    from .suffix_rules import _accented_tail, build_class_tables, derive_lemmas, load_rules, paradigm_for
 except ImportError:  # pragma: no cover
     from _common import (
         CASE_TAGS,
@@ -69,7 +69,7 @@ except ImportError:  # pragma: no cover
         strip_accents,
     )
     from paradigm_engine import MARK_BY_NAME, _apply_stress, accent_nominal, accent_verb, build_forms_by_cell
-    from suffix_rules import build_class_tables, derive_lemmas, load_rules, paradigm_for
+    from suffix_rules import _accented_tail, build_class_tables, derive_lemmas, load_rules, paradigm_for
 
 
 Variant = dict[str, object]
@@ -183,6 +183,103 @@ def _retract_to_prefix(form: str, third_person: str) -> str | None:
     if index is None or not mark or index >= len(stripped):
         return None
     return _apply_stress(stripped, index, mark)
+
+
+# Kushnir 2019 (125): gulėti and turėti are lexical exceptions — strong
+# present roots despite matching the weak criteria. galėti patterns with
+# them (VDU: nebegãli, nebegaliù), tikėti does not (VDU: nètikiu).
+STRONG_PRESENT_EXCEPTIONS = frozenset(("gulėti", "turėti", "galėti"))
+
+
+def _weak_present_root(lemma: str, present_3: str, past_3: str) -> bool:
+    """Kushnir 2019 §4.4.5 (123): which present roots are weak.
+
+    Weak presents retract to a prefix (nè-, pá-): short-vowel stems (kìša,
+    mèta, nẽša — surface grave, or lengthened ã/ẽ), ER~IR alternating stems
+    (per̃ka/pir̃ko), and -aR- stems of -ėti verbs (kal̃ba). -o presents and
+    acute stems are invariably strong.
+    """
+
+    if lemma in STRONG_PRESENT_EXCEPTIONS:
+        return False
+    p3 = normalize_lt(present_3)
+    key = lower_key(p3)
+    if key.endswith("o"):
+        return False
+    if lemma.endswith(("yti", "oti", "uoti", "auti", "inti", "enti")):
+        # §123: only primary and -ėti verbs can have weak presents (ketìna
+        # and friends keep their accent: neketinù)
+        return False
+    mark = first_stress_mark(p3)
+    if mark in (None, "acute"):
+        return False
+    stripped = strip_accents(p3)
+    index = stressed_base_index(p3)
+    if index is None or index >= len(stripped):
+        return False
+    # the mark may sit on a mixed-diphthong sonorant — shift to its vowel
+    vowel = index - 1 if stripped[index] in SONORANTS and index > 0 else index
+    if vowel > 0 and stripped[vowel - 1] in VOWELS:
+        return False  # second component of a diphthong is long (miẽga, eĩna)
+    nxt = stripped[vowel + 1] if vowel + 1 < len(stripped) else ""
+    tautosyllabic_sonorant = nxt in SONORANTS and not (
+        vowel + 2 < len(stripped) and stripped[vowel + 2] in VOWELS
+    )
+    if not tautosyllabic_sonorant:
+        # plain short (or lengthened a/e) stem vowel: kìša, mèta, nẽša
+        if stripped[vowel] in "ae":
+            return True
+        return stripped[vowel] in "iu" and mark == "grave"
+    # mixed diphthong: weak on ER~IR alternation (per̃ka/pir̃ko) ...
+    pst = strip_accents(normalize_lt(past_3))
+    if (
+        stripped[vowel] == "e"
+        and vowel < len(pst)
+        and pst[vowel] == "i"
+        and vowel + 1 < len(pst)
+        and pst[vowel + 1] == nxt
+    ):
+        return True
+    # ... or -aR- stems of -ėti verbs (kal̃ba : kalbė́ti)
+    return stripped[vowel] == "a" and lemma.endswith("ėti")
+
+
+def negated_forms(
+    form: str,
+    tags: Iterable[str],
+    lemma: str,
+    prefix: str | None,
+    present_3: str,
+    past_3: str,
+) -> list[str] | None:
+    """Accented ne-/nebe- counterparts of a verb form, or None when unsafe.
+
+    Kushnir 2019 §4.4.2: the negation behaves like the other weak prefixes —
+    it takes the stress exactly when the tense's root allomorph is weak
+    (nèkeitė, nèneša) and is unstressed otherwise (nežinaũ, nedìrba). With
+    stacked prefixes the last one is stressed (nebè-, §4.4.4 (112)).
+    """
+
+    tag_set = set(tags)
+    weak = False
+    if not prefix and "frequentative" not in tag_set:
+        present_stem = "present" in tag_set
+        past_stem = "past" in tag_set
+        if past_stem and not ("participle" in tag_set and "passive" in tag_set):
+            # finite past + past active participles share the past root
+            weak = _weak_root_possible(lemma, "past", present_3, past_3)
+            if weak and ("participle" in tag_set or "adverbial" in tag_set):
+                # past active participles are always root-strong (§4.6.2)
+                weak = False
+        elif present_stem:
+            if _weak_present_root(lemma, present_3, past_3):
+                if "participle" in tag_set or "adverbial" in tag_set:
+                    return None  # weak present-stem non-finite: prefix wins — skip
+                weak = True
+    if weak:
+        stripped = strip_accents(form)
+        return [normalize_lt("nè" + stripped), normalize_lt("nebè" + stripped)]
+    return ["ne" + form, "nebe" + form]
 
 
 def _weak_root_possible(lemma: str, tense: str, present_3: str, past_3: str) -> bool:
@@ -574,6 +671,16 @@ def generate_verbs(
                             tags=decl_tags,
                             provenance=f"{provenance}:rule=participle-declension",
                         )
+                if not lemma.startswith(("ne", "nebe")) and not tag_set & CASE_TAGS:
+                    negated = negated_forms(resolved, out_tags, lemma, prefix, present_3, past_3)
+                    for negated_form in negated or []:
+                        add_variant(
+                            grouped,
+                            form=negated_form,
+                            pos="verb",
+                            tags=out_tags,
+                            provenance=f"{provenance}:rule=negation",
+                        )
         count += 1
     return count
 
@@ -651,6 +758,143 @@ def generate_closed(db: sqlite3.Connection, grouped: dict[str, dict[tuple[str, s
 
 
 DEFAULT_WORDLIST_NAME = "lt_50k.txt"
+
+# Adjectives with suppletive degree stems.
+DEGREE_STEM_OVERRIDES = {"didelis": "did", "didis": "did"}
+DEGREE_NOM_ENDINGS = ("ias", "as", "is", "ys", "us")
+
+
+def _palatalize(stem: str, suffix: str) -> str:
+    """d/t soften before the i-initial superlative suffix (saldžiáusias)."""
+
+    if suffix.startswith("i"):
+        if stem.endswith("d"):
+            return stem[:-1] + "dž"
+        if stem.endswith("t"):
+            return stem[:-1] + "č"
+    return stem
+
+
+def generate_degrees(
+    db: sqlite3.Connection,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    vetoed_lemmas: dict[str, str] | None = None,
+) -> int:
+    """Synthesize comparative/superlative paradigms for adjectives lacking them.
+
+    kaikki carries observed degree rows for most adjectives (they flow through
+    generate_nominals); the accented suffixes are constant across the language
+    (-èsnis/-esnì..., -iáusias), so per-cell majorities induced from those
+    observed rows fill the gaps for the rest.
+    """
+
+    votes: dict[tuple[str, str], Counter[tuple[str, str]]] = {}
+    have_degrees: set[str] = set()
+    query = """
+        SELECT f.lemma, f.accented, f.tags
+        FROM forms f JOIN nominals n ON n.lemma = f.lemma AND n.pos = f.pos
+        WHERE f.pos = 'adj' AND (f.tags LIKE '%comparative%' OR f.tags LIKE '%superlative%')
+    """
+    for lemma, accented, tags in db.execute(query):
+        tag_tuple = parse_tags(tags)
+        tag_set = set(tag_tuple)
+        have_degrees.add(lemma)
+        if not tag_set & CASE_TAGS:
+            continue
+        ending = next((e for e in DEGREE_NOM_ENDINGS if lemma.endswith(e)), None)
+        if not ending:
+            continue
+        stem = lemma[: -len(ending)]
+        stripped = strip_accents(normalize_lt(accented))
+        if not stripped.startswith(stem) or len(stripped) <= len(stem):
+            continue  # palatalized or irregular stems don't vote
+        degree = "superlative" if "superlative" in tag_set else "comparative"
+        suffix = stripped[len(stem):]
+        acc_suffix = _accented_tail(normalize_lt(accented), len(stem))
+        votes.setdefault((degree, cell_key(tag_tuple)), Counter())[(suffix, acc_suffix)] += 1
+
+    table: dict[tuple[str, str], str] = {}
+    for key, counter in votes.items():
+        (suffix, acc_suffix), n = counter.most_common(1)[0]
+        if n >= MIN_DEGREE_EVIDENCE and n / sum(counter.values()) >= 0.6:
+            table[key] = acc_suffix
+
+    count = 0
+    for lemma, in db.execute("SELECT DISTINCT lemma FROM nominals WHERE pos = 'adj'"):
+        if lemma in have_degrees or (vetoed_lemmas and lemma in vetoed_lemmas):
+            continue
+        ending = next((e for e in DEGREE_NOM_ENDINGS if lemma.endswith(e)), None)
+        if not ending:
+            continue
+        stem = DEGREE_STEM_OVERRIDES.get(lemma, lemma[: -len(ending)])
+        if len(stem) < 2:
+            continue
+        emitted = False
+        for (degree, cell), acc_suffix in sorted(table.items()):
+            form = _palatalize(stem, strip_accents(acc_suffix)) + acc_suffix
+            add_variant(
+                grouped,
+                form=form,
+                pos="adj",
+                tags=parse_tags(cell),
+                provenance=f"open-accentuator:degree-rule:{lemma}:adj:{degree}:{cell}",
+            )
+            emitted = True
+        if emitted:
+            count += 1
+    return count
+
+
+MIN_DEGREE_EVIDENCE = 25
+
+# Deverbal -imas nouns: only the suffixal families whose accent is a plain
+# copy of the past-tense stem (mãtė -> mãtymas, kalbė́jo -> kalbė́jimas,
+# kirčiãvo -> kirčiãvimas). Primary verbs are lexically split (gė́rimas vs
+# pylìmas) and are left to the dictionary sources.
+IMAS_FAMILIES = ("yti", "ėti", "oti", "auti", "uoti")
+
+
+def generate_deverbal_imas(
+    db: sqlite3.Connection,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    vetoed_lemmas: dict[str, str] | None = None,
+) -> int:
+    tables = build_class_tables(db)
+    cells = tables.get(("as", "1")) or {}
+    if not cells:
+        return 0
+    noun_lemmas = {l for (l,) in db.execute("SELECT DISTINCT lemma FROM nominals WHERE pos = 'noun'")}
+    count = 0
+    for lemma, past_3 in db.execute("SELECT DISTINCT lemma, past_3 FROM verbs"):
+        if vetoed_lemmas and lemma in vetoed_lemmas:
+            continue
+        if not lemma.endswith(IMAS_FAMILIES) or lemma.startswith(("ne", "nebe")):
+            continue
+        past = normalize_lt(past_3 or "")
+        stripped_past = strip_accents(past)
+        if len(stripped_past) < 3 or not has_stress(past):
+            continue
+        # stem = past-3 minus its final theme vowel (mãtė -> mãt, kalbė́jo -> kalbė́j)
+        stem = _accented_prefix(past, len(stripped_past) - 1)
+        suffix = "ymas" if lemma.endswith("yti") else "imas"
+        noun = strip_accents(stem) + suffix
+        if noun in noun_lemmas:
+            continue  # the dictionary knows better
+        emitted = False
+        for cell, (ending, acc_ending) in sorted(cells.items()):
+            if acc_ending or "masculine" in cell or "feminine" in cell:
+                continue  # class 1 is fixed; adjective-gendered cells don't apply
+            add_variant(
+                grouped,
+                form=stem + suffix[:-2] + ending,
+                pos="noun",
+                tags=parse_tags(cell),
+                provenance=f"open-accentuator:imas-rule:{lemma}:noun:1:{cell}",
+            )
+            emitted = True
+        if emitted:
+            count += 1
+    return count
 VLKK_NAMES_FILE = "vlkk_names.json"
 
 
@@ -846,6 +1090,8 @@ def generate_dictionary(
         verb_count = generate_verbs(source, grouped, limit, vetoes["lemmas"])
         other_count = generate_other(source, grouped, vetoes["lemmas"])
         closed_count = generate_closed(source, grouped)
+        degree_count = generate_degrees(source, grouped, vetoes["lemmas"])
+        imas_count = generate_deverbal_imas(source, grouped, vetoes["lemmas"])
         derived_count = generate_derived(source, grouped, vetoes["lemmas"])
     finally:
         source.close()
@@ -856,6 +1102,8 @@ def generate_dictionary(
         "verb_lemmas": verb_count,
         "other_lemmas": other_count,
         "closed_rows": closed_count,
+        "degree_lemmas": degree_count,
+        "imas_lemmas": imas_count,
         "derived_lemmas": derived_count,
         "vetoed_lemmas": len(vetoes["lemmas"]),
         "vetoed_words": len(vetoes["words"]),
