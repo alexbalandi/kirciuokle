@@ -100,9 +100,11 @@ this benchmark plus the repo's accentuation parity eval.
 `local/accentuator/` builds an accentuation dictionary from open sources
 (Wiktionary accent classes + a paradigm engine implementing published
 accentology; plan in `docs/PLAN-open-accentuator.md`). Standalone
-artifacts only — the replica's dictionary chain is unchanged. First parity
-vs the VDU cache: 85.1% exact on covered words, 1.0% hard disagreement;
-adjudication ongoing.
+artifacts only — the replica's dictionary chain is unchanged. Parity vs
+the VDU cache: 86.0% exact on covered words, **zero hard disagreements**
+— every adjudicated divergence is either fixed (notation normalization)
+or excluded with a reason in `local/accentuator/parity_vetoes.json`;
+remaining gap to VDU is coverage, not correctness.
 
 ## Local checks
 

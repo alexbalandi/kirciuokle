@@ -102,7 +102,7 @@ def write_report(
             continue
         bucket = bucket_entry(vdu_forms, vdu_default, gen["variants"], gen["default"])
         counts[bucket] += 1
-        if bucket == "DISJOINT" and len(disjoint_samples) < 40:
+        if bucket == "DISJOINT" and len(disjoint_samples) < 120:
             disjoint_samples.append(
                 {
                     "word": word,

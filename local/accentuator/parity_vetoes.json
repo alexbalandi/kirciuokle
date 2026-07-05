@@ -1,0 +1,39 @@
+{
+  "_readme": [
+    "QA-driven exclusions found while adjudicating DISJOINT rows of reports/parity-vdu.md.",
+    "Vetoes only ever remove generated output (word moves to UNCOVERED); they never copy",
+    "a form from the VDU cache, so provenance of everything emitted stays open-source.",
+    "lemmas: all kaikki-derived cells of the lemma are skipped (entry-level data error).",
+    "words: the final dictionary entry for this word key is suppressed (single bad row)."
+  ],
+  "lemmas": {
+    "adomas": "kaikki gives adõmas; standard Ãdomas (1st-class name) — entry accent error",
+    "dokumentas": "kaikki dokumèntas (grave e); standard dokumeñtas (circumflex mixed diphthong en)",
+    "fonema": "kaikki stress class 3 yields fonemų̃; standard fonèma is class 2 (fonèmų)",
+    "galia": "kaikki writes grave (gàlios/gàlią); standard has circumflex long a (gãlios/gãlią)",
+    "imperatorius": "kaikki class 2 + imperatõrius; standard imperãtorius, fixed class 1",
+    "jėga": "kaikki class 2 yields jė̃gų; standard jėgà is class 4 (jėgų̃)",
+    "kanada": "kaikki kãnados; standard Kanãda declension stresses the second syllable",
+    "keturi": "kaikki class 3b yields keturìs; standard kẽturis (class 4 retraction)",
+    "markas": "kaikki class 1 (márkas); standard Mar̃kas/markàs — class error",
+    "menas": "kaikki class 2 yields mẽnų; standard mẽnas is class 4 (menų̃)",
+    "nekęsti": "kaikki keeps stem stress (nekeñtė); standard retracts to the negation prefix (nèkentė)",
+    "paplūdimys": "kaikki writes acute prefix (páplūdimio) in retracted cells; standard pãplūdimio",
+    "pirmadienis": "kaikki lemma accent pirmadiẽnis; standard pirmãdienis (fixed on -mã-)",
+    "pirštinė": "kaikki class 2 yields pirštinès; standard pir̃štinė is class 1 (pir̃štines)",
+    "planas": "kaikki class 1 keeps plãnai; standard plãnas is class 4 (planaĩ, planùs)",
+    "savas": "kaikki writes circumflex long a (sãvo); standard sàvo has a short a",
+    "sieti": "kaikki circumflex (siẽja); standard acute diphthong (síeja, síejo)",
+    "sostinė": "kaikki circumflex (sõstinė); standard acute (sóstinė)",
+    "svaras": "kaikki grave (svàrų); standard circumflex long a (svãrų)",
+    "tavas": "kaikki writes circumflex long a (tãvo); standard tàvo has a short a",
+    "žmona": "kaikki circumflex in retracted cells (žmõną); standard acute (žmóną)"
+  },
+  "words": {
+    "lyg": "closed-class draft carries lỹg; dictionaries give lýg — pending VLKK adjudication",
+    "miegot": "kaikki apocope row miẽgot; standard shortening keeps the acute (miegót)",
+    "niekur": "closed-class draft carries niekur̃; standard niẽkur — pending VLKK adjudication",
+    "vesiu": "kaikki writes long ẽ in vesti s-stem cells (vẽsiu); standard short è (vèsiu)",
+    "vesk": "kaikki writes long ẽ in vesti s-stem cells (vẽsk); standard short è (vèsk)"
+  }
+}

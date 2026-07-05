@@ -27,6 +27,7 @@ DEFAULT_TABLES = DATA_DIR / "paradigm_tables.json"
 DEFAULT_CLOSED_DRAFT = DATA_DIR / "closed_draft.md"
 DEFAULT_PARITY_REPORT = REPORTS_DIR / "parity-vdu.md"
 DEFAULT_VDU_SQLITE = LOCAL_DIR / "data" / "words.sqlite"
+DEFAULT_VETOES = ACCENTUATOR_DIR / "parity_vetoes.json"
 
 COMBINING_GRAVE = "\u0300"
 COMBINING_ACUTE = "\u0301"
@@ -191,10 +192,89 @@ def lower_key(text: str | None) -> str:
     return strip_accents(text).lower()
 
 
+PURE_DIPHTHONGS = frozenset(("au", "ai", "ei", "ui", "uo", "ie"))
+SONORANTS = frozenset("lmnr")
+VOWEL_BASES = frozenset("aeiouy")
+
+
+def _clusters(text: str) -> list[list[str]]:
+    clusters: list[list[str]] = []
+    for ch in unicodedata.normalize("NFD", text):
+        if unicodedata.combining(ch) and clusters:
+            clusters[-1].append(ch)
+        else:
+            clusters.append([ch])
+    return clusters
+
+
+def _plain_base(cluster: list[str]) -> str | None:
+    """Base letter of a cluster carrying no marks besides an optional stress mark."""
+
+    if all(mark in STRESS_MARKS for mark in cluster[1:]):
+        return cluster[0].lower()
+    return None
+
+
+def normalize_notation(text: str) -> str:
+    """Reposition stress marks written in nonstandard places (rendering only).
+
+    Wiktionary tables sometimes carry the circumflex on the first component of
+    a pure diphthong (``ãusys``) or an acute on a sonorant (``giŕdit``).
+    Standard notation puts the circumflex on the second diphthong component
+    (``aũsys``) and allows only the circumflex on the sonorant of a mixed
+    diphthong (``gir̃dit``). Marks are repositioned, never converted between
+    priegaidės: grave and acute sitting on vowels are left untouched.
+    """
+
+    if not text or not has_stress(text):
+        return text
+    clusters = _clusters(text)
+    moves: list[tuple[int, int, str, str]] = []  # (src, dst, drop_mark, add_mark)
+    for i, cluster in enumerate(clusters):
+        base = _plain_base(cluster)
+        if base is None:
+            continue
+        nxt = _plain_base(clusters[i + 1]) if i + 1 < len(clusters) else None
+        prev = _plain_base(clusters[i - 1]) if i > 0 else None
+        after = clusters[i + 2][0].lower() if i + 2 < len(clusters) else ""
+        if COMBINING_TILDE in cluster[1:]:
+            if (
+                nxt
+                and base + nxt in PURE_DIPHTHONGS
+                # not a diphthong if the second letter opens its own (pa|ieška)
+                and nxt + after not in PURE_DIPHTHONGS
+            ):
+                moves.append((i, i + 1, COMBINING_TILDE, COMBINING_TILDE))
+            elif (
+                # long y/o never open a mixed diphthong (vỹras, kõl)
+                base in "aeiu"
+                and nxt in SONORANTS
+                and after not in VOWEL_BASES
+                and not (prev and prev + base in PURE_DIPHTHONGS)
+            ):
+                moves.append((i, i + 1, COMBINING_TILDE, COMBINING_TILDE))
+        elif COMBINING_ACUTE in cluster[1:] and base in SONORANTS and prev in VOWEL_BASES:
+            # An acute cannot sit on a sonorant; the only legal mark there is
+            # the circumflex of a mixed diphthong.
+            moves.append((i, i, COMBINING_ACUTE, COMBINING_TILDE))
+    for src, dst, drop, add in moves:
+        if any(mark in STRESS_MARKS for mark in clusters[dst][1:]) and dst != src:
+            continue
+        clusters[src].remove(drop)
+        clusters[dst].append(add)
+    return nfc("".join(ch for cluster in clusters for ch in cluster))
+
+
 def has_stress(text: str | None) -> bool:
     if not text:
         return False
     return any(ch in STRESS_MARKS for ch in unicodedata.normalize("NFD", text))
+
+
+def count_stress_marks(text: str | None) -> int:
+    if not text:
+        return 0
+    return sum(1 for ch in unicodedata.normalize("NFD", text) if ch in STRESS_MARKS)
 
 
 def first_stress_mark(text: str | None) -> str | None:

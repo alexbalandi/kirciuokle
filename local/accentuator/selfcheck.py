@@ -28,7 +28,9 @@ try:  # pragma: no cover
         safe_relative,
         strip_accents,
     )
+    from ._common import nfc, normalize_notation
     from .extract_lexicon import build_lexicon
+    from .generate_dictionary import prefixed_verb_base, veto_verb_form
     from .paradigm_engine import accent_nominal, accent_verb, build_forms_by_cell, normalize_cell
 except ImportError:  # pragma: no cover
     from _common import (
@@ -47,7 +49,9 @@ except ImportError:  # pragma: no cover
         safe_relative,
         strip_accents,
     )
+    from _common import nfc, normalize_notation
     from extract_lexicon import build_lexicon
+    from generate_dictionary import prefixed_verb_base, veto_verb_form
     from paradigm_engine import accent_nominal, accent_verb, build_forms_by_cell, normalize_cell
 
 
@@ -212,7 +216,80 @@ def check_verb(db: sqlite3.Connection) -> None:
                 raise AssertionError(f"daryti future_3 expected stressed darys, got {sorted(actual)}")
 
 
+def check_notation() -> None:
+    cases = {
+        # circumflex moves to the second component of a pure diphthong
+        "ãusys": "aũsys",
+        "ãusį": "aũsį",
+        # circumflex moves to the sonorant of a mixed diphthong
+        "ĩlgas": "il̃gas",
+        # acute cannot sit on a sonorant — repaired to the circumflex
+        "giŕdite": "gir̃dite",
+        # morpheme-boundary hiatus: the i opens the ie diphthong — no move
+        "pãieškai": "pãieškai",
+        # long o + sonorant is not a mixed diphthong
+        "kõl": "kõl",
+        # already-standard notation is left alone
+        "aũsis": "aũsis",
+        "muĩlas": "muĩlas",
+        "vil̃kas": "vil̃kas",
+        "tiñka": "tiñka",
+        "kur̃": "kur̃",
+        "septỹni": "septỹni",
+        "gãlios": "gãlios",
+        # grave and acute on vowels are never converted (priegaidė is lexical)
+        "apkabìnti": "apkabìnti",
+        "pìlnas": "pìlnas",
+        "dúona": "dúona",
+        # sonorant before a vowel starts the next syllable — no move
+        "mẽnas": "mẽnas",
+    }
+    for raw, expected in cases.items():
+        actual = normalize_notation(normalize_lt(raw))
+        if actual != nfc(expected):
+            raise AssertionError(f"normalize_notation({raw!r}) = {actual!r}, expected {expected!r}")
+
+
+def check_vetoes() -> None:
+    if prefixed_verb_base("atnešti") != "nešti":
+        raise AssertionError("atnešti should resolve to base nešti")
+    if prefixed_verb_base("pasielgti") != "elgti":
+        raise AssertionError("pasielgti should resolve to reflexive base elgtis")
+    if prefixed_verb_base("atiduoti") != "duoti":
+        raise AssertionError("atiduoti should resolve to base duoti")
+    if prefixed_verb_base("paruošti") is None:
+        raise AssertionError("paruošti should count as prefixed")
+    if prefixed_verb_base("nešti") is not None:
+        raise AssertionError("nešti is not a prefixed verb")
+
+    future_3 = ("future", "third-person")
+    past_1sg = ("singular", "past", "first-person")
+    expect = {
+        # future-3 metatony risks are vetoed; resolved forms are kept
+        (False, future_3, "dìrbs"): True,
+        (False, future_3, "kalbė̃s"): False,
+        (False, future_3, "kalbė́s"): True,
+        (False, future_3, "gáus"): True,
+        (False, future_3, "darỹs"): False,
+        (False, future_3, "mókys"): False,
+        (False, future_3, "bùs"): False,
+        # prefixed-verb ending-stressed 1/2sg cells are vetoed, stem-stressed kept
+        (True, past_1sg, "atnešiaũ"): True,
+        (True, past_1sg, "pàdirbau"): False,
+        (False, past_1sg, "nešiaũ"): False,
+        # acute on an ending-stressed 1sg is invalid notation
+        (False, past_1sg, "elgiaúsi"): True,
+    }
+    for (prefixed, tags, form), should_veto in expect.items():
+        reason = veto_verb_form(prefixed, tags, normalize_lt(form))
+        if bool(reason) != should_veto:
+            verdict = "vetoed" if reason else "kept"
+            raise AssertionError(f"veto_verb_form({prefixed}, {tags}, {form!r}) unexpectedly {verdict} ({reason})")
+
+
 def run_selfcheck(args: argparse.Namespace) -> int:
+    check_notation()
+    check_vetoes()
     ensure_lexicon(args)
     db = sqlite3.connect(args.lexicon)
     try:

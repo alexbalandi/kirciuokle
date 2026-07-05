@@ -24,14 +24,20 @@ try:  # pragma: no cover
         CASE_TAGS,
         DEFAULT_GENERATED,
         DEFAULT_LEXICON,
+        DEFAULT_VETOES,
         FINITE_VERB_TAGS,
         NONFINITE_VERB_TAGS,
+        PURE_DIPHTHONGS,
         cell_key,
+        count_stress_marks,
+        first_stress_mark,
         lower_key,
         morphology_label,
         normalize_lt,
+        normalize_notation,
         parse_tags,
         safe_relative,
+        stressed_base_index,
         strip_accents,
     )
     from .paradigm_engine import accent_nominal, accent_verb, build_forms_by_cell
@@ -40,20 +46,124 @@ except ImportError:  # pragma: no cover
         CASE_TAGS,
         DEFAULT_GENERATED,
         DEFAULT_LEXICON,
+        DEFAULT_VETOES,
         FINITE_VERB_TAGS,
         NONFINITE_VERB_TAGS,
+        PURE_DIPHTHONGS,
         cell_key,
+        count_stress_marks,
+        first_stress_mark,
         lower_key,
         morphology_label,
         normalize_lt,
+        normalize_notation,
         parse_tags,
         safe_relative,
+        stressed_base_index,
         strip_accents,
     )
     from paradigm_engine import accent_nominal, accent_verb, build_forms_by_cell
 
 
 Variant = dict[str, object]
+
+VOWELS = "aeiouyąęėįųū"
+LONG_VOWELS = "ąęėįųūyo"
+SONORANTS = "lmnr"
+
+# Longest match first: verbal prefixes (with optional reflexive -si-) whose base
+# verb also exists in the lexicon mark cells where stress retraction applies.
+VERB_PREFIXES = tuple(
+    sorted(
+        (
+            "api", "ap", "apsi", "atsi", "ati", "at", "įsi", "į", "išsi", "iš",
+            "nusi", "nu", "pasi", "parsi", "par", "pa", "persi", "per",
+            "prasi", "pra", "prisi", "pri", "susi", "su", "užsi", "už",
+            "nebe", "tebe", "be", "ne",
+        ),
+        key=len,
+        reverse=True,
+    )
+)
+
+
+def load_vetoes(path: Path = DEFAULT_VETOES) -> dict[str, dict[str, str]]:
+    if not path.exists():
+        return {"lemmas": {}, "words": {}}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        "lemmas": dict(raw.get("lemmas") or {}),
+        "words": dict(raw.get("words") or {}),
+    }
+
+
+def prefixed_verb_base(lemma: str) -> str | None:
+    for prefix in VERB_PREFIXES:
+        rest = lemma[len(prefix):]
+        if lemma.startswith(prefix) and len(rest) >= 4:
+            return rest
+    return None
+
+
+def _ending_stressed_12sg(form: str) -> bool:
+    stripped = strip_accents(form)
+    index = stressed_base_index(form)
+    if index is None:
+        return False
+    core = stripped[:-2] if stripped.endswith("si") else stripped
+    return index >= len(core) - 2
+
+
+def _future_third_metatony_risk(form: str) -> bool:
+    """True when a future-3 form may be missing metatony (dìrbs → dir̃bs).
+
+    The circumflex metatony of the future third person hits stems stressed on
+    their final syllable; kaikki tables copy the infinitive accent instead. A
+    grave on a genuinely short final nucleus (bùs) is fine and kept.
+    """
+
+    mark = first_stress_mark(form)
+    if mark in (None, "circumflex"):
+        return False
+    stripped = strip_accents(form)
+    index = stressed_base_index(form)
+    if index is None or index >= len(stripped):
+        return False
+    after = index + 1
+    is_diphthong = (
+        after < len(stripped) and (stripped[index] + stripped[after]).lower() in PURE_DIPHTHONGS
+    )
+    if is_diphthong:
+        after += 1
+    if any(ch in VOWELS for ch in stripped[after:].lower()):
+        return False  # stress is not on the final syllable — no metatony there
+    if mark == "acute" or is_diphthong:
+        return True
+    if stripped[index].lower() in LONG_VOWELS:
+        return True
+    return after < len(stripped) and stripped[after].lower() in SONORANTS
+
+
+def veto_verb_form(prefixed: bool, tags: Iterable[str], form: str) -> str | None:
+    """Reason to skip a generated verb form, or None to keep it."""
+
+    tag_set = set(tags)
+    if "future" in tag_set and "third-person" in tag_set:
+        if _future_third_metatony_risk(form):
+            return "future-3 metatony unresolved"
+        return None
+    if (
+        "singular" in tag_set
+        and tag_set & {"first-person", "second-person"}
+        and tag_set & {"past", "present"}
+        and "frequentative" not in tag_set
+        and _ending_stressed_12sg(form)
+    ):
+        if prefixed:
+            return "prefixed-verb stress retraction unresolved"
+        if first_stress_mark(form) == "acute":
+            return "acute on an ending-stressed 1/2sg cell (invalid notation)"
+    return None
 
 
 def create_generated_schema(db: sqlite3.Connection) -> None:
@@ -100,8 +210,9 @@ def add_variant(
     tags: Iterable[str],
     provenance: str,
 ) -> None:
-    form = normalize_lt(form)
-    if not form:
+    form = normalize_notation(normalize_lt(form))
+    if not form or count_stress_marks(form) > 1:
+        # Doubly-accented rows (trečiãdiẽnį) are template artifacts, never words.
         return
     word = lower_key(form)
     if not word:
@@ -129,7 +240,12 @@ def is_generation_nominal_cell(pos: str, tags: Iterable[str]) -> bool:
     return pos == "adj" and "neuter" in tag_set
 
 
-def generate_nominals(db: sqlite3.Connection, grouped: dict[str, dict[tuple[str, str], Variant]], limit: int | None) -> int:
+def generate_nominals(
+    db: sqlite3.Connection,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    limit: int | None,
+    vetoed_lemmas: dict[str, str] | None = None,
+) -> int:
     query = """
         SELECT DISTINCT n.lemma, n.pos, n.accented_lemma, n.stress_class, m.declension_template
         FROM nominals n
@@ -141,6 +257,8 @@ def generate_nominals(db: sqlite3.Connection, grouped: dict[str, dict[tuple[str,
     for lemma, pos, accented_lemma, stress_class, template in db.execute(query):
         if limit is not None and count >= limit:
             break
+        if vetoed_lemmas and lemma in vetoed_lemmas:
+            continue
         form_rows = rows_for_lemma(db, lemma, pos)
         forms_by_cell = {
             key: entries
@@ -179,7 +297,12 @@ def is_generation_verb_cell(tags: Iterable[str]) -> bool:
     return bool(tag_set & FINITE_VERB_TAGS)
 
 
-def generate_verbs(db: sqlite3.Connection, grouped: dict[str, dict[tuple[str, str], Variant]], limit: int | None) -> int:
+def generate_verbs(
+    db: sqlite3.Connection,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    limit: int | None,
+    vetoed_lemmas: dict[str, str] | None = None,
+) -> int:
     query = """
         SELECT DISTINCT v.lemma, v.accented_infinitive, v.present_3, v.past_3, m.conjugation_template
         FROM verbs v
@@ -190,6 +313,9 @@ def generate_verbs(db: sqlite3.Connection, grouped: dict[str, dict[tuple[str, st
     for lemma, infinitive, present_3, past_3, template in db.execute(query):
         if limit is not None and count >= limit:
             break
+        if vetoed_lemmas and lemma in vetoed_lemmas:
+            continue
+        prefixed = prefixed_verb_base(lemma) is not None
         form_rows = rows_for_lemma(db, lemma, "verb")
         forms_by_cell = {
             key: entries
@@ -206,6 +332,8 @@ def generate_verbs(db: sqlite3.Connection, grouped: dict[str, dict[tuple[str, st
         for key in sorted(forms_by_cell):
             tags = parse_tags(key)
             for form, out_tags in accent_verb(infinitive, present_3, past_3, tags, info):
+                if veto_verb_form(prefixed, out_tags, form):
+                    continue
                 add_variant(
                     grouped,
                     form=form,
@@ -245,17 +373,25 @@ def generate_closed(db: sqlite3.Connection, grouped: dict[str, dict[tuple[str, s
     return count
 
 
-def write_generated(output: Path, grouped: dict[str, dict[tuple[str, str], Variant]]) -> int:
+def write_generated(
+    output: Path,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    vetoed_words: dict[str, str] | None = None,
+) -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
     tmp = output.with_suffix(output.suffix + ".tmp")
     if tmp.exists():
         tmp.unlink()
     db = sqlite3.connect(tmp)
     now = datetime.now(timezone.utc).isoformat()
+    written = 0
     try:
         create_generated_schema(db)
         rows = []
         for word in sorted(grouped):
+            if vetoed_words and word in vetoed_words:
+                continue
+            written += 1
             variants = list(grouped[word].values())
             variants.sort(key=lambda v: (str(v["form"]), str(v["info"])))
             public_variants = [
@@ -283,7 +419,7 @@ def write_generated(output: Path, grouped: dict[str, dict[tuple[str, str], Varia
     finally:
         db.close()
     os.replace(tmp, output)
-    return len(grouped)
+    return written
 
 
 def generate_dictionary(
@@ -291,20 +427,24 @@ def generate_dictionary(
     lexicon: Path = DEFAULT_LEXICON,
     output: Path = DEFAULT_GENERATED,
     limit: int | None = None,
+    vetoes_path: Path = DEFAULT_VETOES,
 ) -> dict[str, int]:
+    vetoes = load_vetoes(vetoes_path)
     source = sqlite3.connect(lexicon)
     grouped: dict[str, dict[tuple[str, str], Variant]] = defaultdict(dict)
     try:
-        nominal_count = generate_nominals(source, grouped, limit)
-        verb_count = generate_verbs(source, grouped, limit)
+        nominal_count = generate_nominals(source, grouped, limit, vetoes["lemmas"])
+        verb_count = generate_verbs(source, grouped, limit, vetoes["lemmas"])
         closed_count = generate_closed(source, grouped)
     finally:
         source.close()
-    words = write_generated(output, grouped)
+    words = write_generated(output, grouped, vetoes["words"])
     return {
         "nominal_lemmas": nominal_count,
         "verb_lemmas": verb_count,
         "closed_rows": closed_count,
+        "vetoed_lemmas": len(vetoes["lemmas"]),
+        "vetoed_words": len(vetoes["words"]),
         "words": words,
     }
 
