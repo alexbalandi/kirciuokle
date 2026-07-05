@@ -23,3 +23,4 @@ local/data/
 .venv-train/
 local/tagger-hf/artifacts/
 local/tagger-hf/release/hf-*/
+local/accentuator/data/
