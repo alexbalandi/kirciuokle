@@ -428,19 +428,19 @@ describe("local-first accentuation", () => {
 });
 
 describe("tokenizeLikeVdu edge cases", () => {
-  it("keeps pre-accented words whole and untouched (NON_LT)", () => {
+  it("re-accents pre-accented words by their stripped dictionary key", () => {
     // "mė́nuo" carries a combining acute (no precomposed form exists for ė́)
     const { textParts, lookupWords } = tokenizeLikeVdu("Tas mė́nuo baigėsi.");
 
     expect(textParts.map((p) => [p.string, p.type])).toEqual([
       ["Tas", "WORD"],
       [" ", "SEPARATOR"],
-      ["mė́nuo".normalize("NFC"), "NON_LT"],
+      ["mė́nuo".normalize("NFC"), "WORD"],
       [" ", "SEPARATOR"],
       ["baigėsi", "WORD"],
       [".", "SEPARATOR"],
     ]);
-    expect(lookupWords.map((w) => w.key)).toEqual(["tas", "baigėsi"]);
+    expect(lookupWords.map((w) => w.key)).toEqual(["tas", "mėnuo", "baigėsi"]);
   });
 
   it("treats pers. as an abbreviation", () => {

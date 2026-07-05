@@ -146,8 +146,16 @@ export async function lookupWordVariantsD1(
   return entry.variants;
 }
 
+const STRESS_MARKS_RE = /[̀́̃]/g;
+
+/** Remove grave/acute/tilde stress marks so accented input maps to the same
+    dictionary key as plain input (re-accenting is idempotent). */
+export function stripStressMarks(word: string): string {
+  return word.normalize("NFD").replace(STRESS_MARKS_RE, "").normalize("NFC");
+}
+
 export function normalizeWordKey(word: string): string {
-  return word.normalize("NFC").toLowerCase();
+  return stripStressMarks(word).toLowerCase();
 }
 
 function normalizePutEntries(

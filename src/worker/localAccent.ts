@@ -3,6 +3,7 @@ import {
   getWords,
   lookupWordVariantsD1,
   normalizeWordKey,
+  stripStressMarks,
   putWords,
   type WordDictionaryEntry,
   type WordDictionaryEnv,
@@ -17,8 +18,8 @@ import {
 import { matchCase } from "./disambiguation";
 
 // Combining marks stay inside the token so pre-accented input (e.g. a
-// pasted "mė́nuo") is treated as one NON_LT word and left untouched instead
-// of being split at the mark and re-accented around it.
+// pasted "mė́nuo") stays one word; its stress marks are stripped for the
+// dictionary key so re-accenting a previous result is idempotent.
 const WORD_RE = /[\p{L}\p{M}]+/gu;
 const LT_WORD_RE = /^[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]+$/u;
 const ROMAN_NUMERAL_RE = /^[IVXLCDM]+$/u;
@@ -183,7 +184,8 @@ export function tokenizeLikeVdu(text: string): TokenizedText {
 
     if (ROMAN_NUMERAL_RE.test(word)) {
       textParts.push({ string: word, type: "WITH_NUMBER" });
-    } else if (LT_WORD_RE.test(word)) {
+    } else if (LT_WORD_RE.test(stripStressMarks(word))) {
+      // pre-accented input (a pasted result) re-accents like plain input
       const key = normalizeWordKey(word);
       textParts.push({ string: word, type: "WORD" });
       lookupWords.push({ partIndex, text: word, key });
