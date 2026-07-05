@@ -4,6 +4,7 @@ import type {
   Part,
   WordResponse,
 } from "../shared/types";
+import { parseMi, scoreTags } from "../shared/tags";
 import {
   detectLang,
   LANGS,
@@ -315,15 +316,16 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
   }
 
   const interactive = Boolean(part.ambiguous);
+  const chosenMi = bestReadingMi(part);
 
   // Display order: the variant that is actually shown in the result (or the
   // one carrying the tagger-matched reading) comes first, so the relevant
   // group is always at the top. Original indices are kept for selection.
   const order = variants.map((_, variantIndex) => variantIndex);
   let first = typeof part.chosen === "number" ? part.chosen : -1;
-  if ((first < 0 || first >= order.length) && part.chosenMi) {
+  if ((first < 0 || first >= order.length) && chosenMi) {
     first = variants.findIndex((variant) =>
-      variant.info.split("; ").some((reading) => readingMatchesMi(reading, part.chosenMi!)),
+      variant.info.split("; ").some((reading) => readingMatchesMi(reading, chosenMi)),
     );
   }
   if (first > 0 && first < order.length) {
@@ -355,7 +357,7 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
       // Mark the exact reading the tagger matched — only meaningful on the
       // variant that is actually shown in the result.
       const markChosen =
-        Boolean(part.chosenMi) &&
+        Boolean(chosenMi) &&
         !part.userChosen &&
         (!interactive || part.chosen === variantIndex);
       const info = document.createElement("span");
@@ -364,14 +366,14 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
       const displayReadings = markChosen
         ? [...readings].sort(
             (a, b) =>
-              Number(readingMatchesMi(b, part.chosenMi!)) -
-              Number(readingMatchesMi(a, part.chosenMi!)),
+              Number(readingMatchesMi(b, chosenMi!)) -
+              Number(readingMatchesMi(a, chosenMi!)),
           )
         : readings;
       displayReadings.forEach((reading) => {
         const row = document.createElement("span");
         row.className = "variant-reading";
-        if (markChosen && readingMatchesMi(reading, part.chosenMi!)) {
+        if (markChosen && readingMatchesMi(reading, chosenMi!)) {
           row.classList.add("is-chosen");
           row.title = UI[lang].legendResolved;
         }
@@ -398,6 +400,33 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
   });
 
   positionPopover(popover, anchor);
+}
+
+function bestReadingMi(part: RenderedPart): string | undefined {
+  if (part.chosenMi) {
+    return part.chosenMi;
+  }
+  if (!part.tokenTags) {
+    return undefined;
+  }
+
+  // Readings fetched after the accent response: score them here with the
+  // token tags the server shipped alongside the word.
+  let best: { mi: string; score: number } | null = null;
+  for (const variant of part.variants ?? []) {
+    for (const reading of variant.info.split("; ")) {
+      const mi = reading.split(" - ")[0]?.trim();
+      if (!mi) {
+        continue;
+      }
+      const score = scoreTags(parseMi(mi), part.tokenTags);
+      if (!best || score > best.score) {
+        best = { mi, score };
+      }
+    }
+  }
+
+  return best && best.score > 0 ? best.mi : undefined;
 }
 
 function readingMatchesMi(reading: string, mi: string): boolean {

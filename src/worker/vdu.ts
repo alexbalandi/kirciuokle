@@ -337,21 +337,33 @@ export async function accentTextParts(
 
     const token = aligned[wordIndex] ?? null;
     wordIndex += 1;
+    const context = token ? tokenTags(token) : undefined;
+    const contextTags = context && Object.keys(context).length > 0 ? context : undefined;
 
     if (original.accentType !== "MULTIPLE_MEANING") {
-      if (!options.attachInfoForAll || part.unknown || !part.accented) {
+      if (part.unknown || !part.accented) {
         return part;
       }
 
-      // Plain word: attach the dictionary readings so the UI can show
-      // morphology on demand, and mark the reading the tagger matched.
+      // Plain word: the token tags always travel along so lazily-fetched
+      // readings can be scored client-side; with attachInfoForAll the
+      // dictionary readings and the matched reading ship right away.
+      const enriched: Part = { ...part };
+      if (contextTags) {
+        enriched.tokenTags = contextTags;
+      }
+
+      if (!options.attachInfoForAll) {
+        return enriched;
+      }
+
       const raw = variantsByWord.get(normalizeWordKey(original.string ?? "")) ?? [];
       if (raw.length === 0) {
-        return part;
+        return enriched;
       }
 
-      const enriched: Part = { ...part, variants: toPublicVariants(raw) };
-      const readingMi = token ? pickReadingMi(raw, tokenTags(token)) : undefined;
+      enriched.variants = toPublicVariants(raw);
+      const readingMi = contextTags ? pickReadingMi(raw, contextTags) : undefined;
       if (readingMi) {
         enriched.chosenMi = readingMi;
       }
@@ -377,10 +389,10 @@ export async function accentTextParts(
     );
 
     const readingMi =
-      token && safeVariants.length > 0
+      contextTags && safeVariants.length > 0
         ? pickReadingMi(
             selectedVariant ? [selectedVariant] : safeVariants,
-            tokenTags(token),
+            contextTags,
           )
         : undefined;
 
@@ -396,6 +408,9 @@ export async function accentTextParts(
       if (readingMi) {
         resolved.chosenMi = readingMi;
       }
+      if (contextTags) {
+        resolved.tokenTags = contextTags;
+      }
       return resolved;
     }
 
@@ -405,6 +420,10 @@ export async function accentTextParts(
       accented: matchCase(accented, part.text).normalize("NFC"),
       variants: publicVariants,
     };
+
+    if (contextTags) {
+      chosenPart.tokenTags = contextTags;
+    }
 
     if (choice.index !== null) {
       chosenPart.chosen = choice.index;
