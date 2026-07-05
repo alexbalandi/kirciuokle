@@ -2,17 +2,22 @@
 # requires-python = ">=3.11"
 # dependencies = ["phonology_engine"]
 # ///
-"""Guesser tier: LIEPA accentuation for words no open source covers.
+"""Guesser tier: stress guesses for words no open source covers.
 
-The BSD-licensed phonology_engine (native accentuation components of the
-LIEPA speech synthesizer) answers arbitrary words. Benchmarked against the
-VDU cache it agrees 87.9% exact-variant / 95.3% stress-position on exactly
-the dictionary-gap words — good enough for a clearly-labelled lowest-
-confidence tier, not good enough to enter the main artifact (which holds a
-zero-disagreement gate).
+Builds guesses.sqlite (words schema) for every wordlist/VDU-key word the
+main artifact does not cover. Selectable backends (SPEC18), each recorded
+in per-word provenance; cascades try stages in order and the first stage
+that answers wins:
 
-Writes guesses.sqlite in the words schema with `liepa-guess` provenance for
-every wordlist/VDU-key word the main artifact does not cover.
+- `liepa` (default): BSD-licensed phonology_engine wrapping the LIEPA
+  synthesizer components — 88.1% exact on the dictionary-gap slice.
+- `anbinderis`: Anbinderis & Kasparaitis 2010 letter rules trained on our
+  own dictionary (fully open provenance; abstains on ambiguity).
+- `nn`: litlat-bert + char cross-attention head (train_stress_nn.py
+  checkpoint; needs the .venv-train interpreter), `--min-confidence` gated.
+
+Numbers per candidate: reports/guesser-bench.md. This tier is deliberately
+separate from generated.sqlite, which holds a zero-disagreement gate.
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import sys
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +51,11 @@ except ImportError:  # pragma: no cover
 
 MARKS = {"0": "̀", "1": "́", "2": "̃"}
 DEFAULT_GUESSES = DATA_DIR / "guesses.sqlite"
+BACKENDS = ("liepa", "anbinderis", "nn", "anbinderis+liepa", "nn+liepa", "anbinderis+nn+liepa")
+
+
+class BackendLoadError(Exception):
+    pass
 
 
 def engine_accent(pe, word: str) -> str | None:
@@ -57,13 +68,128 @@ def engine_accent(pe, word: str) -> str | None:
     return form if strip_accents(form) == word else None
 
 
+class LiepaBackend:
+    name = "liepa"
+
+    def __init__(self) -> None:
+        from phonology_engine import PhonologyEngine
+
+        self.pe = PhonologyEngine()
+
+    def predict_many(self, words: list[str]) -> list[tuple[str, float | None] | None]:
+        return [
+            (form, None) if form else None
+            for form in (engine_accent(self.pe, word) for word in words)
+        ]
+
+
+class AnbinderisBackend:
+    name = "anbinderis"
+
+    def __init__(self) -> None:
+        try:  # pragma: no cover
+            from .anbinderis_rules import AnbinderisModel
+            from .train_guesser import load_training
+        except ImportError:  # pragma: no cover
+            from anbinderis_rules import AnbinderisModel
+            from train_guesser import load_training
+
+        self.model = AnbinderisModel(load_training(DEFAULT_GENERATED))
+
+    def predict_many(self, words: list[str]) -> list[tuple[str, float | None] | None]:
+        return [
+            (form, None) if form else None
+            for form in (self.model.predict_form(word) for word in words)
+        ]
+
+
+class NNBackend:
+    name = "nn"
+
+    def __init__(self, min_confidence: float) -> None:
+        try:
+            import torch
+            from transformers import AutoModel, AutoTokenizer
+        except ModuleNotFoundError as exc:
+            raise BackendLoadError(
+                "nn backend requires torch/transformers; run with .venv-train/Scripts/python.exe"
+            ) from exc
+        try:  # pragma: no cover
+            from .train_stress_nn import ENCODER, MAX_CHARS, OUT_DIR, StressModel, batch_predict
+        except ImportError:  # pragma: no cover
+            from train_stress_nn import ENCODER, MAX_CHARS, OUT_DIR, StressModel, batch_predict
+
+        ckpt = torch.load(OUT_DIR / "stress_nn.pt", map_location="cpu", weights_only=False)
+        tokenizer = AutoTokenizer.from_pretrained(ckpt.get("encoder", ENCODER))
+        model = StressModel(AutoModel.from_pretrained(ckpt.get("encoder", ENCODER)),
+                            len(ckpt["char_vocab"]) + 2)
+        model.load_state_dict(ckpt["state_dict"])
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model = model.to(self.device)
+        self.tokenizer = tokenizer
+        self.char_vocab = ckpt["char_vocab"]
+        self.batch_predict = batch_predict
+        self.max_chars = MAX_CHARS
+        self.min_confidence = min_confidence
+
+    def predict_many(self, words: list[str]) -> list[tuple[str, float | None] | None]:
+        out: list[tuple[str, float | None] | None] = [None] * len(words)
+        positions = [i for i, word in enumerate(words) if len(word) <= self.max_chars]
+        eligible = [words[i] for i in positions]
+        preds = self.batch_predict(self.model, self.tokenizer, self.char_vocab, eligible, self.device)
+        for i, pred in zip(positions, preds):
+            if pred is None:
+                continue
+            form, conf = pred
+            if conf >= self.min_confidence:
+                out[i] = (form, conf)
+        return out
+
+
+def build_backends(spec: str, min_confidence: float):
+    stages = []
+    for name in spec.split("+"):
+        if name == "liepa":
+            stages.append(LiepaBackend())
+        elif name == "anbinderis":
+            stages.append(AnbinderisBackend())
+        elif name == "nn":
+            stages.append(NNBackend(min_confidence))
+    return stages
+
+
+def run_cascade(backends, words: list[str]):
+    results = [None] * len(words)
+    remaining = list(range(len(words)))
+    for backend in backends:
+        preds = backend.predict_many([words[i] for i in remaining])
+        next_remaining = []
+        for i, pred in zip(remaining, preds):
+            if pred is None:
+                next_remaining.append(i)
+            else:
+                form, conf = pred
+                results[i] = (backend.name, form, conf)
+        remaining = next_remaining
+        if not remaining:
+            break
+    return results
+
+
+def provenance(name: str, word: str, conf: float | None) -> str:
+    if name == "nn":
+        return f"open-accentuator:nn-guess:{word}:conf={conf:.3f}"
+    return f"open-accentuator:{name}-guess:{word}"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=DEFAULT_GUESSES)
     parser.add_argument("--wordlist", type=Path, default=DATA_DIR / "lt_50k.txt")
+    parser.add_argument("--backend", choices=BACKENDS, default="liepa")
+    parser.add_argument("--min-confidence", type=float, default=0.0)
+    parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args(argv)
-
-    from phonology_engine import PhonologyEngine
 
     covered = set()
     if DEFAULT_GENERATED.exists():
@@ -80,8 +206,15 @@ def main(argv: list[str] | None = None) -> int:
         vdu = sqlite3.connect(DEFAULT_VDU_SQLITE)
         candidates |= {w for (w,) in vdu.execute("SELECT word FROM words")}
     todo = sorted(w for w in candidates if w not in covered and w.isalpha())
+    if args.limit is not None:
+        todo = todo[: args.limit]
 
-    pe = PhonologyEngine()
+    try:
+        backends = build_backends(args.backend, args.min_confidence)
+    except BackendLoadError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    counts = {backend.name: 0 for backend in backends}
     now = datetime.now(timezone.utc).isoformat()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.output.exists():
@@ -97,20 +230,25 @@ def main(argv: list[str] | None = None) -> int:
         """
     )
     rows = []
-    for word in todo:
-        form = engine_accent(pe, word)
-        if not form:
+    for word, pred in zip(todo, run_cascade(backends, todo)):
+        if pred is None:
             continue
+        backend_name, form, conf = pred
+        counts[backend_name] += 1
         variants = json.dumps(
             [{"form": form, "info": "spėjimas", "mi": []}],
             ensure_ascii=False, separators=(",", ":"),
         )
         rows.append((word, variants, now, None, form, "ONE",
                      form[:1].upper() + form[1:], "ONE",
-                     f"open-accentuator:liepa-guess:{word}"))
+                     provenance(backend_name, word, conf)))
     out.executemany("INSERT OR IGNORE INTO words VALUES (?,?,?,?,?,?,?,?,?)", rows)
     out.commit()
-    print(f"guessed {len(rows):,} of {len(todo):,} uncovered candidates -> {args.output}")
+    if len(backends) > 1:
+        by_backend = " + ".join(f"{backend.name} {counts[backend.name]:,}" for backend in backends)
+        print(f"guessed {len(rows):,} ({by_backend}) of {len(todo):,} uncovered candidates -> {args.output}")
+    else:
+        print(f"guessed {len(rows):,} of {len(todo):,} uncovered candidates -> {args.output}")
     return 0
 
 
