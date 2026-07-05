@@ -55,6 +55,7 @@ class PooledDataCollator:
         custom_keys = {
             "labels",
             "slot_labels",
+            "lemma_labels",
             "first_subword_indices",
             "last_subword_indices",
         }
@@ -76,6 +77,11 @@ class PooledDataCollator:
                 self.slot_count,
                 self.label_pad_token_id,
             )
+
+        lemma_labels = [feature.get("lemma_labels") for feature in features]
+        if any(value is not None for value in lemma_labels):
+            normalized = [value if value is not None else [] for value in lemma_labels]
+            batch["lemma_labels"] = self._pad_1d(normalized, self.label_pad_token_id)
 
         for key in ("first_subword_indices", "last_subword_indices"):
             values = [feature.get(key) for feature in features]
@@ -117,6 +123,7 @@ class PooledTokenClassifier(nn.Module):
         pooling: str,
         labels: list[str] | None = None,
         slots: dict[str, list[str]] | None = None,
+        lemma_scripts: list[str] | None = None,
     ) -> None:
         super().__init__()
         self.encoder = encoder
@@ -124,6 +131,7 @@ class PooledTokenClassifier(nn.Module):
         self.pooling = pooling
         self.labels = list(labels or [])
         self.slots = dict(slots or {})
+        self.lemma_scripts = list(lemma_scripts or [])
         self.slot_names = list(self.slots)
         self.hidden_size = hidden_size_from_config(encoder.config)
         classifier_input = self.hidden_size * (2 if pooling == "first_last" else 1)
@@ -145,6 +153,11 @@ class PooledTokenClassifier(nn.Module):
             )
         else:
             raise ValueError(f"unknown head: {head}")
+        self.lemma_classifier = (
+            nn.Linear(classifier_input, len(self.lemma_scripts))
+            if self.lemma_scripts
+            else None
+        )
 
     def forward(
         self,
@@ -155,6 +168,7 @@ class PooledTokenClassifier(nn.Module):
         last_subword_indices: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         slot_labels: torch.Tensor | None = None,
+        lemma_labels: torch.Tensor | None = None,
         **_: object,
     ) -> TokenClassifierOutput:
         outputs = self.encoder(
@@ -167,8 +181,8 @@ class PooledTokenClassifier(nn.Module):
             first_subword_indices,
             last_subword_indices,
         )
-        logits = self._head_logits(representations)
-        loss = self._loss(logits, labels, slot_labels)
+        logits = self._output_logits(representations)
+        loss = self._loss(logits, labels, slot_labels, lemma_labels)
         return TokenClassifierOutput(loss=loss, logits=logits)
 
     def _pooled_representations(
@@ -199,7 +213,40 @@ class PooledTokenClassifier(nn.Module):
             for slot in self.slot_names
         )
 
+    def _output_logits(self, representations: torch.Tensor) -> torch.Tensor | tuple:
+        head_logits = self._head_logits(representations)
+        if self.lemma_classifier is None:
+            return head_logits
+        lemma_logits = self.lemma_classifier(representations)
+        if isinstance(head_logits, tuple):
+            return (*head_logits, lemma_logits)
+        return (head_logits, lemma_logits)
+
     def _loss(
+        self,
+        logits: torch.Tensor | tuple,
+        labels: torch.Tensor | None,
+        slot_labels: torch.Tensor | None,
+        lemma_labels: torch.Tensor | None,
+    ) -> torch.Tensor | None:
+        head_logits = logits
+        lemma_logits: torch.Tensor | None = None
+        if self.lemma_classifier is not None:
+            if not isinstance(logits, tuple):
+                raise ValueError("lemma head expects tuple logits")
+            lemma_logits = logits[-1]
+            head_logits = logits[:-1]
+            if self.head == "combined":
+                head_logits = head_logits[0]
+
+        main_loss = self._main_loss(head_logits, labels, slot_labels)
+        lemma_loss = self._lemma_loss(lemma_logits, lemma_labels)
+        losses = [loss for loss in (main_loss, lemma_loss) if loss is not None]
+        if not losses:
+            return None
+        return torch.stack(losses).mean()
+
+    def _main_loss(
         self,
         logits: torch.Tensor | tuple,
         labels: torch.Tensor | None,
@@ -235,19 +282,39 @@ class PooledTokenClassifier(nn.Module):
             return first_logits.sum() * 0.0
         return torch.stack(losses).mean()
 
+    def _lemma_loss(
+        self,
+        lemma_logits: torch.Tensor | None,
+        lemma_labels: torch.Tensor | None,
+    ) -> torch.Tensor | None:
+        if lemma_logits is None or lemma_labels is None:
+            return None
+        return F.cross_entropy(
+            lemma_logits.reshape(-1, lemma_logits.shape[-1]),
+            lemma_labels.reshape(-1),
+            ignore_index=LABEL_PAD_ID,
+        )
+
     def full_sequence_logits(self, hidden: torch.Tensor) -> torch.Tensor | tuple:
+        head_logits: torch.Tensor | tuple
         if self.pooling != "first_last":
-            return self._head_logits(hidden)
+            return self._output_logits(hidden)
 
         if self.head == "combined":
             assert self.classifier is not None
-            return self._first_last_parts(hidden, self.classifier)
-
-        assert self.classifiers is not None
-        return tuple(
-            self._first_last_parts(hidden, self.classifiers[slot_output_name(slot)])
-            for slot in self.slot_names
-        )
+            head_logits = self._first_last_parts(hidden, self.classifier)
+        else:
+            assert self.classifiers is not None
+            head_logits = tuple(
+                self._first_last_parts(hidden, self.classifiers[slot_output_name(slot)])
+                for slot in self.slot_names
+            )
+        if self.lemma_classifier is None:
+            return head_logits
+        lemma_logits = self._first_last_parts(hidden, self.lemma_classifier)
+        if isinstance(head_logits, tuple):
+            return (*head_logits, lemma_logits)
+        return (head_logits, lemma_logits)
 
     def _first_last_parts(self, hidden: torch.Tensor, classifier: nn.Linear) -> torch.Tensor:
         left_weight = classifier.weight[:, : self.hidden_size]
@@ -287,6 +354,7 @@ def create_custom_model(
     pooling: str,
     labels: list[str] | None = None,
     slots: dict[str, list[str]] | None = None,
+    lemma_scripts: list[str] | None = None,
 ) -> PooledTokenClassifier:
     from transformers import AutoModel
 
@@ -297,6 +365,7 @@ def create_custom_model(
         pooling=pooling,
         labels=labels,
         slots=slots,
+        lemma_scripts=lemma_scripts,
     )
 
 
@@ -311,6 +380,7 @@ def load_custom_model(model_dir: Path, head_config: dict) -> PooledTokenClassifi
         pooling=head_config["pooling"],
         labels=head_config.get("labels"),
         slots=head_config.get("slots"),
+        lemma_scripts=head_config.get("lemma_scripts"),
     )
     state_path = model_dir / "pytorch_model.bin"
     if not state_path.exists():

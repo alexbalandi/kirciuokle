@@ -50,8 +50,12 @@ def slot_output_name(slot: str) -> str:
 
 def output_names_for_config(head_config: dict) -> list[str]:
     if head_config["head"] == "combined":
-        return ["logits"]
-    return [slot_output_name(slot) for slot in head_config["slots"]]
+        names = ["logits"]
+    else:
+        names = [slot_output_name(slot) for slot in head_config["slots"]]
+    if head_config.get("lemma_scripts"):
+        names.append("lemma_logits")
+    return names
 
 
 def labels_from_file(path: Path) -> list[str]:
@@ -167,6 +171,7 @@ def build_head_config(
     max_length: int,
     labels: list[str] | None = None,
     slots: dict[str, list[str]] | None = None,
+    lemma_scripts: list[str] | None = None,
 ) -> dict:
     validate_head(head)
     validate_pooling(pooling)
@@ -185,6 +190,8 @@ def build_head_config(
         if slots is None:
             raise ValueError("factored head_config requires slots")
         payload["slots"] = normalize_slots(slots)
+    if lemma_scripts is not None:
+        payload["lemma_scripts"] = list(lemma_scripts)
     return payload
 
 
@@ -199,6 +206,8 @@ def load_head_config(model_dir: Path) -> dict:
         payload["labels"] = [str(label) for label in payload["labels"]]
     else:
         payload["slots"] = normalize_slots(payload["slots"])
+    if payload.get("lemma_scripts") is not None:
+        payload["lemma_scripts"] = [str(script) for script in payload["lemma_scripts"]]
     payload["hidden_size"] = int(payload["hidden_size"])
     payload["max_length"] = int(payload["max_length"])
     payload["base_model"] = str(payload["base_model"])

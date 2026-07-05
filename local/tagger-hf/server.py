@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Iterable
 
 from head_config import load_head_config
-from inference_utils import outputs_to_labels
+from inference_utils import outputs_to_labels, outputs_to_lemma_scripts
+from lemma_scripts import apply_lemma_script
 
 try:
     from fastapi import FastAPI, Form
@@ -122,19 +123,23 @@ def split_label(label: str) -> tuple[str, str]:
     return upos or "X", feats or "_"
 
 
-def lemma_for(form: str, upos: str) -> str:
+def lemma_for(form: str, upos: str, decoded_lemma: str | None = None) -> str:
     lowered = form.lower()
     # The accent pipeline's yra→yrà exception keys on lemma "būti". MATAS
     # labels copular būti VERB (not AUX per UD), so accept both — the
     # competing reading (ỹra from "irti", to crumble) is vanishingly rare
     # in running text and stays user-overridable in the UI.
     if lowered == "yra" and upos in ("AUX", "VERB"):
+        if decoded_lemma is not None and decoded_lemma != "būti":
+            return "būti"
         return "būti"
-    return lowered
+    return decoded_lemma if decoded_lemma is not None else lowered
 
 
-def predict_labels(words: list[str], rt: Runtime) -> list[str]:
+def predict_tags(words: list[str], rt: Runtime) -> tuple[list[str], list[str] | None]:
     labels: list[str] = []
+    lemmas: list[str] = []
+    has_lemma_head = bool(rt.head_config.get("lemma_scripts"))
     for start in range(0, len(words), rt.chunk_words):
         chunk = words[start : start + rt.chunk_words]
         encoded = rt.tokenizer(
@@ -149,18 +154,40 @@ def predict_labels(words: list[str], rt: Runtime) -> list[str]:
         }
         values = rt.session.run(rt.output_names, ort_inputs)
         outputs = dict(zip(rt.output_names, values))
+        word_ids = encoded.word_ids(batch_index=0)
         labels.extend(
             outputs_to_labels(
                 outputs=outputs,
-                word_ids=encoded.word_ids(batch_index=0),
+                word_ids=word_ids,
                 word_count=len(chunk),
                 head_config=rt.head_config,
             )
         )
+        if has_lemma_head:
+            lemma_scripts = outputs_to_lemma_scripts(
+                outputs=outputs,
+                word_ids=word_ids,
+                word_count=len(chunk),
+                head_config=rt.head_config,
+            )
+            lemmas.extend(
+                apply_lemma_script(form, script) if script else form.lower()
+                for form, script in zip(chunk, lemma_scripts)
+            )
+    return labels, lemmas if has_lemma_head else None
+
+
+def predict_labels(words: list[str], rt: Runtime) -> list[str]:
+    labels, _ = predict_tags(words, rt)
     return labels
 
 
-def to_conllu(text: str, sentences: list[list[Word]], labels: list[str]) -> str:
+def to_conllu(
+    text: str,
+    sentences: list[list[Word]],
+    labels: list[str],
+    lemmas: list[str] | None = None,
+) -> str:
     lines: list[str] = []
     label_index = 0
     for sentence_index, sentence in enumerate(sentences, start=1):
@@ -169,11 +196,12 @@ def to_conllu(text: str, sentences: list[list[Word]], labels: list[str]) -> str:
         lines.append(f"# text = {sentence_text}")
         for token_index, word in enumerate(sentence, start=1):
             upos, feats = split_label(labels[label_index])
+            decoded_lemma = lemmas[label_index] if lemmas is not None else None
             label_index += 1
             columns = [
                 str(token_index),
                 word.form,
-                lemma_for(word.form, upos),
+                lemma_for(word.form, upos, decoded_lemma),
                 upos,
                 "_",
                 feats if feats else "_",
@@ -214,7 +242,7 @@ def tag_conllu(data: str) -> str:
     """UDPipe-style input=conllu mode: tag the given tokens, exact alignment."""
     sentences = conllu_sentences(data)
     forms = [form for sentence in sentences for form in sentence]
-    labels = predict_labels(forms, runtime()) if forms else []
+    labels, lemmas = predict_tags(forms, runtime()) if forms else ([], None)
     lines: list[str] = []
     label_index = 0
     for sentence_index, sentence in enumerate(sentences, start=1):
@@ -222,13 +250,14 @@ def tag_conllu(data: str) -> str:
         lines.append(f"# text = {' '.join(sentence)}")
         for token_index, form in enumerate(sentence, start=1):
             upos, feats = split_label(labels[label_index])
+            decoded_lemma = lemmas[label_index] if lemmas is not None else None
             label_index += 1
             lines.append(
                 "\t".join(
                     [
                         str(token_index),
                         form,
-                        lemma_for(form, upos),
+                        lemma_for(form, upos, decoded_lemma),
                         upos,
                         "_",
                         feats if feats else "_",
@@ -255,8 +284,8 @@ async def process_request(
         return {"result": tag_conllu(data)}
     sentences = split_sentences(data)
     forms = [word.form for sentence in sentences for word in sentence]
-    labels = predict_labels(forms, runtime()) if forms else []
-    return {"result": to_conllu(data, sentences, labels)}
+    labels, lemmas = predict_tags(forms, runtime()) if forms else ([], None)
+    return {"result": to_conllu(data, sentences, labels, lemmas)}
 
 
 if app is not None:

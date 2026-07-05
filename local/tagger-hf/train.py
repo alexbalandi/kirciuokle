@@ -23,10 +23,12 @@ from head_config import (
     derive_run_name,
     label_token_positions,
     labels_from_file,
+    represented_word_indices,
     slot_ids_for_label,
     word_piece_spans,
     write_head_config,
 )
+from lemma_scripts import apply_lemma_script
 from metrics import evaluate_label_pairs
 
 
@@ -42,6 +44,12 @@ def load_labels(path: Path) -> tuple[list[str], dict[str, int], dict[int, str]]:
     label2id = {label: index for index, label in enumerate(labels)}
     id2label = {index: label for index, label in enumerate(labels)}
     return labels, label2id, id2label
+
+
+def load_lemma_scripts(path: Path) -> tuple[list[str], dict[str, int]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    scripts = [str(script) for script in payload["lemma_scripts"]]
+    return scripts, {script: index for index, script in enumerate(scripts)}
 
 
 def resolve_run_dir(args: argparse.Namespace) -> Path:
@@ -83,7 +91,9 @@ def training_arguments_kwargs(args: argparse.Namespace) -> dict:
     else:
         kwargs["evaluation_strategy"] = "epoch"
     if "label_names" in parameters:
-        kwargs["label_names"] = ["labels"]
+        kwargs["label_names"] = (
+            ["labels", "lemma_labels"] if args.lemma_head else ["labels"]
+        )
     kwargs["save_strategy"] = "epoch"
     return kwargs
 
@@ -110,7 +120,7 @@ def labels_in_rows(rows: Iterable[dict]) -> list[str]:
 
 
 def uses_custom_model(args: argparse.Namespace) -> bool:
-    return args.head == "factored" or args.subword_pooling == "first_last"
+    return args.lemma_head or args.head == "factored" or args.subword_pooling == "first_last"
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -132,6 +142,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         help="compatibility alias for the full run directory",
     )
     parser.add_argument("--head", choices=VALID_HEADS, default="combined")
+    parser.add_argument(
+        "--lemma-head",
+        action="store_true",
+        help="train an auxiliary FORM→LEMMA edit-script classifier head",
+    )
     parser.add_argument(
         "--subword-pooling",
         choices=VALID_POOLINGS,
@@ -173,6 +188,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         {
             "run_name": args.run_name,
             "head": args.head,
+            "lemma_head": args.lemma_head,
             "pooling": args.subword_pooling,
             "evaluations": [],
         },
@@ -201,6 +217,12 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     labels_path = args.data_dir / "labels.json"
     labels, label2id, id2label = load_labels(labels_path)
+    lemma_scripts: list[str] = []
+    lemma_script2id: dict[str, int] = {}
+    if args.lemma_head:
+        lemma_scripts, lemma_script2id = load_lemma_scripts(
+            args.data_dir / "lemma_scripts.json"
+        )
 
     data_files = {
         "train": str(args.data_dir / "train.jsonl"),
@@ -232,13 +254,38 @@ def main(argv: Iterable[str] | None = None) -> int:
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         if uses_custom_model(args):
-            model = create_custom_model(
-                model_name=model_name,
-                head=args.head,
-                pooling=args.subword_pooling,
-                labels=labels if args.head == "combined" else None,
-                slots=slots,
-            )
+            # A previously saved custom checkpoint must be restored through
+            # load_custom_model — AutoModel.from_pretrained cannot map the
+            # wrapper's weights and would silently reinitialize them.
+            candidate = Path(model_name)
+            if (candidate / "head_config.json").exists() and (
+                candidate / "pytorch_model.bin"
+            ).exists():
+                from head_config import load_head_config
+                from head_modeling import load_custom_model
+
+                checkpoint_config = load_head_config(candidate)
+                if args.head == "combined" and checkpoint_config.get("labels") != labels:
+                    raise RuntimeError(
+                        "checkpoint label inventory differs from the dataset's; "
+                        "align labels.json before continued fine-tuning"
+                    )
+                if args.lemma_head and checkpoint_config.get("lemma_scripts") != lemma_scripts:
+                    raise RuntimeError(
+                        "checkpoint lemma-script inventory differs from the "
+                        "dataset's; align lemma_scripts.json before continued "
+                        "fine-tuning"
+                    )
+                model = load_custom_model(candidate, checkpoint_config)
+            else:
+                model = create_custom_model(
+                    model_name=model_name,
+                    head=args.head,
+                    pooling=args.subword_pooling,
+                    labels=labels if args.head == "combined" else None,
+                    slots=slots,
+                    lemma_scripts=lemma_scripts if args.lemma_head else None,
+                )
         else:
             model = AutoModelForTokenClassification.from_pretrained(
                 model_name,
@@ -259,6 +306,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 pooling=args.subword_pooling,
                 labels=labels if args.head == "combined" else None,
                 slots=slots,
+                lemma_scripts=lemma_scripts if args.lemma_head else None,
             )
         else:
             model = AutoModelForTokenClassification.from_pretrained(
@@ -283,10 +331,14 @@ def main(argv: Iterable[str] | None = None) -> int:
         )
         aligned_labels: list[list[int]] = []
         aligned_slot_labels: list[list[list[int]]] = []
+        aligned_lemma_labels: list[list[int]] = []
         first_indices_batch: list[list[int]] = []
         last_indices_batch: list[list[int]] = []
 
         for batch_index, sentence_labels in enumerate(batch["labels"]):
+            sentence_scripts = (
+                batch["lemma_scripts"][batch_index] if args.lemma_head else []
+            )
             word_ids = list(tokenized.word_ids(batch_index=batch_index))
             word_count = len(sentence_labels)
 
@@ -294,6 +346,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 first, last = word_piece_spans(word_ids, word_count)
                 sentence_ids: list[int] = []
                 sentence_slot_ids: list[list[int]] = []
+                sentence_lemma_ids: list[int] = []
                 first_indices: list[int] = []
                 last_indices: list[int] = []
                 for word_index, label in enumerate(sentence_labels):
@@ -302,17 +355,24 @@ def main(argv: Iterable[str] | None = None) -> int:
                     first_indices.append(first[word_index])
                     last_indices.append(last[word_index])
                     sentence_ids.append(encode_combined_label(label))
+                    if args.lemma_head:
+                        sentence_lemma_ids.append(
+                            lemma_script2id.get(sentence_scripts[word_index], -100)
+                        )
                     if slots is not None:
                         sentence_slot_ids.append(slot_ids_for_label(label, slots))
                 aligned_labels.append(sentence_ids)
                 first_indices_batch.append(first_indices)
                 last_indices_batch.append(last_indices)
+                if args.lemma_head:
+                    aligned_lemma_labels.append(sentence_lemma_ids)
                 if slots is not None:
                     aligned_slot_labels.append(sentence_slot_ids)
                 continue
 
             sentence_ids = [-100] * len(word_ids)
             sentence_slot_ids = [[-100] * slot_count for _ in word_ids]
+            sentence_lemma_ids = [-100] * len(word_ids)
             positions = label_token_positions(
                 word_ids,
                 word_count,
@@ -323,9 +383,16 @@ def main(argv: Iterable[str] | None = None) -> int:
                     continue
                 label = sentence_labels[word_index]
                 sentence_ids[token_index] = encode_combined_label(label)
+                if args.lemma_head:
+                    sentence_lemma_ids[token_index] = lemma_script2id.get(
+                        sentence_scripts[word_index],
+                        -100,
+                    )
                 if slots is not None:
                     sentence_slot_ids[token_index] = slot_ids_for_label(label, slots)
             aligned_labels.append(sentence_ids)
+            if args.lemma_head:
+                aligned_lemma_labels.append(sentence_lemma_ids)
             if slots is not None:
                 aligned_slot_labels.append(sentence_slot_ids)
 
@@ -335,6 +402,8 @@ def main(argv: Iterable[str] | None = None) -> int:
             tokenized["last_subword_indices"] = last_indices_batch
         if slots is not None:
             tokenized["slot_labels"] = aligned_slot_labels
+        if args.lemma_head:
+            tokenized["lemma_labels"] = aligned_lemma_labels
         return tokenized
 
     tokenized_dataset = dataset.map(
@@ -343,19 +412,68 @@ def main(argv: Iterable[str] | None = None) -> int:
         remove_columns=dataset["train"].column_names,
     )
 
+    def metric_lemma_context(split: str) -> list[tuple[str, str]]:
+        if not args.lemma_head:
+            return []
+        context: list[tuple[str, str]] = []
+        for row in dataset[split]:
+            encoded = tokenizer(
+                row["tokens"],
+                is_split_into_words=True,
+                truncation=True,
+                max_length=args.max_length,
+            )
+            word_ids = list(encoded.word_ids(batch_index=0))
+            word_count = len(row["tokens"])
+            if args.subword_pooling == "first_last":
+                word_indexes = represented_word_indices(word_ids, word_count)
+            else:
+                word_indexes = [
+                    index
+                    for index, token_index in enumerate(
+                        label_token_positions(
+                            word_ids,
+                            word_count,
+                            args.subword_pooling,
+                        )
+                    )
+                    if token_index != -1
+                ]
+            for word_index in word_indexes:
+                context.append((row["tokens"][word_index], row["lemmas"][word_index]))
+        return context
+
+    metric_lemma_contexts: dict[tuple[int, int, int], list[tuple[str, str]]] = {}
+    if args.lemma_head:
+        for split in ("dev", "test"):
+            context = metric_lemma_context(split)
+            label_lengths = [len(row) for row in tokenized_dataset[split]["labels"]]
+            signature = (
+                len(label_lengths),
+                max(label_lengths, default=0),
+                len(context),
+            )
+            metric_lemma_contexts.setdefault(signature, context)
+
     def compute_metrics(eval_prediction: object) -> dict[str, float]:
         import numpy as np
 
         predictions = getattr(eval_prediction, "predictions")
         label_ids = getattr(eval_prediction, "label_ids")
+        lemma_label_ids = None
         if isinstance(label_ids, tuple):
+            if args.lemma_head and len(label_ids) > 1:
+                lemma_label_ids = label_ids[1]
             label_ids = label_ids[0]
 
         pred_labels: list[str] = []
         gold_labels: list[str] = []
+        lemma_predictions = None
 
         if args.head == "combined":
             if isinstance(predictions, tuple):
+                if args.lemma_head and len(predictions) > 1:
+                    lemma_predictions = predictions[1]
                 predictions = predictions[0]
             pred_ids = np.argmax(predictions, axis=-1)
             mask = label_ids != -100
@@ -369,7 +487,11 @@ def main(argv: Iterable[str] | None = None) -> int:
             if not isinstance(predictions, (tuple, list)):
                 raise RuntimeError("factored model predictions must be per-slot tensors")
             assert slots is not None
-            slot_predictions = [np.argmax(item, axis=-1) for item in predictions]
+            slot_prediction_tensors = list(predictions)
+            if args.lemma_head:
+                lemma_predictions = slot_prediction_tensors[-1]
+                slot_prediction_tensors = slot_prediction_tensors[:-1]
+            slot_predictions = [np.argmax(item, axis=-1) for item in slot_prediction_tensors]
             active_positions = np.argwhere(label_ids != -100)
             for position in active_positions:
                 index = tuple(position.tolist())
@@ -379,13 +501,39 @@ def main(argv: Iterable[str] | None = None) -> int:
                 gold_labels.append(labels[gold_id] if gold_id < len(labels) else DEFAULT_LABEL)
 
         scored = evaluate_label_pairs(pred_labels, gold_labels)
-        return {
+        metrics = {
             "label_accuracy": float(scored["label_accuracy"]),
             "slot_accuracy": float(scored["slot_accuracy"]),
             "upos_accuracy": float(scored["upos_accuracy"]),
             "feats_exact_accuracy": float(scored["feats_exact_accuracy"]),
             "aux_verb_accuracy": float(scored["aux_verb_accuracy"]),
         }
+        if args.lemma_head and lemma_predictions is not None:
+            lemma_pred_ids = np.argmax(lemma_predictions, axis=-1)
+            lemma_mask = label_ids != -100
+            if lemma_label_ids is not None:
+                lemma_mask = lemma_mask & (lemma_label_ids != -100)
+            signature = (
+                int(label_ids.shape[0]),
+                int(label_ids.shape[1]) if len(label_ids.shape) > 1 else 0,
+                int(lemma_mask.sum()),
+            )
+            contexts = metric_lemma_contexts.get(signature)
+            lemma_ok = 0
+            lemma_total = 0
+            if contexts is not None:
+                for (form, gold_lemma), script_id in zip(
+                    contexts,
+                    lemma_pred_ids[lemma_mask].tolist(),
+                ):
+                    if 0 <= script_id < len(lemma_scripts):
+                        predicted_lemma = apply_lemma_script(form, lemma_scripts[script_id])
+                    else:
+                        predicted_lemma = form.lower()
+                    lemma_ok += int(predicted_lemma == gold_lemma)
+                    lemma_total += 1
+            metrics["lemma_accuracy"] = lemma_ok / lemma_total if lemma_total else 0.0
+        return metrics
 
     eval_records: list[dict[str, float | int | str | None]] = []
 
@@ -405,6 +553,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                     metrics.get("eval_feats_exact_accuracy", 0.0)
                 ),
                 "aux_verb_accuracy": float(metrics.get("eval_aux_verb_accuracy", 0.0)),
+                "lemma_accuracy": float(metrics.get("eval_lemma_accuracy", 0.0)),
             }
             eval_records.append(record)
             write_json(
@@ -412,6 +561,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 {
                     "run_name": args.run_name,
                     "head": args.head,
+                    "lemma_head": args.lemma_head,
                     "pooling": args.subword_pooling,
                     "evaluations": eval_records,
                 },
@@ -449,6 +599,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         trainer.save_model(str(best_dir))
     tokenizer.save_pretrained(str(best_dir))
     shutil.copy2(labels_path, best_dir / "labels.json")
+    if args.lemma_head:
+        shutil.copy2(args.data_dir / "lemma_scripts.json", best_dir / "lemma_scripts.json")
 
     hidden_size = (
         int(model.hidden_size)
@@ -463,6 +615,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         max_length=args.max_length,
         labels=labels if args.head == "combined" else None,
         slots=slots if args.head == "factored" else None,
+        lemma_scripts=lemma_scripts if args.lemma_head else None,
     )
     write_head_config(best_dir / "head_config.json", head_config)
     write_json(
@@ -474,6 +627,8 @@ def main(argv: Iterable[str] | None = None) -> int:
             "pooling": args.subword_pooling,
             "max_length": args.max_length,
             "label_count": len(labels),
+            "lemma_head": args.lemma_head,
+            "lemma_script_count": len(lemma_scripts),
             "slot_count": slot_count,
         },
     )
@@ -484,6 +639,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "requested_model": args.model_name,
         "base_model": model_name,
         "head": args.head,
+        "lemma_head": args.lemma_head,
         "pooling": args.subword_pooling,
         "data_dir": str(args.data_dir),
         "best_model_dir": str(best_dir),

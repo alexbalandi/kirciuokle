@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+from collections import Counter
 from pathlib import Path
 from typing import Iterable
 
@@ -19,6 +20,7 @@ from coverage_diff import (
     format_coverage_table,
     key_filter,
 )
+from lemma_scripts import make_lemma_script, script_inventory, top_script_coverage
 from metrics import combined_label, feats_string, parse_feats, split_label
 
 
@@ -79,6 +81,13 @@ JABLONSKIS_XPOS_TO_UD = {
     "veik": ("Voice", "Act"),
     "neveik": ("Voice", "Pass"),
     "reik": ("Voice", "Nec"),
+    # Definiteness / degree / polarity
+    "įvardž": ("Definite", "Def"),
+    "neįvardž": ("Definite", "Ind"),
+    "nelygin": ("Degree", "Pos"),
+    "teig": ("Polarity", "Pos"),
+    "neig": ("Polarity", "Neg"),
+    "savyb": ("Poss", "Yes"),
     # VerbForm
     "asm": ("VerbForm", "Fin"),
     "bndr": ("VerbForm", "Inf"),
@@ -88,6 +97,70 @@ JABLONSKIS_XPOS_TO_UD = {
     "būdn": ("VerbForm", "Part"),
     # Reflex
     "sngr": ("Reflex", "Yes"),
+}
+
+GENDER_VALUES = {"m": "Masc", "f": "Fem", "n": "Neut", "c": "Com"}
+NUMBER_VALUES = {"s": "Sing", "p": "Plur", "d": "Dual"}
+CASE_VALUES = {
+    "n": "Nom",
+    "g": "Gen",
+    "d": "Dat",
+    "a": "Acc",
+    "i": "Ins",
+    "l": "Loc",
+    "v": "Voc",
+    "x": "Ill",
+}
+DEGREE_VALUES = {"p": "Pos", "c": "Cmp", "s": "Sup", "d": "Dim"}
+DEFINITE_VALUES = {"n": "Ind", "y": "Def"}
+NUM_TYPE_VALUES = {"c": "Card", "o": "Ord", "m": "Mult", "l": "Sets"}
+NUM_FORM_VALUES = {"d": "Digit", "r": "Roman", "l": "Word", "m": "Word"}
+VERB_FORM_VALUES = {
+    "m": "Fin",
+    "i": "Inf",
+    "p": "Part",
+    "a": "Ger",
+    "h": "Conv",
+    "b": "Vadv",
+}
+TENSE_VALUES = {"p": "Pres", "a": "Past", "s": "Past", "q": "Past", "f": "Fut"}
+PERSON_VALUES = {"1": "1", "2": "2", "3": "3"}
+MOOD_VALUES = {"i": "Ind", "m": "Imp", "s": "Sub", "o": "Opt"}
+VOICE_VALUES = {"a": "Act", "p": "Pass", "n": "Nec"}
+NAME_TYPE_VALUES = {"g": "Geo", "f": "Giv", "s": "Sur"}
+
+PRON_TYPE_LEMMAS = {
+    "Dem": {
+        "tas",
+        "šis",
+        "šitas",
+        "anas",
+        "toks",
+        "šitoks",
+        "šioks",
+        "anoks",
+        "tiek",
+        "šitiek",
+    },
+    "Emp": {"pats"},
+    "Ind": {
+        "vienas",
+        "kitas",
+        "kitoks",
+        "kažkas",
+        "kažkuris",
+        "kažkoks",
+        "kažin kas",
+        "bet kas",
+        "bet kuris",
+        "bet koks",
+        "keletas",
+        "keli",
+    },
+    "Int,Rel": {"kas", "kuris", "koks", "katras", "kelintas", "kiek", "keliese"},
+    "Neg": {"niekas", "joks", "nė vienas", "nė koks", "nė kuris"},
+    "Prs": {"aš", "tu", "jis", "ji", "mes", "jūs", "savęs", "savas", "tavas"},
+    "Tot": {"visas", "kiekvienas", "abu", "abudu", "abi", "abidvi", "abeji"},
 }
 
 
@@ -130,6 +203,116 @@ def xpos_ud_feats(
     return feats
 
 
+def misc_value(misc: str, key: str) -> str:
+    prefix = f"{key}="
+    for part in (item for item in misc.split("|") if item):
+        if part.startswith(prefix):
+            return part[len(prefix) :]
+    return ""
+
+
+def _char(value: str, position: int) -> str:
+    index = position - 1
+    if index < 0 or index >= len(value):
+        return ""
+    char = value[index]
+    return "" if char == "-" else char
+
+
+def _add_feat(
+    feats: dict[str, str],
+    key: str,
+    value: str | None,
+    allowed: set[str] | None,
+) -> None:
+    if not value:
+        return
+    if allowed is not None and key not in allowed:
+        return
+    feats.setdefault(key, value)
+
+
+def pron_type_from_lemma(lemma: str) -> str | None:
+    normalized = " ".join(lemma.casefold().split())
+    if not normalized:
+        return None
+    for pron_type, lemmas in PRON_TYPE_LEMMAS.items():
+        if normalized in lemmas:
+            return pron_type
+    if normalized.startswith(("kaž", "bet ")):
+        return "Ind"
+    if normalized.startswith("nie"):
+        return "Neg"
+    return None
+
+
+def multext_ud_feats(
+    multext: str,
+    kept_keys: Iterable[str] | None = None,
+    lemma: str = "",
+) -> dict[str, str]:
+    """Decode Lithuanian MULTEXT-East-style MSD positions into UD FEATS."""
+    allowed = None if kept_keys is None else set(kept_keys)
+    feats: dict[str, str] = {}
+    if not multext:
+        return feats
+
+    category = multext[0]
+    if category == "N":
+        _add_feat(feats, "Gender", GENDER_VALUES.get(_char(multext, 3)), allowed)
+        _add_feat(feats, "Number", NUMBER_VALUES.get(_char(multext, 4)), allowed)
+        _add_feat(feats, "Case", CASE_VALUES.get(_char(multext, 5)), allowed)
+        _add_feat(feats, "Reflex", "Yes" if _char(multext, 6) == "y" else None, allowed)
+        _add_feat(feats, "NameType", NAME_TYPE_VALUES.get(_char(multext, 7)), allowed)
+    elif category == "A":
+        _add_feat(feats, "Degree", DEGREE_VALUES.get(_char(multext, 3)), allowed)
+        _add_feat(feats, "Gender", GENDER_VALUES.get(_char(multext, 4)), allowed)
+        _add_feat(feats, "Number", NUMBER_VALUES.get(_char(multext, 5)), allowed)
+        _add_feat(feats, "Case", CASE_VALUES.get(_char(multext, 6)), allowed)
+        _add_feat(feats, "Definite", DEFINITE_VALUES.get(_char(multext, 7)), allowed)
+    elif category == "P":
+        _add_feat(feats, "Gender", GENDER_VALUES.get(_char(multext, 3)), allowed)
+        _add_feat(feats, "Number", NUMBER_VALUES.get(_char(multext, 4)), allowed)
+        _add_feat(feats, "Case", CASE_VALUES.get(_char(multext, 5)), allowed)
+        _add_feat(feats, "Definite", DEFINITE_VALUES.get(_char(multext, 6)), allowed)
+        _add_feat(feats, "PronType", pron_type_from_lemma(lemma), allowed)
+    elif category == "M":
+        _add_feat(feats, "NumType", NUM_TYPE_VALUES.get(_char(multext, 2)), allowed)
+        _add_feat(feats, "Gender", GENDER_VALUES.get(_char(multext, 3)), allowed)
+        _add_feat(feats, "Number", NUMBER_VALUES.get(_char(multext, 4)), allowed)
+        _add_feat(feats, "Case", CASE_VALUES.get(_char(multext, 5)), allowed)
+        _add_feat(feats, "NumForm", NUM_FORM_VALUES.get(_char(multext, 6)), allowed)
+        _add_feat(feats, "Definite", DEFINITE_VALUES.get(_char(multext, 7)), allowed)
+    elif category == "V":
+        _add_feat(feats, "VerbForm", VERB_FORM_VALUES.get(_char(multext, 3)), allowed)
+        _add_feat(feats, "Tense", TENSE_VALUES.get(_char(multext, 4)), allowed)
+        if _char(multext, 4) == "q":
+            _add_feat(feats, "Aspect", "Iter", allowed)
+        _add_feat(feats, "Person", PERSON_VALUES.get(_char(multext, 5)), allowed)
+        _add_feat(feats, "Number", NUMBER_VALUES.get(_char(multext, 6)), allowed)
+        _add_feat(feats, "Gender", GENDER_VALUES.get(_char(multext, 7)), allowed)
+        _add_feat(feats, "Voice", VOICE_VALUES.get(_char(multext, 8)), allowed)
+        polarity_char = _char(multext, 9)
+        if polarity_char in {"n", "y"}:
+            _add_feat(feats, "Polarity", "Neg" if polarity_char == "y" else "Pos", allowed)
+        _add_feat(feats, "Definite", DEFINITE_VALUES.get(_char(multext, 10)), allowed)
+        _add_feat(feats, "Case", CASE_VALUES.get(_char(multext, 11)), allowed)
+        _add_feat(feats, "Reflex", "Yes" if _char(multext, 12) == "y" else None, allowed)
+        _add_feat(feats, "Mood", MOOD_VALUES.get(_char(multext, 13)), allowed)
+        _add_feat(feats, "Degree", DEGREE_VALUES.get(_char(multext, 14)), allowed)
+    elif category == "R":
+        _add_feat(feats, "Degree", DEGREE_VALUES.get(_char(multext, 3)), allowed)
+    elif category == "S":
+        _add_feat(feats, "Case", CASE_VALUES.get(_char(multext, 3)), allowed)
+    elif category == "X":
+        _add_feat(feats, "Foreign", "Yes" if _char(multext, 2) == "f" else None, allowed)
+        _add_feat(feats, "Abbr", "Yes" if _char(multext, 2) == "r" else None, allowed)
+    elif category == "Y":
+        if _char(multext, 2) in {"a", "s"}:
+            _add_feat(feats, "Abbr", "Yes", allowed)
+    return feats
+
+
 # The accent pipeline consumes VDU's label space, and Lithuanian traditional
 # grammar (hence VDU) has no determiner category — everything is įvardis
 # (PRON) — and no auxiliary category — all verbs are veiksmažodis (vksm.).
@@ -144,6 +327,8 @@ def label_from_parts(
     upos: str,
     raw_feats: str,
     xpos: str,
+    misc: str,
+    lemma: str,
     kept_keys: Iterable[str] | None,
     repair_from_xpos: bool,
     normalize_vdu: bool = False,
@@ -154,8 +339,28 @@ def label_from_parts(
     if repair_from_xpos:
         for key, value in xpos_ud_feats(xpos, kept_keys).items():
             feats.setdefault(key, value)
+    for key, value in multext_ud_feats(
+        misc_value(misc, "Multext"),
+        kept_keys,
+        lemma=lemma,
+    ).items():
+        feats.setdefault(key, value)
+    feats = align_alksnis_conventions(upos, feats)
     feats = filter_feats_keys(feats, kept_keys)
     return combined_label(upos, feats_string(feats))
+
+
+def align_alksnis_conventions(upos: str, feats: dict[str, str]) -> dict[str, str]:
+    """Deterministic peripheral-key alignment with ALKSNIS (the gold eval
+    conventions): every ADP carries AdpType=Prep there; NameType and
+    Degree-on-verbs are not used. Exact-match UFeats punishes both over-
+    and under-emission, so align both directions."""
+    if upos == "ADP":
+        feats.setdefault("AdpType", "Prep")
+    feats.pop("NameType", None)
+    if upos in ("VERB", "AUX"):
+        feats.pop("Degree", None)
+    return feats
 
 
 def read_conllu(
@@ -164,29 +369,36 @@ def read_conllu(
     kept_keys: Iterable[str] | None,
     repair_from_xpos: bool = False,
     normalize_vdu: bool = False,
+    emit_lemma_scripts: bool = False,
 ) -> list[dict]:
     require_file(path)
     sentences: list[dict] = []
     text = ""
     tokens: list[str] = []
+    lemmas: list[str] = []
     labels: list[str] = []
+    lemma_scripts: list[str] = []
     raw_labels: list[str] = []
 
     def flush() -> None:
-        nonlocal text, tokens, labels, raw_labels
+        nonlocal text, tokens, lemmas, labels, lemma_scripts, raw_labels
         if tokens:
-            sentences.append(
-                {
-                    "id": f"{sentence_prefix}-{len(sentences) + 1}",
-                    "text": text or " ".join(tokens),
-                    "tokens": tokens,
-                    "labels": labels,
-                    "_raw_labels": raw_labels,
-                }
-            )
+            row = {
+                "id": f"{sentence_prefix}-{len(sentences) + 1}",
+                "text": text or " ".join(tokens),
+                "tokens": tokens,
+                "labels": labels,
+                "_raw_labels": raw_labels,
+            }
+            if emit_lemma_scripts:
+                row["lemmas"] = lemmas
+                row["lemma_scripts"] = lemma_scripts
+            sentences.append(row)
         text = ""
         tokens = []
+        lemmas = []
         labels = []
+        lemma_scripts = []
         raw_labels = []
 
     for raw_line in path.read_text(encoding="utf-8").splitlines():
@@ -204,12 +416,17 @@ def read_conllu(
         if len(columns) < 6 or not columns[0].isdigit():
             continue
         tokens.append(columns[1])
+        if emit_lemma_scripts:
+            lemmas.append(columns[2])
+            lemma_scripts.append(make_lemma_script(columns[1], columns[2]))
         raw_labels.append(combined_label(columns[3], columns[5]))
         labels.append(
             label_from_parts(
                 upos=columns[3],
                 raw_feats=columns[5],
                 xpos=columns[4],
+                misc=columns[9] if len(columns) > 9 else "",
+                lemma=columns[2],
                 kept_keys=kept_keys,
                 repair_from_xpos=repair_from_xpos,
                 normalize_vdu=normalize_vdu,
@@ -269,6 +486,24 @@ def write_labels(path: Path, labels: Iterable[str]) -> None:
     )
 
 
+def write_lemma_scripts(path: Path, scripts: Iterable[str]) -> list[str]:
+    script_list = script_inventory(scripts)
+    payload = {
+        "lemma_scripts": script_list,
+        "lemma_script2id": {
+            script: index for index, script in enumerate(script_list)
+        },
+        "id2lemma_script": {
+            str(index): script for index, script in enumerate(script_list)
+        },
+    }
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return script_list
+
+
 def token_count(rows: Iterable[dict]) -> int:
     return sum(len(row["tokens"]) for row in rows)
 
@@ -279,6 +514,10 @@ def labels_in(rows: Iterable[dict]) -> list[str]:
 
 def raw_labels_in(rows: Iterable[dict]) -> list[str]:
     return [label for row in rows for label in row["_raw_labels"]]
+
+
+def lemma_scripts_in(rows: Iterable[dict]) -> list[str]:
+    return [script for row in rows for script in row.get("lemma_scripts", [])]
 
 
 def coverage_tokens(rows: Iterable[dict]) -> list[FeatsToken]:
@@ -350,6 +589,17 @@ def main(argv: Iterable[str] | None = None) -> int:
         help="normalize UPOS toward VDU conventions in all splits (DET->PRON; "
         "Lithuanian grammar and the VDU dictionary have no determiner category)",
     )
+    parser.add_argument(
+        "--emit-lemma-scripts",
+        action="store_true",
+        help="store per-token FORM→LEMMA edit-script labels and inventory",
+    )
+    parser.add_argument(
+        "--lemma-top-n",
+        type=int,
+        default=25,
+        help="top-N lemma scripts included in prep coverage summary",
+    )
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -363,12 +613,14 @@ def main(argv: Iterable[str] | None = None) -> int:
         "alksnis-dev",
         kept_keys=kept_keys,
         normalize_vdu=args.normalize_vdu,
+        emit_lemma_scripts=args.emit_lemma_scripts,
     )
     alksnis_test = read_conllu(
         args.raw_dir / ALKSNIS_FILES["test"],
         "alksnis-test",
         kept_keys=kept_keys,
         normalize_vdu=args.normalize_vdu,
+        emit_lemma_scripts=args.emit_lemma_scripts,
     )
     heldout_keys = {normalized_text(row) for row in alksnis_dev + alksnis_test}
 
@@ -382,6 +634,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             kept_keys=kept_keys,
             repair_from_xpos=args.repair_from_xpos,
             normalize_vdu=args.normalize_vdu,
+            emit_lemma_scripts=args.emit_lemma_scripts,
         )
         matas_rows, matas_deduped_dropped = dedupe_sentences(matas_rows)
         train_rows.extend(matas_rows)
@@ -393,6 +646,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 "alksnis-train",
                 kept_keys=kept_keys,
                 normalize_vdu=args.normalize_vdu,
+                emit_lemma_scripts=args.emit_lemma_scripts,
             )
         )
 
@@ -411,6 +665,15 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     all_labels = labels_in(train_rows) + labels_in(alksnis_dev) + labels_in(alksnis_test)
     write_labels(args.out / "labels.json", all_labels)
+    all_lemma_scripts = (
+        lemma_scripts_in(train_rows)
+        + lemma_scripts_in(alksnis_dev)
+        + lemma_scripts_in(alksnis_test)
+    )
+    if args.emit_lemma_scripts:
+        lemma_inventory = write_lemma_scripts(args.out / "lemma_scripts.json", all_lemma_scripts)
+    else:
+        lemma_inventory = []
 
     train_label_set = set(labels_in(train_rows))
     dev_oov, dev_total, dev_rate = oov_label_stats(alksnis_dev, train_label_set)
@@ -428,6 +691,16 @@ def main(argv: Iterable[str] | None = None) -> int:
     print_split_stats("test", alksnis_test)
     print(f"label set before: {len(set(all_raw_labels)):,}")
     print(f"label set after: {len(set(all_labels)):,}")
+    print(f"label inventory size: {len(set(all_labels)):,}")
+    if args.emit_lemma_scripts:
+        covered, total, rate = top_script_coverage(all_lemma_scripts, args.lemma_top_n)
+        print(f"lemma script inventory size: {len(lemma_inventory):,}")
+        print(
+            f"top-{args.lemma_top_n} lemma script coverage: "
+            f"{covered:,}/{total:,} ({rate:.2%})"
+        )
+        for script, count in Counter(all_lemma_scripts).most_common(args.lemma_top_n):
+            print(f"  {script}: {count:,}")
     print(f"dev OOV-label rate: {dev_oov:,}/{dev_total:,} ({dev_rate:.2%})")
     print(f"test OOV-label rate: {test_oov:,}/{test_total:,} ({test_rate:.2%})")
     print(

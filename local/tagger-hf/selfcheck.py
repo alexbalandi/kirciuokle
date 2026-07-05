@@ -21,7 +21,9 @@ from head_config import (
     slot_values_for_label,
     word_piece_spans,
 )
+from lemma_scripts import apply_lemma_script, make_lemma_script
 from metrics import canonicalize_feats, combined_label, feats_string, split_label
+from prep_corpus import multext_ud_feats, xpos_ud_feats
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -108,6 +110,90 @@ def check_pooling_indices() -> None:
     )
 
 
+def check_multext_decoder() -> None:
+    assert_equal(
+        multext_ud_feats("Agpmsgn"),
+        {
+            "Case": "Gen",
+            "Definite": "Ind",
+            "Degree": "Pos",
+            "Gender": "Masc",
+            "Number": "Sing",
+        },
+        "MULTEXT adjective decode",
+    )
+    assert_equal(
+        multext_ud_feats("Pgmsin", lemma="šis"),
+        {
+            "Case": "Ins",
+            "Definite": "Ind",
+            "Gender": "Masc",
+            "Number": "Sing",
+            "PronType": "Dem",
+        },
+        "MULTEXT pronoun decode",
+    )
+    assert_equal(
+        multext_ud_feats("Momsaly"),
+        {
+            "Case": "Acc",
+            "Definite": "Def",
+            "Gender": "Masc",
+            "NumForm": "Word",
+            "NumType": "Ord",
+            "Number": "Sing",
+        },
+        "MULTEXT numeral decode",
+    )
+    assert_equal(
+        multext_ud_feats("Vgmp3---y--ni-"),
+        {
+            "Mood": "Ind",
+            "Person": "3",
+            "Polarity": "Neg",
+            "Tense": "Pres",
+            "VerbForm": "Fin",
+        },
+        "MULTEXT verb decode",
+    )
+    assert_equal(
+        xpos_ud_feats("bdv.nelygin.įvardž.vyr.vns.K.", None).get("Definite"),
+        "Def",
+        "XPOS definiteness repair",
+    )
+    assert_equal(
+        xpos_ud_feats("vksm.asm.neig.tiesiog.es.3.", None).get("Polarity"),
+        "Neg",
+        "XPOS polarity repair",
+    )
+    assert_equal(
+        xpos_ud_feats("įv.savyb.vns.K.", None).get("Poss"),
+        "Yes",
+        "XPOS possessive repair",
+    )
+
+
+def check_lemma_scripts() -> None:
+    examples = [
+        ("namai", "namas"),
+        ("yra", "būti"),
+        ("Vilniaus", "Vilnius"),
+        ("Namai", "namas"),
+    ]
+    for form, lemma in examples:
+        script = make_lemma_script(form, lemma)
+        assert_equal(
+            apply_lemma_script(form, script),
+            lemma,
+            f"lemma script round-trip for {form}->{lemma}",
+        )
+    assert_equal(
+        make_lemma_script("yra", "būti").startswith("W|"),
+        True,
+        "irregular lemma fallback",
+    )
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -123,6 +209,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     check_canonical_feats()
     check_factored_roundtrip(labels)
     check_pooling_indices()
+    check_multext_decoder()
+    check_lemma_scripts()
     print(f"selfcheck ok: {len(labels)} labels checked")
     return 0
 

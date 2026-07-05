@@ -17,8 +17,9 @@ import json
 from pathlib import Path
 from typing import Iterable
 
+from coverage_diff import SLOT_FEATS_KEYS
 from head_config import labels_from_file, load_head_config, write_head_config
-from metrics import canonicalize_feats
+from metrics import canonicalize_feats, combined_label, feats_string, parse_feats
 
 
 FOLDED_UPOS = {
@@ -62,6 +63,15 @@ def folded_twin_label(label: str) -> str:
     return f"{folded_upos}|{canonicalize_feats(feats if separator else '_')}"
 
 
+def stripped_folded_twin_label(label: str) -> str:
+    upos, separator, feats = label.partition("|")
+    folded_upos = FOLDED_UPOS.get(upos, upos)
+    parsed = parse_feats(feats if separator else "_")
+    slot_keys = set(SLOT_FEATS_KEYS)
+    stripped = {key: value for key, value in parsed.items() if key in slot_keys}
+    return combined_label(folded_upos, feats_string(stripped))
+
+
 def classifier_module(model: object):
     try:
         import torch
@@ -86,7 +96,7 @@ def surgery(
     base_checkpoint: Path,
     target_labels_path: Path,
     out_dir: Path,
-) -> tuple[int, int, int, list[str]]:
+) -> tuple[int, int, int, int, list[str]]:
     from transformers import AutoModelForTokenClassification, AutoTokenizer
     import torch
 
@@ -125,6 +135,7 @@ def surgery(
     initializer_range = float(getattr(model.config, "initializer_range", 0.02) or 0.02)
     copied = 0
     twinned = 0
+    stripped_twinned = 0
     fresh = 0
     fresh_labels: list[str] = []
 
@@ -143,9 +154,14 @@ def surgery(
                 if source_index is not None:
                     twinned += 1
                 else:
-                    fresh += 1
-                    fresh_labels.append(label)
-                    continue
+                    stripped_twin = stripped_folded_twin_label(label)
+                    source_index = base_label2id.get(stripped_twin)
+                    if source_index is not None:
+                        stripped_twinned += 1
+                    else:
+                        fresh += 1
+                        fresh_labels.append(label)
+                        continue
 
             new_classifier.weight[target_index].copy_(old_classifier.weight[source_index])
             if new_classifier.bias is not None and old_classifier.bias is not None:
@@ -170,7 +186,7 @@ def surgery(
     updated_head_config["labels"] = target_labels
     write_head_config(out_dir / "head_config.json", updated_head_config)
 
-    return copied, twinned, fresh, fresh_labels
+    return copied, twinned, stripped_twinned, fresh, fresh_labels
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -201,7 +217,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     base_checkpoint = resolve_base_checkpoint(args.base_run)
-    copied, twinned, fresh, fresh_labels = surgery(
+    copied, twinned, stripped_twinned, fresh, fresh_labels = surgery(
         base_checkpoint=base_checkpoint,
         target_labels_path=args.labels,
         out_dir=args.out,
@@ -211,6 +227,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     print(f"output checkpoint: {args.out}")
     print(f"copied rows: {copied}")
     print(f"twinned rows: {twinned}")
+    print(f"stripped-twinned rows: {stripped_twinned}")
     print(f"fresh rows: {fresh}")
     if fresh_labels:
         print("fresh labels:")

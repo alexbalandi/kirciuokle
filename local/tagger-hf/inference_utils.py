@@ -60,6 +60,39 @@ def outputs_to_labels(
     return labels
 
 
+def outputs_to_lemma_scripts(
+    *,
+    outputs: dict[str, Any],
+    word_ids: Iterable[int | None],
+    word_count: int,
+    head_config: dict,
+    batch_index: int = 0,
+) -> list[str]:
+    scripts = head_config.get("lemma_scripts") or []
+    if not scripts or "lemma_logits" not in outputs:
+        return []
+
+    first, last = word_piece_spans(word_ids, word_count)
+    lemma_logits = outputs["lemma_logits"]
+    decoded: list[str] = []
+    for word_index in range(word_count):
+        first_index = first[word_index]
+        last_index = last[word_index]
+        if first_index == -1 or last_index == -1:
+            decoded.append("")
+            continue
+        word_logits = _word_logits(
+            lemma_logits,
+            head_config["pooling"],
+            first_index,
+            last_index,
+            batch_index,
+        )
+        script_id = int(word_logits.argmax(axis=-1))
+        decoded.append(scripts[script_id] if 0 <= script_id < len(scripts) else "")
+    return decoded
+
+
 def _combined_label(
     logits: Any,
     labels: list[str],

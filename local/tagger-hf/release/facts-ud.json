@@ -1,26 +1,29 @@
 {
   "variant": "ud",
-  "variant_description": "Strict-UD flavor: emits DET and AUX per Universal Dependencies conventions. Produced by classifier-head surgery from the -vdu base plus a short fine-tune on UD_Lithuanian-ALKSNIS.",
+  "variant_description": "v2: full UD FEATS emission and a real lemmatizer (edit-script head trained on 2.1M gold lemmas). Strict-UD categories via ALKSNIS convention fine-tune.",
   "full_test_bench": {
-    "slots": "89.1%",
-    "upos": "92.5%",
-    "aux_verb": "93.4%",
-    "tokens_per_second_cpu_int8": 874,
-    "udpipe_reference_slots": "89.2%",
-    "udpipe_reference_tokens_per_second": 605,
-    "protocol": "684-sentence UD_Lithuanian-ALKSNIS gold test, raw-text input, letter-token alignment, VDU-convention slots projection (DET/PRON and AUX/VERB merged; slots = POS family + Case/Gender/Number/Tense/Person/Voice/Degree)"
+    "slots": "86.3%",
+    "upos": "91.4%",
+    "lemma": "94.2%",
+    "feats_exact": "80.3%",
+    "aux_verb": "93.5%",
+    "tokens_per_second_cpu_int8": 921,
+    "note": "For the highest slots/UPOS numbers (89.1%/92.5%) at the cost of no lemmas and slots-only FEATS, use the companion litlat-bert-lithuanian-morphology model; this model is the complete-annotation variant.",
+    "protocol": "684-sentence UD_Lithuanian-ALKSNIS gold test, raw-text input, letter-token alignment"
   },
   "conll18_official": {
-    "upos_f1": "94.02",
-    "ufeats_f1": "65.89 (by design: the model emits only the accentuation scoring slots, not full UD FEATS)",
-    "lemmas_f1": "49.67 (by design: no lemmatizer; form-as-lemma except yra→būti)",
-    "udpipe_reference_upos_f1": "95.15",
-    "protocol": "gold tokenization, official conll18_ud_eval.py"
+    "upos_f1": "93.23",
+    "ufeats_f1": "84.14",
+    "lemmas_f1": "94.71 (beats the UDPipe 2 reference: 92.87)",
+    "udpipe_reference": "UPOS 95.15 / UFeats 89.06 / Lemmas 92.87",
+    "protocol": "gold tokenization, official conll18_ud_eval.py",
+    "note": "residual UFeats gap vs UDPipe is dominated by peripheral-key conventions not derivable from the training sources (Aspect, NUM Definite, Hyph)"
   },
   "conll18_vdu_projection": {
-    "upos_f1": "97.12 (UDPipe reference: 95.44)",
-    "ufeats_f1": "91.50 (UDPipe reference: 90.69)"
+    "upos_f1": "96.72",
+    "ufeats_f1": "89.08"
   },
   "lineage": "Fully permissive: gold MATAS v3.0 (CC BY 4.0) + gold UD_Lithuanian-ALKSNIS (CC BY-SA 4.0), UD FEATS reconstructed deterministically from MATAS's Jablonskis XPOS, remaining contextual gaps filled by iterated constrained-decoding self-training (no UDPipe or other NC-licensed model anywhere in the lineage), base encoder EMBEDDIA/litlat-bert (CC BY-SA 4.0).",
-  "speed_hardware": "ONNX Runtime INT8, single CPU thread pool, consumer laptop (measured alongside network-served UDPipe at 605 tok/s)"
+  "speed_hardware": "ONNX Runtime INT8, single CPU thread pool, consumer laptop (measured alongside network-served UDPipe at 605 tok/s)",
+  "training_note": "v2 trains on the full UD label space (MULTEXT-East + Jablonskis XPOS decoding fills MATAS gaps) with a joint edit-script lemma head; dev lemma accuracy 97.1%."
 }

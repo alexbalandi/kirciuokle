@@ -22,6 +22,7 @@ RUNTIME_FILES = (
     "generation_config.json",
     "head_config.json",
     "labels.json",
+    "lemma_scripts.json",
     "special_tokens_map.json",
     "tokenizer.json",
     "tokenizer_config.json",
@@ -91,7 +92,11 @@ def run_torch_model(torch_runner: object, encoded: object, output_names: list[st
 
 
 def load_torch_runner(model_dir: Path, head_config: dict) -> tuple[object, list[str]]:
-    if head_config["head"] == "combined" and head_config["pooling"] in {"first", "last"}:
+    if (
+        head_config["head"] == "combined"
+        and head_config["pooling"] in {"first", "last"}
+        and not head_config.get("lemma_scripts")
+    ):
         from transformers import AutoModelForTokenClassification
 
         model = AutoModelForTokenClassification.from_pretrained(model_dir).eval()
@@ -291,6 +296,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     use_optimum = (
         head_config["head"] == "combined"
         and head_config["pooling"] in {"first", "last"}
+        and not head_config.get("lemma_scripts")
     )
     if use_optimum:
         fp32_onnx = export_with_optimum(args, fp32_dir)
@@ -308,6 +314,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 "int8_onnx": int8_onnx.name,
                 "opset": args.opset,
                 "head": head_config["head"],
+                "lemma_head": bool(head_config.get("lemma_scripts")),
                 "pooling": head_config["pooling"],
                 "verification_mismatches": mismatches,
                 "verification_sentences": args.max_dev_sentences,
