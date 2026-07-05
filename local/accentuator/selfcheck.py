@@ -310,6 +310,39 @@ def check_verb_rules() -> None:
             )
 
 
+def check_suffix_rules(db: sqlite3.Connection) -> None:
+    try:
+        from .suffix_rules import build_class_tables, derive_lemmas, load_rules, paradigm_for
+    except ImportError:
+        from suffix_rules import build_class_tables, derive_lemmas, load_rules, paradigm_for
+
+    tables = build_class_tables(db)
+    rules = load_rules()
+    known: set[str] = set()  # treat everything as unknown for the probe
+    words = [
+        "agentas", "amžinybė", "amžinas", "fizika", "panika", "plėšikas",
+        "plėšti", "daugelis", "kautis", "nuotrauka", "petrauskas",
+    ]
+    derived = {}
+    for lemma, rule, stem in derive_lemmas(words, rules, tables, known):
+        forms = dict(paradigm_for(stem, rule, tables))
+        derived[lemma] = forms.get("nominative") or forms.get("singular|nominative")
+    expect = {
+        "agentas": "ageñtas",     # -eñtas kl.2 internationalism
+        "amžinybė": "amžinýbė",   # -ýbė kl.1
+        "fizika": "fìzika",       # pretonic short i
+        "panika": "pãnika",       # pretonic a is long
+        "plėšikas": "plėšìkas",   # deverbal agentive, not pretonic
+    }
+    for lemma, want in expect.items():
+        got = derived.get(lemma)
+        if got != nfc(want):
+            raise AssertionError(f"suffix rule {lemma}: got {got!r}, expected {want!r}")
+    for lemma in ("daugelis", "kautis", "nuotrauka"):
+        if lemma in derived:
+            raise AssertionError(f"suffix rules must not fire for {lemma} (got {derived[lemma]!r})")
+
+
 def run_selfcheck(args: argparse.Namespace) -> int:
     check_notation()
     check_verb_rules()
@@ -319,6 +352,7 @@ def run_selfcheck(args: argparse.Namespace) -> int:
         check_namas(db)
         check_class_examples(db)
         check_verb(db)
+        check_suffix_rules(db)
     finally:
         db.close()
     if not args.quiet:

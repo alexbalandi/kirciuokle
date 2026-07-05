@@ -223,6 +223,32 @@ and a citation when one is standard.
 }
 ```
 
+## Kazlauskienė, Raškinis, Norkevičius, Vaičiūnas (2010), VDU accentuation monograph
+
+- What it is: "Automatinis lietuvių kalbos žodžių skiemenavimas, kirčiavimas,
+  transkribavimas" (VDU, 2010) — the published, freely downloadable
+  description of the VDU kirčiuoklė's algorithms and resource structure.
+- License or terms: published scholarship; used as textbook knowledge. No
+  VDU data files are used — only the published rules and the Appendix C
+  suffix table.
+- How this project uses it: the open accentuator's suffix-derivation module
+  (`local/accentuator/suffix_rules.py`) implements the self-accented suffix
+  rules (§3.2.4, §3.3.7, Appendix C); inflection endings are induced from
+  Wiktionary paradigms, not taken from VDU.
+- Attribution line: Suffix accentuation rules after Kazlauskienė, Raškinis,
+  Norkevičius, Vaičiūnas (2010), Vytauto Didžiojo universitetas.
+- Citation:
+
+```bibtex
+@book{kazlauskiene2010automatinis,
+  title = {Automatinis lietuvi{\ų} kalbos {\ž}od{\ž}i{\ų} skiemenavimas, kir{\č}iavimas, transkribavimas},
+  author = {Kazlauskien{\.e}, Asta and Ra{\š}kinis, Gailius and Norkevi{\č}ius, Giedrius and Vai{\č}i{\=u}nas, Airenas},
+  publisher = {Vytauto Did{\ž}iojo universiteto leidykla},
+  year = {2010},
+  url = {http://donelaitis.vdu.lt/lkk/pdf/alka_SKT.pdf}
+}
+```
+
 ## Kushnir (2019), Prosodic Patterns in Lithuanian Morphology
 
 - What it is: Yuriy Kushnir's doctoral dissertation (Leipzig University, 2019),

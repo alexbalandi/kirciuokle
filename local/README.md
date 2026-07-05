@@ -100,15 +100,15 @@ this benchmark plus the repo's accentuation parity eval.
 `local/accentuator/` builds an accentuation dictionary from open sources
 (Wiktionary accent classes + a paradigm engine implementing published
 accentology; plan in `docs/PLAN-open-accentuator.md`). Standalone
-artifacts only — the replica's dictionary chain is unchanged. Parity vs
-the VDU cache (10,015 words): 60% covered, 82% of covered exact, **zero
-hard disagreements** — every adjudicated divergence is either repaired
-by a published rule (notation normalization; future-tense metatony;
-prefixed-verb stress retraction and participle constraints per Kushnir
-2019, see `ATTRIBUTIONS/`) or excluded with a reason in
-`local/accentuator/parity_vetoes.json`. Most partial matches are words
-where VDU lists additional accent-class variants beyond Wiktionary's
-facts; the uncovered mass is lemmas absent from Wiktionary.
+artifacts only — the replica's dictionary chain is unchanged. Full
+architecture, module inventory, rule sources, and QA methodology:
+`docs/ACCENTUATOR.md`. Parity vs the VDU cache (10,015 words): 61%
+covered, 82% of covered exact, **zero hard disagreements** — every
+adjudicated divergence is either repaired by a published rule (notation
+normalization; future-tense metatony; verb stress retraction and
+participle constraints per Kushnir 2019; self-accented suffix rules per
+the VDU 2010 monograph, see `ATTRIBUTIONS/`) or excluded with a reason
+in `local/accentuator/parity_vetoes.json`.
 
 ## Local checks
 

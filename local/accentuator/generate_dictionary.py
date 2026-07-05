@@ -22,6 +22,7 @@ from typing import Iterable
 try:  # pragma: no cover
     from ._common import (
         CASE_TAGS,
+        DATA_DIR,
         DEFAULT_GENERATED,
         DEFAULT_LEXICON,
         DEFAULT_VETOES,
@@ -41,9 +42,11 @@ try:  # pragma: no cover
         strip_accents,
     )
     from .paradigm_engine import MARK_BY_NAME, _apply_stress, accent_nominal, accent_verb, build_forms_by_cell
+    from .suffix_rules import build_class_tables, derive_lemmas, load_rules, paradigm_for
 except ImportError:  # pragma: no cover
     from _common import (
         CASE_TAGS,
+        DATA_DIR,
         DEFAULT_GENERATED,
         DEFAULT_LEXICON,
         DEFAULT_VETOES,
@@ -63,6 +66,7 @@ except ImportError:  # pragma: no cover
         strip_accents,
     )
     from paradigm_engine import MARK_BY_NAME, _apply_stress, accent_nominal, accent_verb, build_forms_by_cell
+    from suffix_rules import build_class_tables, derive_lemmas, load_rules, paradigm_for
 
 
 Variant = dict[str, object]
@@ -557,6 +561,63 @@ def generate_closed(db: sqlite3.Connection, grouped: dict[str, dict[tuple[str, s
     return count
 
 
+DEFAULT_WORDLIST_NAME = "lt_50k.txt"
+
+
+def generate_derived(
+    db: sqlite3.Connection,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    vetoed_lemmas: dict[str, str] | None = None,
+    wordlist: Path | None = None,
+) -> int:
+    """Suffix-rule fallback for lemmas the observed lexicon does not know.
+
+    Candidate word forms come from the hermitdave frequency list; a word is
+    only derived when it parses as (base + self-accented suffix + induced
+    inflection ending), and derived paradigms never overwrite word keys the
+    observed generators already produced.
+    """
+
+    if wordlist is None:
+        wordlist = DATA_DIR / DEFAULT_WORDLIST_NAME
+    if not wordlist.exists():
+        return 0
+    words = [
+        line.split()[0]
+        for line in wordlist.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    tables = build_class_tables(db)
+    rules = load_rules()
+    known = {l for (l,) in db.execute("SELECT DISTINCT lemma FROM nominals")}
+    known |= {l for (l,) in db.execute("SELECT DISTINCT lemma FROM forms")}
+    verb_form_keys = {
+        lower_key(accented) for (accented,) in db.execute("SELECT accented FROM forms WHERE pos = 'verb'")
+    }
+    count = 0
+    derived_words: set[str] = set()
+    for lemma, rule, accented_stem in derive_lemmas(words, rules, tables, known, verb_form_keys):
+        if vetoed_lemmas and lemma in vetoed_lemmas:
+            continue
+        emitted = False
+        for cell, form in paradigm_for(accented_stem, rule, tables):
+            word = lower_key(form)
+            if not word or (word in grouped and word not in derived_words):
+                continue
+            derived_words.add(word)
+            add_variant(
+                grouped,
+                form=form,
+                pos=rule.pos,
+                tags=parse_tags(cell),
+                provenance=f"open-accentuator:vdu2010-suffix:{lemma}:{rule.pos}:{rule.stress_class}:{rule.plain}:{cell}",
+            )
+            emitted = True
+        if emitted:
+            count += 1
+    return count
+
+
 def write_generated(
     output: Path,
     grouped: dict[str, dict[tuple[str, str], Variant]],
@@ -621,6 +682,7 @@ def generate_dictionary(
         verb_count = generate_verbs(source, grouped, limit, vetoes["lemmas"])
         other_count = generate_other(source, grouped, vetoes["lemmas"])
         closed_count = generate_closed(source, grouped)
+        derived_count = generate_derived(source, grouped, vetoes["lemmas"])
     finally:
         source.close()
     words = write_generated(output, grouped, vetoes["words"])
@@ -629,6 +691,7 @@ def generate_dictionary(
         "verb_lemmas": verb_count,
         "other_lemmas": other_count,
         "closed_rows": closed_count,
+        "derived_lemmas": derived_count,
         "vetoed_lemmas": len(vetoes["lemmas"]),
         "vetoed_words": len(vetoes["words"]),
         "words": words,
