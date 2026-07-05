@@ -198,6 +198,56 @@ and a citation when one is standard.
 }
 ```
 
+## Wiktionary via kaikki.org (wiktextract)
+
+- What it is: machine-readable English Wiktionary extractions by Tatu Ylonen's
+  wiktextract project, served at kaikki.org; the Lithuanian entries carry
+  accent-class tags and accented inflection tables.
+- License: Wiktionary text is dual-licensed CC BY-SA 4.0 and GFDL; wiktextract
+  is open source.
+- How this project uses it: the open accentuator (`local/accentuator/`) reads
+  accent classes, accented headwords, and inflection tables from the kaikki
+  Lithuanian dump as its lexical facts. Known bad entries are excluded (never
+  corrected from closed sources) via `local/accentuator/parity_vetoes.json`.
+- Attribution line: Lexical accent data from Wiktionary contributors via
+  kaikki.org (wiktextract by Tatu Ylonen), CC BY-SA 4.0.
+- Citation:
+
+```bibtex
+@inproceedings{ylonen-2022-wiktextract,
+  title = {Wiktextract: Wiktionary as Machine-Readable Structured Data},
+  author = {Ylonen, Tatu},
+  booktitle = {Proceedings of the 13th Language Resources and Evaluation Conference},
+  year = {2022},
+  pages = {1317--1325}
+}
+```
+
+## Kushnir (2019), Prosodic Patterns in Lithuanian Morphology
+
+- What it is: Yuriy Kushnir's doctoral dissertation (Leipzig University, 2019),
+  a formal analysis of Lithuanian accentuation covering nominal accent classes,
+  Saussure's Law, dominance, and verbal prosody.
+- License or terms: published scholarship; used as textbook knowledge.
+- How this project uses it: the open accentuator implements its conditioning of
+  verbal stress retraction (§4.4.2, §4.4.5: 1/2sg stress retracts to the prefix
+  exactly when the tense's root allomorph is weak — past theme -ė in primary
+  verbs; -o presents and -yti pasts are always strong) and its confirmation
+  that future 1/2sg and conditional forms never undergo Saussure's shift.
+- Attribution line: Verbal stress-retraction conditioning after Kushnir (2019),
+  Prosodic Patterns in Lithuanian Morphology, Leipzig University.
+- Citation:
+
+```bibtex
+@phdthesis{kushnir2019prosodic,
+  title = {Prosodic Patterns in Lithuanian Morphology},
+  author = {Kushnir, Yuriy},
+  school = {Universit{\"a}t Leipzig},
+  year = {2019},
+  url = {https://yuriykushnir.com/documents/Y_Kushnir_Dissertation.pdf}
+}
+```
+
 ## Scope Note
 
 Repository code is public domain under The Unlicense. Data, services, corpora,

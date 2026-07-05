@@ -102,9 +102,11 @@ this benchmark plus the repo's accentuation parity eval.
 accentology; plan in `docs/PLAN-open-accentuator.md`). Standalone
 artifacts only — the replica's dictionary chain is unchanged. Parity vs
 the VDU cache: 86.0% exact on covered words, **zero hard disagreements**
-— every adjudicated divergence is either fixed (notation normalization)
-or excluded with a reason in `local/accentuator/parity_vetoes.json`;
-remaining gap to VDU is coverage, not correctness.
+— every adjudicated divergence is either repaired by a published rule
+(notation normalization; future-tense metatony; prefixed-verb stress
+retraction per Kushnir 2019, see `ATTRIBUTIONS/`) or excluded with a
+reason in `local/accentuator/parity_vetoes.json`; remaining gap to VDU
+is coverage, not correctness.
 
 ## Local checks
 

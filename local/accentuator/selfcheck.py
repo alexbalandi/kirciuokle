@@ -30,7 +30,7 @@ try:  # pragma: no cover
     )
     from ._common import nfc, normalize_notation
     from .extract_lexicon import build_lexicon
-    from .generate_dictionary import prefixed_verb_base, veto_verb_form
+    from .generate_dictionary import matched_verb_prefix, resolve_verb_form
     from .paradigm_engine import accent_nominal, accent_verb, build_forms_by_cell, normalize_cell
 except ImportError:  # pragma: no cover
     from _common import (
@@ -51,7 +51,7 @@ except ImportError:  # pragma: no cover
     )
     from _common import nfc, normalize_notation
     from extract_lexicon import build_lexicon
-    from generate_dictionary import prefixed_verb_base, veto_verb_form
+    from generate_dictionary import matched_verb_prefix, resolve_verb_form
     from paradigm_engine import accent_nominal, accent_verb, build_forms_by_cell, normalize_cell
 
 
@@ -250,46 +250,59 @@ def check_notation() -> None:
             raise AssertionError(f"normalize_notation({raw!r}) = {actual!r}, expected {expected!r}")
 
 
-def check_vetoes() -> None:
-    if prefixed_verb_base("atnešti") != "nešti":
-        raise AssertionError("atnešti should resolve to base nešti")
-    if prefixed_verb_base("pasielgti") != "elgti":
-        raise AssertionError("pasielgti should resolve to reflexive base elgtis")
-    if prefixed_verb_base("atiduoti") != "duoti":
-        raise AssertionError("atiduoti should resolve to base duoti")
-    if prefixed_verb_base("paruošti") is None:
+def check_verb_rules() -> None:
+    if matched_verb_prefix("atnešti") != "at":
+        raise AssertionError("atnešti should match prefix at-")
+    if matched_verb_prefix("pasielgti") != "pasi":
+        raise AssertionError("pasielgti should match prefix pasi-")
+    if matched_verb_prefix("atiduoti") != "ati":
+        raise AssertionError("atiduoti should match prefix ati-")
+    if matched_verb_prefix("paruošti") is None:
         raise AssertionError("paruošti should count as prefixed")
-    if prefixed_verb_base("nešti") is not None:
+    if matched_verb_prefix("nešti") is not None:
         raise AssertionError("nešti is not a prefixed verb")
 
     future_3 = ("future", "third-person")
     past_1sg = ("singular", "past", "first-person")
+    prs_1sg = ("singular", "present", "first-person")
+    # (prefix, tags, observed form, lemma, present_3, past_3) -> expected emitted form
     expect = {
-        # future-3 metatony risks are vetoed; resolved forms are kept
-        (False, future_3, "dìrbs"): True,
-        (False, future_3, "kalbė̃s"): False,
-        (False, future_3, "kalbė́s"): True,
-        (False, future_3, "gáus"): True,
-        (False, future_3, "darỹs"): False,
-        (False, future_3, "mókys"): False,
-        (False, future_3, "bùs"): False,
-        # prefixed-verb ending-stressed 1/2sg cells are vetoed, stem-stressed kept
-        (True, past_1sg, "atnešiaũ"): True,
-        (True, past_1sg, "pàdirbau"): False,
-        (False, past_1sg, "nešiaũ"): False,
-        # acute on an ending-stressed 1sg is invalid notation
-        (False, past_1sg, "elgiaúsi"): True,
+        # future-3 metatony: long final-syllable stems take the circumflex
+        (None, future_3, "dìrbs", "dirbti", "dìrba", "dìrbo"): "dir̃bs",
+        (None, future_3, "gáus", "gauti", "gáuna", "gãvo"): "gaũs",
+        (None, future_3, "kalbė́s", "kalbėti", "kal̃ba", "kalbė́jo"): "kalbė̃s",
+        (None, future_3, "kalbė̃s", "kalbėti", "kal̃ba", "kalbė́jo"): "kalbė̃s",
+        (None, future_3, "darỹs", "daryti", "dãro", "dãrė"): "darỹs",
+        (None, future_3, "mókys", "mokyti", "móko", "mókė"): "mókys",
+        # short final nucleus keeps the grave (Kushnir 2019: (17a) kás)
+        (None, future_3, "bùs", "būti", "yrà", "bùvo"): "bùs",
+        # weak past root (Kushnir 2019 §4.4.5: -ė past, primary verb) — the
+        # third person shows prefix stress, and 1/2sg retracts with it
+        ("at", past_1sg, "atnešiaũ", "atnešti", "àtneša", "àtnešė"): "àtnešiau",
+        ("ati", past_1sg, "atidaviaũ", "atiduoti", "atìduoda", "atìdavė"): "atìdaviau",
+        # strong past root (-o past): Saussure shift stands (aptikaũ)
+        ("ap", past_1sg, "aptikaũ", "aptikti", "aptiñka", "aptìko"): "aptikaũ",
+        # prefix-lookalike lemma: praš- is the root, -yti pasts are never weak
+        ("pra", past_1sg, "prašiaũ", "prašyti", "prãšo", "prãšė"): "prašiaũ",
+        ("pra", prs_1sg, "prašaũ", "prašyti", "prãšo", "prãšė"): "prašaũ",
+        # stem-stressed observed forms pass through untouched
+        ("pa", past_1sg, "pàdirbau", "padirbti", "pàdirba", "pàdirbo"): "pàdirbau",
+        (None, past_1sg, "nešiaũ", "nešti", "nẽša", "nẽšė"): "nešiaũ",
+        # acute on an ending-stressed 1sg is invalid notation — skipped
+        (None, past_1sg, "elgiaúsi", "elgtis", "el̃giasi", "el̃gėsi"): None,
     }
-    for (prefixed, tags, form), should_veto in expect.items():
-        reason = veto_verb_form(prefixed, tags, normalize_lt(form))
-        if bool(reason) != should_veto:
-            verdict = "vetoed" if reason else "kept"
-            raise AssertionError(f"veto_verb_form({prefixed}, {tags}, {form!r}) unexpectedly {verdict} ({reason})")
+    for (prefix, tags, form, lemma, prs3, pst3), expected in expect.items():
+        resolved, rule = resolve_verb_form(prefix, tags, normalize_lt(form), lemma, prs3, pst3)
+        want = nfc(expected) if expected else None
+        if resolved != want:
+            raise AssertionError(
+                f"resolve_verb_form({prefix}, {tags}, {form!r}) = {resolved!r} ({rule}), expected {expected!r}"
+            )
 
 
 def run_selfcheck(args: argparse.Namespace) -> int:
     check_notation()
-    check_vetoes()
+    check_verb_rules()
     ensure_lexicon(args)
     db = sqlite3.connect(args.lexicon)
     try:

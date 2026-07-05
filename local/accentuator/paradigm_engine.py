@@ -267,14 +267,23 @@ def _copy_lemma_accent(accented_lemma: str, stripped_form: str, accent_mark: str
 
 
 def _apply_stress(stripped: str, base_index: int, mark: str) -> str:
+    # The stress mark must follow the cluster's own combining marks (ė is
+    # e + dot above; both marks share a combining class, so NFC cannot
+    # reorder a mis-ordered sequence).
     out: list[str] = []
     current = -1
+    pending = False
     for ch in unicodedata.normalize("NFD", stripped):
-        out.append(ch)
         if not unicodedata.combining(ch):
+            if pending:
+                out.append(mark)
+                pending = False
             current += 1
             if current == base_index:
-                out.append(mark)
+                pending = True
+        out.append(ch)
+    if pending:
+        out.append(mark)
     return normalize_lt("".join(out))
 
 

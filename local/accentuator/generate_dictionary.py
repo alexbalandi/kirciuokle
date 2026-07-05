@@ -40,7 +40,7 @@ try:  # pragma: no cover
         stressed_base_index,
         strip_accents,
     )
-    from .paradigm_engine import accent_nominal, accent_verb, build_forms_by_cell
+    from .paradigm_engine import MARK_BY_NAME, _apply_stress, accent_nominal, accent_verb, build_forms_by_cell
 except ImportError:  # pragma: no cover
     from _common import (
         CASE_TAGS,
@@ -62,7 +62,7 @@ except ImportError:  # pragma: no cover
         stressed_base_index,
         strip_accents,
     )
-    from paradigm_engine import accent_nominal, accent_verb, build_forms_by_cell
+    from paradigm_engine import MARK_BY_NAME, _apply_stress, accent_nominal, accent_verb, build_forms_by_cell
 
 
 Variant = dict[str, object]
@@ -97,11 +97,10 @@ def load_vetoes(path: Path = DEFAULT_VETOES) -> dict[str, dict[str, str]]:
     }
 
 
-def prefixed_verb_base(lemma: str) -> str | None:
+def matched_verb_prefix(lemma: str) -> str | None:
     for prefix in VERB_PREFIXES:
-        rest = lemma[len(prefix):]
-        if lemma.startswith(prefix) and len(rest) >= 4:
-            return rest
+        if lemma.startswith(prefix) and len(lemma) - len(prefix) >= 4:
+            return prefix
     return None
 
 
@@ -144,14 +143,77 @@ def _future_third_metatony_risk(form: str) -> bool:
     return after < len(stripped) and stripped[after].lower() in SONORANTS
 
 
-def veto_verb_form(prefixed: bool, tags: Iterable[str], form: str) -> str | None:
-    """Reason to skip a generated verb form, or None to keep it."""
+def _metatonize_future(form: str) -> str | None:
+    """dìrbs → dir̃bs, gáus → gaũs, kalbė́s → kalbė̃s (future-3 metatony).
+
+    A final-syllable-stressed long stem takes the circumflex in the future
+    third person (Stundžia; consistent across the VDU cache), placed by the
+    standard notation: second pure-diphthong component, mixed-diphthong
+    sonorant, or the long vowel itself.
+    """
+
+    stripped = strip_accents(form)
+    index = stressed_base_index(form)
+    if index is None or index >= len(stripped):
+        return None
+    tilde = MARK_BY_NAME["circumflex"]
+    nxt = stripped[index + 1].lower() if index + 1 < len(stripped) else ""
+    if (stripped[index] + nxt).lower() in PURE_DIPHTHONGS:
+        return _apply_stress(stripped, index + 1, tilde)
+    if nxt in SONORANTS:
+        return _apply_stress(stripped, index + 1, tilde)
+    if stripped[index].lower() in LONG_VOWELS:
+        return _apply_stress(stripped, index, tilde)
+    return None
+
+
+def _retract_to_prefix(form: str, third_person: str) -> str | None:
+    """Copy the third person's prefix accent onto a 1/2sg form (àtnešė → àtnešiau)."""
+
+    index = stressed_base_index(third_person)
+    mark = MARK_BY_NAME.get(first_stress_mark(third_person) or "")
+    stripped = strip_accents(form)
+    if index is None or not mark or index >= len(stripped):
+        return None
+    return _apply_stress(stripped, index, mark)
+
+
+def _weak_root_possible(lemma: str, tense: str, present_3: str, past_3: str) -> bool:
+    """Kushnir (2019 §4.4.5): which tense stems can carry a weak root at all.
+
+    Past: theme must be -ė and the verb primary (no -yti verbs). Present:
+    themes -a-/-ia-/-i- only — an -o present is invariably strong. Suffixal
+    pasts in -o (kalbė́jo, mókino) fail the -ė test on their own.
+    """
+
+    if tense == "past":
+        return lower_key(past_3).endswith("ė") and not lemma.endswith("yti")
+    return not lower_key(present_3).endswith("o")
+
+
+def resolve_verb_form(
+    prefix: str | None,
+    tags: Iterable[str],
+    form: str,
+    lemma: str,
+    present_3: str,
+    past_3: str,
+) -> tuple[str | None, str | None]:
+    """Apply published accent rules to one observed verb form.
+
+    Returns ``(form_to_emit, rule_tag)``; ``form_to_emit`` is None when the
+    form must be skipped, ``rule_tag`` names the applied repair (for
+    provenance) or carries the skip reason.
+    """
 
     tag_set = set(tags)
     if "future" in tag_set and "third-person" in tag_set:
         if _future_third_metatony_risk(form):
-            return "future-3 metatony unresolved"
-        return None
+            fixed = _metatonize_future(form)
+            if fixed:
+                return fixed, "future-3-metatony"
+            return None, "future-3 metatony unresolved"
+        return form, None
     if (
         "singular" in tag_set
         and tag_set & {"first-person", "second-person"}
@@ -159,11 +221,30 @@ def veto_verb_form(prefixed: bool, tags: Iterable[str], form: str) -> str | None
         and "frequentative" not in tag_set
         and _ending_stressed_12sg(form)
     ):
-        if prefixed:
-            return "prefixed-verb stress retraction unresolved"
+        if prefix:
+            # Kushnir (2019: §4.4.2, §4.4.5): 1/2sg stress retracts to the
+            # prefix exactly when the tense's root allomorph is weak — which
+            # the verb's own third-person principal part already shows. The
+            # eligibility gate also screens out prefix-lookalike lemmas
+            # (prašyti is praš-, not pra- + šyti).
+            tense = "past" if "past" in tag_set else "present"
+            third = normalize_lt(past_3 if tense == "past" else present_3)
+            index = stressed_base_index(third)
+            if (
+                _weak_root_possible(lemma, tense, present_3, past_3)
+                and index is not None
+                and index < len(prefix)
+            ):
+                retracted = _retract_to_prefix(form, third)
+                if retracted:
+                    return retracted, "prefix-retraction"
+                return None, "prefixed-verb stress retraction unresolved"
+            # Strong root: Saussure's shift applies and the observed
+            # ending-stressed form is correct (aptìko → aptikaũ).
+            return form, None
         if first_stress_mark(form) == "acute":
-            return "acute on an ending-stressed 1/2sg cell (invalid notation)"
-    return None
+            return None, "acute on an ending-stressed 1/2sg cell (invalid notation)"
+    return form, None
 
 
 def create_generated_schema(db: sqlite3.Connection) -> None:
@@ -315,7 +396,7 @@ def generate_verbs(
             break
         if vetoed_lemmas and lemma in vetoed_lemmas:
             continue
-        prefixed = prefixed_verb_base(lemma) is not None
+        prefix = matched_verb_prefix(lemma)
         form_rows = rows_for_lemma(db, lemma, "verb")
         forms_by_cell = {
             key: entries
@@ -332,14 +413,18 @@ def generate_verbs(
         for key in sorted(forms_by_cell):
             tags = parse_tags(key)
             for form, out_tags in accent_verb(infinitive, present_3, past_3, tags, info):
-                if veto_verb_form(prefixed, out_tags, form):
+                resolved, rule = resolve_verb_form(prefix, out_tags, form, lemma, present_3, past_3)
+                if resolved is None:
                     continue
+                provenance = f"open-accentuator:kaikki:{lemma}:verb:{key}"
+                if rule:
+                    provenance += f":rule={rule}"
                 add_variant(
                     grouped,
-                    form=form,
+                    form=resolved,
                     pos="verb",
                     tags=out_tags,
-                    provenance=f"open-accentuator:kaikki:{lemma}:verb:{key}",
+                    provenance=provenance,
                 )
         count += 1
     return count
