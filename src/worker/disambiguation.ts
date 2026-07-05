@@ -318,5 +318,17 @@ export function matchCase(accented: string, original: string): string {
 }
 
 export function toPublicVariants(variants: AccentVariant[]): Variant[] {
-  return variants.map(({ form, info }) => ({ form, info }));
+  return variants.map(({ form, info }) => ({ form, info: dedupeInfo(info) }));
+}
+
+// Cached VDU entries can carry repeated readings ("prl.; prl.; prl.").
+function dedupeInfo(info: string): string {
+  return [
+    ...new Set(
+      info
+        .split("; ")
+        .map((reading) => reading.trim())
+        .filter(Boolean),
+    ),
+  ].join("; ");
 }

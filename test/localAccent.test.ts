@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccentVariant } from "../src/worker/disambiguation";
+import { toPublicVariants } from "../src/worker/disambiguation";
 import { getWords } from "../src/worker/dictionary";
 import worker from "../src/worker/index";
 import { accentTextLocalFirst, tokenizeLikeVdu } from "../src/worker/localAccent";
@@ -156,14 +157,18 @@ describe("local-first accentuation", () => {
       { text: "alyta", type: "word", unknown: true },
       { text: " ", type: "sep" },
       {
+        // a single distinct accented form is not a choice — no ambiguity flag
         text: "Alyta",
         accented: "Alytà",
         type: "word",
-        ambiguous: true,
-        variants: [{ form: "Alytà", info: "dkt." }],
-        chosen: 0,
       },
     ]);
+  });
+
+  it("dedupes repeated readings in public variant info", () => {
+    expect(
+      toPublicVariants([{ form: "põ", info: "prl.; prl.; prl.; prl.", mi: ["prl."] }]),
+    ).toEqual([{ form: "põ", info: "prl." }]);
   });
 
   it("keeps lowercase vilnius variant plain but capitalized Vilnius ambiguous", async () => {

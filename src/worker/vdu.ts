@@ -336,11 +336,27 @@ export async function accentTextParts(
       part.accented ??
       part.text
     ).normalize("NFC");
+    const publicVariants = toPublicVariants(safeVariants);
+    const distinctForms = new Set(
+      publicVariants.map((variant) => variant.form.normalize("NFC")),
+    );
+
+    if (distinctForms.size <= 1) {
+      // All readings share one accented form (e.g. põ as four prepositional
+      // readings) — there is nothing to choose, so don't flag it.
+      const resolved: Part = {
+        ...part,
+        accented: matchCase(accented, part.text).normalize("NFC"),
+      };
+      delete resolved.ambiguous;
+      return resolved;
+    }
+
     const chosenPart: Part = {
       ...part,
       ambiguous: true,
       accented: matchCase(accented, part.text).normalize("NFC"),
-      variants: toPublicVariants(safeVariants),
+      variants: publicVariants,
     };
 
     if (choice.index !== null) {
