@@ -1131,6 +1131,39 @@ DEFINITE_CELLS: dict[tuple[str, str, str], tuple[str | None, str, str | None, st
 }
 
 
+# būti's irregular finite forms are word-level kaikki entries (esù, esì,
+# ẽsame, bùs, nesù) that the conjugation-table pipeline never sees; the
+# plural/parallel gaps are filled by the same pattern. kaikki's nėrà
+# contradicts standard nė́ra and is left out.
+BUTI_FORMS = [
+    ("esù", ("present", "first-person", "singular")),
+    ("esì", ("present", "second-person", "singular")),
+    ("ẽsame", ("present", "first-person", "plural")),
+    ("ẽsate", ("present", "second-person", "plural")),
+    ("bùs", ("future", "third-person")),
+    ("bū́siu", ("future", "first-person", "singular")),
+    ("bū́si", ("future", "second-person", "singular")),
+    ("bū́sime", ("future", "first-person", "plural")),
+    ("bū́site", ("future", "second-person", "plural")),
+    ("nesù", ("present", "first-person", "singular")),
+    ("nesì", ("present", "second-person", "singular")),
+    ("nẽsame", ("present", "first-person", "plural")),
+    ("nẽsate", ("present", "second-person", "plural")),
+]
+
+
+def generate_buti(grouped: dict[str, dict[tuple[str, str], Variant]]) -> int:
+    for form, tags in BUTI_FORMS:
+        add_variant(
+            grouped,
+            form=form,
+            pos="verb",
+            tags=tags,
+            provenance=f"open-accentuator:kaikki:būti:verb:{cell_key(tags)}",
+        )
+    return len(BUTI_FORMS)
+
+
 def generate_negated_adjectives(
     db: sqlite3.Connection,
     grouped: dict[str, dict[tuple[str, str], Variant]],
@@ -1613,6 +1646,7 @@ def generate_dictionary(
         iskas_count = generate_iskas(source, grouped, vetoes["lemmas"])
         definite_count = generate_definite(source, grouped, vetoes["lemmas"])
         neg_adj_count = generate_negated_adjectives(source, grouped, vetoes["lemmas"])
+        generate_buti(grouped)
         derived_count = generate_derived(source, grouped, vetoes["lemmas"])
     finally:
         source.close()
