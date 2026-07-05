@@ -519,11 +519,18 @@ def resolve_verb_form(
                 if retracted:
                     return retracted, "prefix-retraction"
                 return None, "prefixed-verb stress retraction unresolved"
-            # Strong root: Saussure's shift applies and the observed
-            # ending-stressed form is correct (aptìko → aptikaũ).
-            return form, None
-        if first_stress_mark(form) == "acute":
+        elif first_stress_mark(form) == "acute":
             return None, "acute on an ending-stressed 1/2sg cell (invalid notation)"
+        ref3 = normalize_lt(past_3 if "past" in tag_set else present_3)
+        if first_stress_mark(ref3) == "acute":
+            # Saussure cannot shift off an acute stem (dū́rė, atsidū́rė) —
+            # kaikki's mechanical dūriaũ repairs to the stem accent
+            repaired = _retract_to_prefix(form, ref3)
+            if repaired:
+                return repaired, "acute-stem-1sg-repair"
+            return None, "ending-stressed 1/2sg of an acute stem"
+        # Strong non-acute root: Saussure's shift applies and the observed
+        # ending-stressed form is correct (aptìko → aptikaũ).
     return form, None
 
 
@@ -774,8 +781,13 @@ def _emit_verb_forms(
 
 
 # Prefixes safe for paradigm synthesis: short-vowel stress targets (pà-,
-# atì-, ìš-). per- (always stressed) and long į- need their own treatment.
-SYNTH_PREFIXES = ("ap", "api", "at", "ati", "iš", "nu", "pa", "par", "pra", "pri", "su", "už")
+# atì-, ìš-), including the reflexive composites whose -si- carries the
+# retraction (atsìnešė). per- (always stressed) and long į- need their own
+# treatment.
+SYNTH_PREFIXES = (
+    "ap", "api", "at", "ati", "iš", "nu", "pa", "par", "pra", "pri", "su", "už",
+    "apsi", "atsi", "išsi", "nusi", "pasi", "parsi", "prasi", "prisi", "susi", "užsi",
+)
 
 
 def _prefix_grave(prefix: str) -> str:
