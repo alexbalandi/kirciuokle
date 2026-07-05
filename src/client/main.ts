@@ -2,6 +2,7 @@ import type {
   AccentResponse,
   ErrorResponse,
   Part,
+  WordResponse,
 } from "../shared/types";
 import {
   detectLang,
@@ -262,9 +263,10 @@ function renderResult(): void {
       return;
     }
 
-    if (part.variants && part.variants.length > 0) {
-      // Plain resolved word with dictionary readings: clickable for
-      // morphology info, but not underlined — it is not a choice.
+    if (part.accented || (part.variants && part.variants.length > 0)) {
+      // Plain resolved word: clickable for morphology info, but not
+      // underlined — it is not a choice. Readings not shipped with the
+      // response (long-text fallback) are fetched on first click.
       const button = document.createElement("button");
       button.type = "button";
       button.className = "token token-plain";
@@ -300,6 +302,13 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
   const variants = part.variants ?? [];
 
   if (variants.length === 0) {
+    if (part.type === "word" && !part.unknown) {
+      popover.textContent = UI[lang].variantsLoading;
+      positionPopover(popover, anchor);
+      void loadWordInfo(popover, anchor, index);
+      return;
+    }
+
     popover.textContent = UI[lang].variantsNone;
     positionPopover(popover, anchor);
     return;
@@ -370,6 +379,49 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
 function readingMatchesMi(reading: string, mi: string): boolean {
   const trimmed = reading.trim();
   return trimmed === mi || trimmed.startsWith(`${mi} - `);
+}
+
+async function loadWordInfo(
+  popover: HTMLDivElement,
+  anchor: HTMLElement,
+  index: number,
+): Promise<void> {
+  const part = renderedParts[index];
+  if (!part) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/word?w=${encodeURIComponent(part.text)}`);
+    const payload = (await response.json().catch(() => null)) as
+      | WordResponse
+      | ErrorResponse
+      | null;
+    if (!response.ok || !payload || "error" in payload) {
+      throw new Error(`Word info request failed (${response.status})`);
+    }
+
+    const variants = payload.variants ?? [];
+    renderedParts[index] = { ...part, variants };
+
+    if (activePopover !== popover) {
+      return; // closed or replaced while loading
+    }
+
+    if (variants.length === 0) {
+      popover.textContent = UI[lang].variantsNone;
+      positionPopover(popover, anchor);
+      return;
+    }
+
+    closePopover();
+    openVariantPopover(anchor, index);
+  } catch {
+    if (activePopover === popover) {
+      popover.textContent = UI[lang].variantsError;
+      positionPopover(popover, anchor);
+    }
+  }
 }
 
 function appendMorphologyInfo(
