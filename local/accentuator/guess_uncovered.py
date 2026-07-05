@@ -132,11 +132,16 @@ class NNBackend:
                 "nn backend requires torch/transformers; run with .venv-train/Scripts/python.exe"
             ) from exc
         try:  # pragma: no cover
-            from .train_stress_nn import ENCODER, MAX_CHARS, OUT_DIR, StressModel, batch_predict
+            from .train_stress_nn import ENCODER, MAX_CHARS, OUT_DIR, OUT_DIR_V2, StressModel, batch_predict
         except ImportError:  # pragma: no cover
-            from train_stress_nn import ENCODER, MAX_CHARS, OUT_DIR, StressModel, batch_predict
+            from train_stress_nn import ENCODER, MAX_CHARS, OUT_DIR, OUT_DIR_V2, StressModel, batch_predict
 
-        ckpt = torch.load(OUT_DIR / "stress_nn.pt", map_location="cpu", weights_only=False)
+        # prefer the v2 checkpoint (label-conditioned training also improved
+        # its unconditioned mode: 98.4% vs v1's 97.9% in-domain)
+        ckpt_path = OUT_DIR_V2 / "stress_nn2.pt"
+        if not ckpt_path.exists():
+            ckpt_path = OUT_DIR / "stress_nn.pt"
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
         tokenizer = AutoTokenizer.from_pretrained(ckpt.get("encoder", ENCODER))
         model = StressModel(AutoModel.from_pretrained(ckpt.get("encoder", ENCODER)),
                             len(ckpt["char_vocab"]) + 2)
