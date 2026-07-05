@@ -316,7 +316,23 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
 
   const interactive = Boolean(part.ambiguous);
 
-  variants.forEach((variant, variantIndex) => {
+  // Display order: the variant that is actually shown in the result (or the
+  // one carrying the tagger-matched reading) comes first, so the relevant
+  // group is always at the top. Original indices are kept for selection.
+  const order = variants.map((_, variantIndex) => variantIndex);
+  let first = typeof part.chosen === "number" ? part.chosen : -1;
+  if ((first < 0 || first >= order.length) && part.chosenMi) {
+    first = variants.findIndex((variant) =>
+      variant.info.split("; ").some((reading) => readingMatchesMi(reading, part.chosenMi!)),
+    );
+  }
+  if (first > 0 && first < order.length) {
+    order.splice(order.indexOf(first), 1);
+    order.unshift(first);
+  }
+
+  order.forEach((variantIndex) => {
+    const variant = variants[variantIndex]!;
     const option = document.createElement(interactive ? "button" : "div");
     option.className = "variant-option";
 
@@ -344,7 +360,15 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
         (!interactive || part.chosen === variantIndex);
       const info = document.createElement("span");
       info.className = "variant-info";
-      variant.info.split("; ").forEach((reading) => {
+      const readings = variant.info.split("; ");
+      const displayReadings = markChosen
+        ? [...readings].sort(
+            (a, b) =>
+              Number(readingMatchesMi(b, part.chosenMi!)) -
+              Number(readingMatchesMi(a, part.chosenMi!)),
+          )
+        : readings;
+      displayReadings.forEach((reading) => {
         const row = document.createElement("span");
         row.className = "variant-reading";
         if (markChosen && readingMatchesMi(reading, part.chosenMi!)) {
