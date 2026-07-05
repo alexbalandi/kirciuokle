@@ -56,7 +56,10 @@ reports/parity-vdu.md ──► adjudication ──► parity_vetoes.json (+ rul
 | 8 | `generate_deverbal_imas` | -imas/-ymas action nouns from suffixal verbs (mãtymas, kalbė́jimas) | accent copied from the past-3 stem; primary verbs are lexically split and skipped |
 | 9 | `generate_iskas` | -iškas adjectives + -iškai adverbs with base-copied stem accent (vaĩkiškas) | base noun stems from kaikki; no attested base → no answer |
 | 10 | `generate_definite` | definite (pronominal) adjective forms (aukštàsis, didỹsis) | VDU 2010 §3.3.10 table 3.24: fixed for class 1, mobile pattern otherwise |
-| 11 | `generate_derived` | full paradigms for unknown lemmas that parse as base + self-accented suffix | VDU 2010 App. C suffix table + endings induced from kaikki |
+| 11 | `generate_closed_extra` | 50 curated interjections/particles (dė̃kui, galbū́t, štaĩ) | per-word citations in `closed_class_extra.json`: e-LKŽ, accented en.wiktionary, VLKK R-13 |
+| 12 | `generate_vlkk_recommended` | VLKK recommended-stress-variants list: verbatim forms + paradigms for stem-stressed classed nominals | vlkk.lt consolidated list (normative arbiter; K-nn rec ids in provenance) |
+| 13 | `generate_derived` | full paradigms for unknown lemmas that parse as base + self-accented suffix | VDU 2010 App. C suffix table + endings induced from kaikki; candidates = lt_50k ∪ VDU cache keys (keys only) |
+| 14 | `generate_apocope` | standard shortenings -ti→-t, -ki→-k with accent kept (ateĩt, supràst) | documented apocope convention; runs last, never overwrites |
 
 `generate_verbs` additionally emits **negated counterparts** (ne-, nebe-) of
 finite forms, infinitives, and participle heads: the negation is stressed
@@ -141,14 +144,19 @@ disagreement), UNCOVERED. The standing quality gate is **DISJOINT = 0**:
 every hard disagreement must be adjudicated (rule fix, veto, or documented
 norm-delta) before committing.
 
-Current state (2026-07-05, full VLKK crawl folded in): dictionary 566,439
-words; covered 7,373/10,015 (73.6%), EXACT 6,013 (81.6% of covered),
-DISJOINT 0, NORM-DELTA 9. Most OVERLAP/DEFAULT-MATCH words are cases
-where VDU lists additional accent-class variants (`Ãnglija`/`Anglijà`) that
-Wiktionary has no facts for. The uncovered mass is dominated by lemmas
-absent from Wiktionary whose suffix does not determine their accent — the
-slice that structurally needs DLKŽ (closed) and is served by the guesser
-tier below.
+Current state (2026-07-06): dictionary 574,749+ words; covered
+7,540/10,015 (75.3%), EXACT 6,154 (81.6% of covered), DISJOINT 0,
+NORM-DELTA 9. Most OVERLAP/DEFAULT-MATCH words are cases where VDU lists
+additional accent-class variants (`Ãnglija`/`Anglijà`) that Wiktionary has
+no facts for. The uncovered residue was classified exhaustively
+(2026-07-06): ~2,100 lexical stems absent from every open source
+(internationalisms, rare lemmas — the slice that structurally needs the
+closed DLKŽ/BŽ), 116 foreign names VDU itself leaves unmarked, and long
+tails of derivatives whose accent needs base-lexeme knowledge. Foreign
+Wiktionary editions were measured and ruled out (nine kaikki extractions:
+≤3% residue coverage, mostly duplicating en.wiktionary). This is the
+practical ceiling of the dictionary tier under open provenance; beyond it
+the guesser tier answers.
 
 ## The guesser tier (separate artifact)
 
