@@ -113,11 +113,13 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .input-panel,
 .result-panel {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
@@ -151,6 +153,7 @@ a {
 
 textarea {
   display: block;
+  flex: 1 0 auto;
   width: 100%;
   min-height: 240px;
   max-height: 62vh;
@@ -280,6 +283,7 @@ button:disabled {
 }
 
 .result-output {
+  flex: 1 0 auto;
   min-height: 240px;
   max-height: 62vh;
   overflow: auto;
