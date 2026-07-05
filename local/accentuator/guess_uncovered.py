@@ -76,7 +76,13 @@ def engine_accent(pe, word: str) -> str | None:
         return None
     out = [MARKS.get(ch, ch) for ch in raw.lower()]
     form = normalize_notation(normalize_lt(unicodedata.normalize("NFC", "".join(out))))
-    return form if strip_accents(form) == word else None
+    if strip_accents(form) != word:
+        return None
+    # exactly one stress mark, or it is not an answer: LIEPA leaves unknown
+    # names unmarked and occasionally emits double-marked forms (žaĩstà) —
+    # both must fall through the cascade as abstentions (LRT eval finding)
+    marks = sum(form.count(m) for m in MARKS.values())
+    return form if marks == 1 else None
 
 
 class LiepaBackend:
