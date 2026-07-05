@@ -51,9 +51,12 @@ reports/parity-vdu.md ──► adjudication ──► parity_vetoes.json (+ rul
 | 3 | `generate_verbs` | observed finite + non-finite verb forms, filtered/repaired by `resolve_verb_form` | kaikki tables + published rules (below) |
 | 4 | `generate_other` | observed forms for adverbs, interjections, prepositions, conjunctions, particles, and nominal lemmas without a stress class | kaikki (observed facts) |
 | 5 | `generate_closed` | 208 closed-class headwords | our draft, pending VLKK review |
-| 6 | `generate_degrees` | comparative/superlative paradigms for adjectives lacking observed rows | per-cell majorities induced from the 13k observed degree rows |
-| 7 | `generate_deverbal_imas` | -imas/-ymas action nouns from suffixal verbs (mãtymas, kalbė́jimas) | accent copied from the past-3 stem; primary verbs are lexically split and skipped |
-| 8 | `generate_derived` | full paradigms for unknown lemmas that parse as base + self-accented suffix | VDU 2010 App. C suffix table + endings induced from kaikki |
+| 6 | `generate_prefixed_verbs` | full paradigms for wordlist-attested prefix+base combos (ištraukti, atsisėsti), incl. reflexive composites | Kushnir §4.4.2 weak/strong transforms over the base cells; weakness evidence read off kaikki's real prefixed entries |
+| 7 | `generate_degrees` | comparative/superlative paradigms for adjectives lacking observed rows | per-cell majorities induced from the 13k observed degree rows |
+| 8 | `generate_deverbal_imas` | -imas/-ymas action nouns from suffixal verbs (mãtymas, kalbė́jimas) | accent copied from the past-3 stem; primary verbs are lexically split and skipped |
+| 9 | `generate_iskas` | -iškas adjectives + -iškai adverbs with base-copied stem accent (vaĩkiškas) | base noun stems from kaikki; no attested base → no answer |
+| 10 | `generate_definite` | definite (pronominal) adjective forms (aukštàsis, didỹsis) | VDU 2010 §3.3.10 table 3.24: fixed for class 1, mobile pattern otherwise |
+| 11 | `generate_derived` | full paradigms for unknown lemmas that parse as base + self-accented suffix | VDU 2010 App. C suffix table + endings induced from kaikki |
 
 `generate_verbs` additionally emits **negated counterparts** (ne-, nebe-) of
 finite forms, infinitives, and participle heads: the negation is stressed

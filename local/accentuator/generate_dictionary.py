@@ -1087,6 +1087,116 @@ MIN_DEGREE_EVIDENCE = 25
 
 ISKAS_BASE_ENDINGS = ("ius", "as", "is", "ys", "us", "a", "ė")
 
+# Definite (pronominal) adjective forms — VDU 2010 §3.3.10, table 3.24.
+# Mobile paradigm: constant accented endings per cell; None = stem cell
+# (copies the simple form's stem accent). First member: -as adjectives,
+# second: -us adjectives (with -i- glide).
+DEFINITE_CELLS: dict[tuple[str, str, str], tuple[str | None, str, str | None, str]] = {
+    # (gender, number, case): (as accented, as plain, us accented, us plain)
+    ("masculine", "singular", "nominative"): ("àsis", "asis", "ùsis", "usis"),
+    ("masculine", "singular", "genitive"): (None, "ojo", None, "iojo"),
+    ("masculine", "singular", "dative"): ("ájam", "ajam", "iájam", "iajam"),
+    ("masculine", "singular", "accusative"): (None, "ąjį", None, "ųjį"),
+    ("masculine", "singular", "instrumental"): ("úoju", "uoju", "iúoju", "iuoju"),
+    ("masculine", "singular", "locative"): ("ãjame", "ajame", "iãjame", "iajame"),
+    ("masculine", "plural", "nominative"): ("íeji", "ieji", "íeji", "ieji"),
+    ("masculine", "plural", "genitive"): ("ų̃jų", "ųjų", "ių̃jų", "iųjų"),
+    ("masculine", "plural", "dative"): ("íesiems", "iesiems", "íesiems", "iesiems"),
+    ("masculine", "plural", "accusative"): ("úosius", "uosius", "iúosius", "iuosius"),
+    ("masculine", "plural", "instrumental"): ("aĩsiais", "aisiais", "iaĩsiais", "iaisiais"),
+    ("masculine", "plural", "locative"): ("uõsiuose", "uosiuose", "iuõsiuose", "iuosiuose"),
+    ("feminine", "singular", "nominative"): ("óji", "oji", "ióji", "ioji"),
+    ("feminine", "singular", "genitive"): ("õsios", "osios", "iõsios", "iosios"),
+    ("feminine", "singular", "dative"): (None, "ajai", None, "iajai"),
+    ("feminine", "singular", "accusative"): (None, "ąją", None, "iąją"),
+    ("feminine", "singular", "instrumental"): ("ą́ja", "ąja", "ią́ja", "iąja"),
+    ("feminine", "singular", "locative"): ("õjoje", "ojoje", "iõjoje", "iojoje"),
+    ("feminine", "plural", "nominative"): (None, "osios", None, "iosios"),
+    ("feminine", "plural", "genitive"): ("ų̃jų", "ųjų", "ių̃jų", "iųjų"),
+    ("feminine", "plural", "dative"): ("ósioms", "osioms", "iósioms", "iosioms"),
+    ("feminine", "plural", "accusative"): ("ą́sias", "ąsias", "ią́sias", "iąsias"),
+    ("feminine", "plural", "instrumental"): ("õsiomis", "osiomis", "iõsiomis", "iosiomis"),
+    ("feminine", "plural", "locative"): ("õsiose", "osiose", "iõsiose", "iosiose"),
+}
+
+
+def generate_definite(
+    db: sqlite3.Connection,
+    grouped: dict[str, dict[tuple[str, str], Variant]],
+    vetoed_lemmas: dict[str, str] | None = None,
+) -> int:
+    """Definite (pronominal) adjective forms per VDU 2010 §3.3.10.
+
+    Class-1 adjectives keep the simple form's accent throughout; all others
+    follow the mobile pattern of table 3.24 — constant accented endings with
+    five stem cells copying the simple form's stem accent.
+    """
+
+    count = 0
+    for lemma, stress_class in db.execute(
+        "SELECT DISTINCT lemma, stress_class FROM nominals WHERE pos = 'adj'"
+    ):
+        if vetoed_lemmas and lemma in vetoed_lemmas:
+            continue
+        if lemma in DEGREE_STEM_OVERRIDES:
+            stem, family = DEGREE_STEM_OVERRIDES[lemma], "is"  # didỹsis
+        elif lemma.endswith("as"):
+            stem, family = lemma[:-2], "as"
+        elif lemma.endswith("us") and not lemma.endswith("ius"):
+            stem, family = lemma[:-2], "us"
+        elif lemma.endswith("is") and not lemma.endswith(("tis", "sis")):
+            stem, family = lemma[:-2], "is"
+        else:
+            continue
+        if len(stem) < 2:
+            continue
+        # stem accent from a stem-stressed simple row (nom or acc)
+        accented_stem = None
+        for (accented,) in db.execute(
+            """SELECT accented FROM forms WHERE lemma = ? AND pos = 'adj'
+               AND (tags LIKE '%accusative%' OR tags LIKE '%nominative%')""",
+            (lemma,),
+        ):
+            form = normalize_lt(accented)
+            index = stressed_base_index(form)
+            if index is not None and index < len(stem) and strip_accents(form).startswith(stem):
+                accented_stem = _accented_prefix(form, len(stem))
+                break
+        if not accented_stem:
+            continue
+        fixed = str(stress_class) == "1"
+        emitted = False
+        for (gender, number, case), (acc_as, plain_as, acc_us, plain_us) in DEFINITE_CELLS.items():
+            if family == "as":
+                accented_ending, plain_ending = acc_as, plain_as
+            else:
+                accented_ending, plain_ending = acc_us, plain_us
+            if family == "is":
+                # -is adjectives (didis -> didỹsis): us-type endings with
+                # the nom/acc masculine singular replaced, stems palatalized
+                if (gender, number, case) == ("masculine", "singular", "nominative"):
+                    accented_ending, plain_ending = "ỹsis", "ysis"
+                elif (gender, number, case) == ("masculine", "singular", "accusative"):
+                    accented_ending, plain_ending = None, "įjį"
+            if fixed or accented_ending is None:
+                stem_part, ending = accented_stem, plain_ending
+            else:
+                stem_part, ending = stem, accented_ending
+            if family == "is":
+                stem_part = _palatalize(stem_part, strip_accents(ending))
+            form = stem_part + ending
+            add_variant(
+                grouped,
+                form=form,
+                pos="adj",
+                tags=("definite", gender, number, case),
+                provenance=f"open-accentuator:definite-rule:{lemma}:adj:{stress_class}:{gender}|{number}|{case}",
+            )
+            emitted = True
+        if emitted:
+            count += 1
+    return count
+
 
 def generate_iskas(
     db: sqlite3.Connection,
@@ -1440,6 +1550,7 @@ def generate_dictionary(
         degree_count = generate_degrees(source, grouped, vetoes["lemmas"])
         imas_count = generate_deverbal_imas(source, grouped, vetoes["lemmas"])
         iskas_count = generate_iskas(source, grouped, vetoes["lemmas"])
+        definite_count = generate_definite(source, grouped, vetoes["lemmas"])
         derived_count = generate_derived(source, grouped, vetoes["lemmas"])
     finally:
         source.close()
@@ -1454,6 +1565,7 @@ def generate_dictionary(
         "degree_lemmas": degree_count,
         "imas_lemmas": imas_count,
         "iskas_lemmas": iskas_count,
+        "definite_lemmas": definite_count,
         "derived_lemmas": derived_count,
         "vetoed_lemmas": len(vetoes["lemmas"]),
         "vetoed_words": len(vetoes["words"]),
