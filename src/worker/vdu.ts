@@ -277,9 +277,11 @@ function formatInformation(
 export type AccentTextOptions = {
   lookupVariants?: (word: string) => Promise<AccentVariant[]>;
   useTagger?: boolean;
-  /** Attach reading info to every covered word, not just ambiguous ones.
-      Only sensible when lookupVariants is a cheap in-memory lookup. */
+  /** Attach reading info to every covered word, not just ambiguous ones. */
   attachInfoForAll?: boolean;
+  /** Cheap (no-network) lookup used for the non-ambiguous words when
+      attachInfoForAll is set; defaults to lookupVariants. */
+  lookupInfoVariants?: (word: string) => Promise<AccentVariant[]>;
 };
 
 type TaggerResult =
@@ -309,13 +311,22 @@ export async function accentTextParts(
     taggerResult.tagger === "ok"
       ? alignTokens(textParts, taggerResult.tokens)
       : Array<TokenOrNull>(wordParts.length).fill(null);
-  const wordsNeedingVariants = options.attachInfoForAll
-    ? distinctWordKeys(wordParts)
-    : distinctAmbiguousWords(wordParts);
   const variantsByWord = await fetchAmbiguousVariants(
-    wordsNeedingVariants,
+    distinctAmbiguousWords(wordParts),
     options.lookupVariants ?? lookupWordVariants,
   );
+
+  if (options.attachInfoForAll) {
+    const rest = distinctWordKeys(wordParts).filter(
+      (key) => !variantsByWord.has(key),
+    );
+    const infoLookup =
+      options.lookupInfoVariants ?? options.lookupVariants ?? lookupWordVariants;
+    const infoByWord = await fetchAmbiguousVariants(rest, infoLookup);
+    for (const [key, value] of infoByWord) {
+      variantsByWord.set(key, value);
+    }
+  }
 
   let wordIndex = 0;
   const disambiguatedParts = parts.map((part, index) => {

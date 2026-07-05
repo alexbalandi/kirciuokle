@@ -120,6 +120,11 @@ export async function accentTextLocalFirst(
     return accentText(normalizedText, {
       lookupVariants: (word) => lookupWordVariantsD1(word, env, ctx),
       useTagger: options.useTagger,
+      // reading info still comes from the entries we already batch-loaded;
+      // never fetch per plain word on the over-budget path
+      attachInfoForAll: true,
+      lookupInfoVariants: async (word) =>
+        entriesByWord.get(normalizeWordKey(word))?.variants ?? [],
     });
   }
 
