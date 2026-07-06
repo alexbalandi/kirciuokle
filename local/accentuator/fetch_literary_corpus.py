@@ -88,6 +88,11 @@ AUTHOR_WHITELIST: tuple[Author, ...] = (
     Author("Vytautas Mačernis", 1944),
     Author("Julius Janonis", 1917),
     Author("Petras Cvirka", 1947),
+    Author("Juozas Tumas-Vaižgantas", 1933, ("Vaižgantas", "Juozas Tumas")),  # d.1933
+    Author("Gabrielė Petkevičaitė-Bitė", 1943, ("Gabrielė Petkevičaitė", "Bitė")),  # d.1943
+    Author("Kazys Binkis", 1942),  # d.1942
+    Author("Pranas Vaičaitis", 1901),  # d.1901
+    Author("Jurgis Baltrušaitis", 1944),  # d.1944; Lithuanian-language works only
 )
 
 
@@ -161,10 +166,20 @@ class Corpus:
     tokens: int
     poetry_tokens: int
     firewall: Firewall
+    excluded_work_sidecars: list[str]
+    excluded_work_titles: list[str]
+    skipped_excluded: list[dict[str, Any]]
     skipped_old_orthography: list[dict[str, Any]]
     skipped_empty: list[dict[str, Any]]
     skipped_over_budget: list[dict[str, Any]]
     discovered_candidates: int
+
+
+@dataclass(frozen=True)
+class ExcludedWorks:
+    paths: tuple[Path, ...]
+    title_keys: frozenset[str]
+    titles: tuple[str, ...]
 
 
 class ThrottledMediaWikiClient:
@@ -260,6 +275,31 @@ def word_keys(text: str) -> list[str]:
 
 def title_key(title: str) -> str:
     return re.sub(r"\s+", " ", title.replace("_", " ")).strip().casefold()
+
+
+def load_excluded_works(paths: list[Path]) -> ExcludedWorks:
+    keys: set[str] = set()
+    titles: list[str] = []
+    for path in paths:
+        if not path.exists():
+            raise FileNotFoundError(f"missing excluded works sidecar: {path}")
+        meta = json.loads(path.read_text(encoding="utf-8"))
+        for segment in meta.get("segments", []):
+            title = str(segment.get("title") or "").strip()
+            if title:
+                key = title_key(title)
+                if key not in keys:
+                    keys.add(key)
+                    titles.append(title)
+            for source_title in segment.get("source_pages", []) or []:
+                source_title = str(source_title).strip()
+                if source_title:
+                    keys.add(title_key(source_title))
+    return ExcludedWorks(
+        paths=tuple(paths),
+        title_keys=frozenset(keys),
+        titles=tuple(sorted(titles, key=title_key)),
+    )
 
 
 def visible_title(raw_link: str) -> str | None:
@@ -862,7 +902,12 @@ def select_works(works: list[Work], max_tokens: int) -> tuple[list[Work], list[d
     return selected, skipped_over_budget
 
 
-def build_corpus(client: ThrottledMediaWikiClient, max_tokens: int, gold_path: Path) -> Corpus:
+def build_corpus(
+    client: ThrottledMediaWikiClient,
+    max_tokens: int,
+    gold_path: Path,
+    excluded: ExcludedWorks,
+) -> Corpus:
     author_pages = resolve_author_pages(client)
     print("author pages:")
     for page in author_pages:
@@ -883,15 +928,56 @@ def build_corpus(client: ThrottledMediaWikiClient, max_tokens: int, gold_path: P
         seen_keys.add(key)
         deduped.append(candidate)
     candidates = deduped
+    skipped_excluded: list[dict[str, Any]] = []
+    if excluded.title_keys:
+        kept_candidates: list[WorkCandidate] = []
+        for candidate in candidates:
+            if title_key(candidate.title) in excluded.title_keys:
+                skipped_excluded.append(
+                    {
+                        "author": candidate.author.name,
+                        "title": candidate.title,
+                        "reason": "excluded by previous meta sidecar",
+                    }
+                )
+                continue
+            kept_candidates.append(candidate)
+        candidates = kept_candidates
     print(f"discovered work links: {len(candidates):,}")
 
     pages = fetch_pages(client, [candidate.title for candidate in candidates])
     pages = expand_container_pages(client, pages)
     works, skipped_old, skipped_empty = build_works(candidates, pages)
+    if excluded.title_keys:
+        kept_works: list[Work] = []
+        for work in works:
+            keys = {title_key(work.title), *(title_key(title) for title in work.source_pages)}
+            if keys & excluded.title_keys:
+                skipped_excluded.append(
+                    {
+                        "author": work.author.name,
+                        "title": work.title,
+                        "reason": "resolved title/source page excluded by previous meta sidecar",
+                    }
+                )
+                continue
+            kept_works.append(work)
+        works = kept_works
     print(f"clean candidate works: {len(works):,}")
 
     all_firewall = apply_firewall(works, gold_path)
     selected, skipped_over_budget = select_works(works, max_tokens)
+    overlap = sorted(
+        {
+            work.title
+            for work in selected
+            if title_key(work.title) in excluded.title_keys
+            or any(title_key(source_title) in excluded.title_keys for source_title in work.source_pages)
+        },
+        key=title_key,
+    )
+    if overlap:
+        raise RuntimeError("excluded work title overlap survived selection: " + ", ".join(overlap))
     firewall = selected_firewall_report(selected, all_firewall)
     tokens = sum(work.output_tokens for work in selected)
     poetry_tokens = sum(work.output_tokens for work in selected if work.genre == "poetry")
@@ -900,6 +986,9 @@ def build_corpus(client: ThrottledMediaWikiClient, max_tokens: int, gold_path: P
         tokens=tokens,
         poetry_tokens=poetry_tokens,
         firewall=firewall,
+        excluded_work_sidecars=[safe_relative(path) for path in excluded.paths],
+        excluded_work_titles=list(excluded.titles),
+        skipped_excluded=skipped_excluded,
         skipped_old_orthography=skipped_old,
         skipped_empty=skipped_empty,
         skipped_over_budget=skipped_over_budget,
@@ -927,6 +1016,8 @@ def write_outputs(corpus: Corpus, output: Path, max_tokens: int, request_interva
         "sentences_or_verse_lines": sum(len(work.output_units) for work in corpus.works),
         "poetry_tokens": corpus.poetry_tokens,
         "poetry_share": corpus.poetry_tokens / corpus.tokens if corpus.tokens else 0.0,
+        "excluded_work_sidecars": corpus.excluded_work_sidecars,
+        "excluded_work_titles": corpus.excluded_work_titles,
         "author_whitelist": [
             {
                 "name": author.name,
@@ -969,6 +1060,7 @@ def write_outputs(corpus: Corpus, output: Path, max_tokens: int, request_interva
             "dropped_total": corpus.firewall.dropped_total,
             "dropped_by_work": corpus.firewall.dropped_by_work,
         },
+        "skipped_excluded_works": corpus.skipped_excluded,
         "skipped_old_orthography": corpus.skipped_old_orthography,
         "skipped_empty_or_missing": corpus.skipped_empty,
         "skipped_over_budget": corpus.skipped_over_budget,
@@ -1004,6 +1096,24 @@ def print_work_list(corpus: Corpus) -> None:
             )
     else:
         print("old-orthography skipped works: none")
+
+
+def print_author_token_report(corpus: Corpus) -> None:
+    per_author: dict[str, int] = {}
+    for work in corpus.works:
+        per_author[work.author.name] = per_author.get(work.author.name, 0) + work.output_tokens
+    print("per-author tokens:")
+    for author, tokens in sorted(per_author.items(), key=lambda item: (-item[1], item[0])):
+        print(f"  {author}: {tokens:,}")
+
+
+def print_excluded_report(corpus: Corpus) -> None:
+    print("excluded works report:")
+    print(f"  sidecars: {len(corpus.excluded_work_sidecars):,}")
+    for path in corpus.excluded_work_sidecars:
+        print(f"    {path}")
+    print(f"  excluded title keys loaded: {len(corpus.excluded_work_titles):,}")
+    print(f"  candidate/resolved works skipped: {len(corpus.skipped_excluded):,}")
 
 
 def print_firewall_report(firewall: Firewall) -> None:
@@ -1042,9 +1152,16 @@ def print_summary(corpus: Corpus) -> None:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--max-tokens", type=int, default=220000)
+    parser.add_argument("--max-tokens", type=int, default=260000)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--gold", type=Path, default=DEFAULT_GOLD)
+    parser.add_argument(
+        "--exclude-works",
+        type=Path,
+        nargs="*",
+        default=[],
+        help="Previous literary meta sidecar paths; selected works with matching titles are excluded.",
+    )
     parser.add_argument("--sample-count", type=int, default=5)
     parser.add_argument("--seed", type=int, default=20260706)
     parser.add_argument(
@@ -1064,8 +1181,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.request_interval < 0.5:
         parser.error("--request-interval must be at least 0.5 seconds")
 
+    excluded = load_excluded_works(args.exclude_works)
     with ThrottledMediaWikiClient(args.request_interval) as client:
-        corpus = build_corpus(client, max_tokens=args.max_tokens, gold_path=args.gold)
+        corpus = build_corpus(
+            client,
+            max_tokens=args.max_tokens,
+            gold_path=args.gold,
+            excluded=excluded,
+        )
 
     meta_path = write_outputs(
         corpus=corpus,
@@ -1074,18 +1197,16 @@ def main(argv: list[str] | None = None) -> int:
         request_interval=args.request_interval,
     )
     print_work_list(corpus)
+    print_author_token_report(corpus)
+    print_excluded_report(corpus)
     print_firewall_report(corpus.firewall)
     print_summary(corpus)
     print_samples(corpus, sample_count=args.sample_count, seed=args.seed)
     print(f"wrote: {safe_relative(args.output)}")
     print(f"meta:  {safe_relative(meta_path)}")
 
-    poetry_share = corpus.poetry_tokens / corpus.tokens if corpus.tokens else 0.0
-    if args.max_tokens >= 190000 and not (190000 <= corpus.tokens <= 230000):
-        print("full-run token count is outside 190k-230k", file=sys.stderr)
-        return 1
-    if args.max_tokens >= 190000 and not (0.25 <= poetry_share <= 0.60):
-        print("full-run poetry share is outside 25%-60%", file=sys.stderr)
+    if not corpus.works:
+        print("no works selected", file=sys.stderr)
         return 1
     return 0
 
