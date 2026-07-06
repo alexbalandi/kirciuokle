@@ -655,11 +655,15 @@ class JointModel(nn.Module):
         losses: dict[str, torch.Tensor] = {}
         total_loss: torch.Tensor | None = None
         if pos_labels is not None:
-            pos_loss = F.cross_entropy(
-                pos_logits.reshape(-1, pos_logits.shape[-1]),
-                pos_labels.reshape(-1),
-                ignore_index=LABEL_PAD_ID,
-            )
+            flat_pos_labels = pos_labels.reshape(-1)
+            if torch.any(flat_pos_labels != LABEL_PAD_ID):
+                pos_loss = F.cross_entropy(
+                    pos_logits.reshape(-1, pos_logits.shape[-1]),
+                    flat_pos_labels,
+                    ignore_index=LABEL_PAD_ID,
+                )
+            else:
+                pos_loss = pos_logits.sum() * 0.0
             losses["pos_loss"] = pos_loss
             total_loss = pos_loss
         if stress_targets is not None:
