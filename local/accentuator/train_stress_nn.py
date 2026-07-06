@@ -597,6 +597,24 @@ def main(argv=None) -> int:
         lambda s: min((s + 1) / 500, 0.5 * (1 + math.cos(math.pi * s / total_steps))),
     )
 
+    if args.v3:
+        out_dir = OUT_DIR_V3
+        ckpt_name = "stress_nn3.pt"
+    else:
+        out_dir = OUT_DIR_V2 if args.labels else OUT_DIR
+        ckpt_name = "stress_nn2.pt" if args.labels else "stress_nn.pt"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    def save_checkpoint():
+        ckpt = {"state_dict": model.state_dict(), "char_vocab": char_vocab, "encoder": ENCODER}
+        if args.labels:
+            ckpt["labeled"] = True
+        if args.v3:
+            ckpt["no_stress"] = True
+        tmp = out_dir / (ckpt_name + ".tmp")
+        torch.save(ckpt, tmp)
+        tmp.replace(out_dir / ckpt_name)
+
     step = 0
     for epoch in range(args.epochs):
         model.train()
@@ -631,23 +649,11 @@ def main(argv=None) -> int:
             if step % 200 == 0:
                 print(f"epoch {epoch} step {step}/{total_steps} loss {running / 200:.4f}", flush=True)
                 running = 0.0
+        # crash insurance: a lost run costs at most one epoch (2026-07-06 outage)
+        save_checkpoint()
+        print(f"epoch {epoch} checkpoint saved", flush=True)
 
-    if args.v3:
-        out_dir = OUT_DIR_V3
-        ckpt_name = "stress_nn3.pt"
-    else:
-        out_dir = OUT_DIR_V2 if args.labels else OUT_DIR
-        ckpt_name = "stress_nn2.pt" if args.labels else "stress_nn.pt"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    ckpt = {"state_dict": model.state_dict(), "char_vocab": char_vocab, "encoder": ENCODER}
-    if args.labels:
-        ckpt["labeled"] = True
-    if args.v3:
-        ckpt["no_stress"] = True
-    torch.save(
-        ckpt,
-        out_dir / ckpt_name,
-    )
+    save_checkpoint()
     print(f"saved {out_dir / ckpt_name}")
 
     db = sqlite3.connect(DEFAULT_GENERATED)
