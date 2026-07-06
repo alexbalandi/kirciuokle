@@ -48,8 +48,24 @@ training data is dictionary+news; the benchmark is poetry/classics
 predicted the gold number (86.9%) within a point → the silver+audit
 ladder is calibrated.
 
+## E5.5 Literary fine-tune (v2-literary, SPEC35/36)
+220k tokens of public-domain classics (lt.wikisource, PD-author
+whitelist, chrestomatija FIREWALL — 159 sentences dropped for matching
+gold, proving the firewall necessary), teacher-labeled at 99.5% purity,
+mixed with a 25% MATAS rehearsal slice, fine-tuned 2 constant-LR
+epochs (polish recipe) from joint_v1_polish.best.
+
+Verdict on the untouched gold: **89.9% token exact / 92.1% position /
+37.6% sequence** (was 86.9/89.5/28.4) — a third of the register gap to
+the 95.8% VDU ceiling closed by one small corpus. Modern register
+IMPROVED (audited LRT 89.8%, was 87.9%); POS held within noise
+(88.76% vs 88.86%) — rehearsal works. Trade-off found: foreign-word
+abstention dipped 76%→67% (literary teacher data has no foreign
+words) — future corpus mixes should retain some foreign-unmarked rows.
+Checkpoint: joint/checkpoints/joint_v2_literary.best.pt.
+
 ## Open levers
-Literary fine-tune via teacher-labeled public-domain classics with
-MATAS rehearsal mixture (POS head can be frozen; the encoder needs the
-rehearsal to not drift); ONNX export + 80% embedding prune → single
-~110–120MB int8 browser artifact (onnx/BROWSER.md math).
+Scale the teacher loop (more PD volume, modern LRT at teacher purity,
+foreign-row retention); teacher v2 with an independent POS voter;
+ONNX export + 80% embedding prune → single ~110–120MB int8 browser
+artifact (onnx/BROWSER.md math).
