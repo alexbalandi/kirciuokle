@@ -27,3 +27,5 @@ local/accentuator/data/
 local/accentuator/onnx/*.onnx
 local/accentuator/joint/checkpoints/
 local/accentuator/joint/data/
+local/accentuator/joint/hf_release/
+local/accentuator/joint/data-literary/
