@@ -61,11 +61,67 @@
               <span><i class="legend-line legend-ambiguous"></i><span id="legend-ambiguous"></span></span>
               <span><i class="legend-line legend-user"></i><span id="legend-user"></span></span>
               <span><i class="legend-line legend-unknown"></i><span id="legend-unknown"></span></span>
+              <button
+                class="primer-link"
+                id="primer-link"
+                type="button"
+                aria-haspopup="dialog"
+              ></button>
             </span>
           </div>
         </section>
       </section>
     </main>
+
+    <div class="primer-backdrop" id="primer-backdrop" hidden>
+      <div
+        class="primer-dialog"
+        id="primer-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="primer-title"
+        tabindex="-1"
+      >
+        <button class="primer-close" id="primer-close" type="button" aria-label="×">×</button>
+        <h2 id="primer-title"></h2>
+        <p id="primer-intro"></p>
+        <div class="primer-mark-list">
+          <section class="primer-mark">
+            <span class="primer-glyph" aria-hidden="true">à</span>
+            <div>
+              <h3 id="primer-grave-name"></h3>
+              <p id="primer-grave-desc"></p>
+              <p class="primer-examples"><span id="primer-grave-ex" lang="lt"></span></p>
+            </div>
+          </section>
+          <section class="primer-mark">
+            <span class="primer-glyph" aria-hidden="true">á</span>
+            <div>
+              <h3 id="primer-acute-name"></h3>
+              <p id="primer-acute-desc"></p>
+              <p class="primer-examples"><span id="primer-acute-ex" lang="lt"></span></p>
+            </div>
+          </section>
+          <section class="primer-mark">
+            <span class="primer-glyph" aria-hidden="true">ã</span>
+            <div>
+              <h3 id="primer-tilde-name"></h3>
+              <p id="primer-tilde-desc"></p>
+              <p class="primer-examples"><span id="primer-tilde-ex" lang="lt"></span></p>
+            </div>
+          </section>
+        </div>
+        <p class="primer-note" id="primer-mixed"></p>
+        <p class="primer-note" id="primer-pair"></p>
+        <a
+          class="primer-more"
+          id="primer-more"
+          href="https://www.vlkk.lt/aktualiausios-temos/tartis-ir-kirciavimas"
+          target="_blank"
+          rel="noopener"
+        ></a>
+      </div>
+    </div>
 
     <footer class="site-footer" id="site-footer"></footer>
 

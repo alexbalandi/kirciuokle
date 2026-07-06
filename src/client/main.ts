@@ -17,6 +17,12 @@ import {
 import "./style.css";
 
 const MAX_TEXT_LENGTH = 20_000;
+const VLKK_PRIMER_URL =
+  "https://www.vlkk.lt/aktualiausios-temos/tartis-ir-kirciavimas";
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not(:disabled), textarea:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
+const PRIMER_MIXED_WORDS = getPrimerMixedWords();
+const PRIMER_PAIR_WORDS = getPrimerPairWords();
 
 type MessageKey = Extract<
   keyof UiStrings,
@@ -57,6 +63,24 @@ const legendResolved = getElement<HTMLSpanElement>("legend-resolved");
 const legendAmbiguous = getElement<HTMLSpanElement>("legend-ambiguous");
 const legendUser = getElement<HTMLSpanElement>("legend-user");
 const legendUnknown = getElement<HTMLSpanElement>("legend-unknown");
+const primerLink = getElement<HTMLButtonElement>("primer-link");
+const primerBackdrop = getElement<HTMLDivElement>("primer-backdrop");
+const primerDialog = getElement<HTMLDivElement>("primer-dialog");
+const primerClose = getElement<HTMLButtonElement>("primer-close");
+const primerTitle = getElement<HTMLHeadingElement>("primer-title");
+const primerIntro = getElement<HTMLParagraphElement>("primer-intro");
+const primerGraveName = getElement<HTMLHeadingElement>("primer-grave-name");
+const primerGraveDesc = getElement<HTMLParagraphElement>("primer-grave-desc");
+const primerGraveEx = getElement<HTMLSpanElement>("primer-grave-ex");
+const primerAcuteName = getElement<HTMLHeadingElement>("primer-acute-name");
+const primerAcuteDesc = getElement<HTMLParagraphElement>("primer-acute-desc");
+const primerAcuteEx = getElement<HTMLSpanElement>("primer-acute-ex");
+const primerTildeName = getElement<HTMLHeadingElement>("primer-tilde-name");
+const primerTildeDesc = getElement<HTMLParagraphElement>("primer-tilde-desc");
+const primerTildeEx = getElement<HTMLSpanElement>("primer-tilde-ex");
+const primerMixed = getElement<HTMLParagraphElement>("primer-mixed");
+const primerPair = getElement<HTMLParagraphElement>("primer-pair");
+const primerMore = getElement<HTMLAnchorElement>("primer-more");
 const siteFooter = getElement<HTMLElement>("site-footer");
 const metaDescription = document.querySelector<HTMLMetaElement>(
   'meta[name="description"]',
@@ -104,6 +128,26 @@ taggerNoticeClose.addEventListener("click", () => {
   taggerNotice.hidden = true;
 });
 
+primerLink.addEventListener("click", () => {
+  openPrimer();
+});
+
+primerClose.addEventListener("click", () => {
+  closePrimer();
+});
+
+primerBackdrop.addEventListener("click", (event) => {
+  if (event.target === primerBackdrop) {
+    closePrimer();
+  }
+});
+
+primerDialog.addEventListener("keydown", (event) => {
+  if (event.key === "Tab") {
+    trapPrimerFocus(event);
+  }
+});
+
 // Keep the input and the result scrolled to the same relative position —
 // the texts are identical, so proportional sync keeps the same passage
 // visible on both sides. The induced scroll event on the synced element is
@@ -132,6 +176,12 @@ resultOutput.addEventListener("scroll", () => syncScroll(resultOutput, textarea)
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
+    if (isPrimerOpen()) {
+      event.preventDefault();
+      closePrimer();
+      return;
+    }
+
     closePopover();
   }
 });
@@ -505,6 +555,53 @@ function closePopover(): void {
   activePopover = null;
 }
 
+function openPrimer(): void {
+  closePopover();
+  primerBackdrop.hidden = false;
+  document.body.classList.add("has-primer-open");
+  primerDialog.focus({ preventScroll: true });
+}
+
+function closePrimer(): void {
+  if (!isPrimerOpen()) {
+    return;
+  }
+
+  primerBackdrop.hidden = true;
+  document.body.classList.remove("has-primer-open");
+  primerLink.focus({ preventScroll: true });
+}
+
+function isPrimerOpen(): boolean {
+  return !primerBackdrop.hidden;
+}
+
+function trapPrimerFocus(event: KeyboardEvent): void {
+  const focusable = Array.from(
+    primerDialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+  ).filter((element) => element.getClientRects().length > 0);
+
+  if (focusable.length === 0) {
+    event.preventDefault();
+    primerDialog.focus({ preventScroll: true });
+    return;
+  }
+
+  const first = focusable[0]!;
+  const last = focusable[focusable.length - 1]!;
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+    return;
+  }
+
+  if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function positionPopover(popover: HTMLElement, anchor: HTMLElement): void {
   const rect = anchor.getBoundingClientRect();
   const gap = 8;
@@ -605,6 +702,7 @@ function renderUi(): void {
   legendUser.textContent = strings.legendUser;
   legendUnknown.textContent = strings.legendUnknown;
   message.textContent = messageKey ? strings[messageKey] : "";
+  renderPrimer(strings);
 
   languageButtons.forEach((button) => {
     const buttonLang = parseLang(button.dataset.lang);
@@ -614,6 +712,83 @@ function renderUi(): void {
   });
 
   renderFooter(strings);
+}
+
+function renderPrimer(strings: UiStrings): void {
+  primerLink.textContent = strings.primerLink;
+  primerTitle.textContent = strings.primerTitle;
+  primerIntro.textContent = strings.primerIntro;
+  primerGraveName.textContent = strings.primerGraveName;
+  primerGraveDesc.textContent = strings.primerGraveDesc;
+  primerGraveEx.textContent = strings.primerGraveEx;
+  primerAcuteName.textContent = strings.primerAcuteName;
+  primerAcuteDesc.textContent = strings.primerAcuteDesc;
+  primerAcuteEx.textContent = strings.primerAcuteEx;
+  primerTildeName.textContent = strings.primerTildeName;
+  primerTildeDesc.textContent = strings.primerTildeDesc;
+  primerTildeEx.textContent = strings.primerTildeEx;
+  renderTextWithLtWords(primerMixed, strings.primerMixed, PRIMER_MIXED_WORDS);
+  renderTextWithLtWords(primerPair, strings.primerPair, PRIMER_PAIR_WORDS);
+  primerMore.href = VLKK_PRIMER_URL;
+  primerMore.textContent = strings.primerMore;
+}
+
+function renderTextWithLtWords(
+  container: HTMLElement,
+  text: string,
+  ltWords: string[],
+): void {
+  container.replaceChildren();
+
+  let cursor = 0;
+  while (cursor < text.length) {
+    const next = findNextLtWord(text, ltWords, cursor);
+    if (!next) {
+      container.append(document.createTextNode(text.slice(cursor)));
+      return;
+    }
+
+    if (next.index > cursor) {
+      container.append(document.createTextNode(text.slice(cursor, next.index)));
+    }
+
+    const word = document.createElement("span");
+    word.lang = "lt";
+    word.textContent = next.word;
+    container.append(word);
+    cursor = next.index + next.word.length;
+  }
+}
+
+function findNextLtWord(
+  text: string,
+  ltWords: string[],
+  cursor: number,
+): { index: number; word: string } | null {
+  let next: { index: number; word: string } | null = null;
+
+  ltWords.forEach((word) => {
+    const index = text.indexOf(word, cursor);
+    if (index !== -1 && (!next || index < next.index)) {
+      next = { index, word };
+    }
+  });
+
+  return next;
+}
+
+function getPrimerMixedWords(): string[] {
+  const pieces = UI.lt.primerMixed.split(": ");
+  const examples = pieces[pieces.length - 1]?.replace(/\.$/, "") ?? "";
+  return examples
+    .split(", ")
+    .map((word) => word.trim())
+    .filter(Boolean);
+}
+
+function getPrimerPairWords(): string[] {
+  const match = UI.lt.primerPair.match(/: ([^(]+)\s\([^)]*\) ir ([^(]+)\s\(/);
+  return match ? [match[1]!.trim(), match[2]!.trim()] : [];
 }
 
 function renderFooter(strings: UiStrings): void {

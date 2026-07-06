@@ -20,6 +20,21 @@ export type UiStrings = {
   legendAmbiguous: string;
   legendUser: string;
   legendUnknown: string;
+  primerLink: string;
+  primerTitle: string;
+  primerIntro: string;
+  primerGraveName: string;
+  primerGraveDesc: string;
+  primerGraveEx: string;
+  primerAcuteName: string;
+  primerAcuteDesc: string;
+  primerAcuteEx: string;
+  primerTildeName: string;
+  primerTildeDesc: string;
+  primerTildeEx: string;
+  primerMixed: string;
+  primerPair: string;
+  primerMore: string;
   taggerNotice: string;
   unknownTitle: string;
   variantsLoading: string;
@@ -48,6 +63,26 @@ export const UI: Record<Lang, UiStrings> = {
     legendAmbiguous: "Keli variantai",
     legendUser: "Jūsų pasirinkta",
     legendUnknown: "Žodyne nerasta",
+    primerLink: "Kas yra kirčio ženklai?",
+    primerTitle: "Kirčio ženklai",
+    primerIntro:
+      "Kirčiuotas skiemuo tariamas ryškiausiai. Ilguosiuose skiemenyse dar skiriama priegaidė — balso „kryptis“ skiemens viduje. Žymimi trys ženklai:",
+    primerGraveName: "Kairinis",
+    primerGraveDesc: "trumpas kirčiuotas skiemuo.",
+    primerGraveEx: "bùs, vìsas, làbas",
+    primerAcuteName: "Dešininis",
+    primerAcuteDesc:
+      "ilgas skiemuo, tvirtapradė priegaidė — pabrėžiama skiemens pradžia.",
+    primerAcuteEx: "výras, káina, áukštas",
+    primerTildeName: "Riestinis",
+    primerTildeDesc:
+      "ilgas skiemuo, tvirtagalė priegaidė — pabrėžiama skiemens pabaiga.",
+    primerTildeEx: "nãmas, laũkas, geraĩ",
+    primerMixed:
+      "Mišriuosiuose dvigarsiuose (il, ir, al, an…) riestinis rašomas ant l, m, n, r: šil̃tas, var̃das.",
+    primerPair:
+      "Priegaidė gali skirti žodžius: áušta (švinta) ir aũšta (vėsta).",
+    primerMore: "Plačiau — VLKK: tartis ir kirčiavimas",
     taggerNotice:
       "Kontekstinė analizė nepasiekiama — dviprasmiškiems žodžiams parinktos numatytosios formos.",
     unknownTitle: "Žodyne nerasta",
@@ -75,6 +110,26 @@ export const UI: Record<Lang, UiStrings> = {
     legendAmbiguous: "Multiple variants",
     legendUser: "Chosen by you",
     legendUnknown: "Not in dictionary",
+    primerLink: "What do the stress marks mean?",
+    primerTitle: "Lithuanian stress marks",
+    primerIntro:
+      "The stressed syllable is pronounced most prominently. Long syllables additionally carry a pitch contour (priegaidė). Three marks are used:",
+    primerGraveName: "Grave",
+    primerGraveDesc: "short stressed syllable.",
+    primerGraveEx: "bùs, vìsas, làbas",
+    primerAcuteName: "Acute",
+    primerAcuteDesc:
+      "long syllable, falling contour — the start of the syllable is emphasized.",
+    primerAcuteEx: "výras, káina, áukštas",
+    primerTildeName: "Circumflex",
+    primerTildeDesc:
+      "long syllable, rising contour — the end of the syllable is emphasized.",
+    primerTildeEx: "nãmas, laũkas, geraĩ",
+    primerMixed:
+      "In mixed diphthongs (il, ir, al, an…) the circumflex sits on the sonorant: šil̃tas, var̃das.",
+    primerPair:
+      "The contour can distinguish words: áušta (day breaks) vs aũšta (it cools down).",
+    primerMore: "More at VLKK: pronunciation and accentuation (in Lithuanian)",
     taggerNotice:
       "Contextual analysis is unavailable — default forms were chosen for ambiguous words.",
     unknownTitle: "Not in dictionary",
@@ -102,6 +157,26 @@ export const UI: Record<Lang, UiStrings> = {
     legendAmbiguous: "Несколько вариантов",
     legendUser: "Выбрано пользователем",
     legendUnknown: "Нет в словаре",
+    primerLink: "Что означают знаки ударения?",
+    primerTitle: "Литовские знаки ударения",
+    primerIntro:
+      "Ударный слог произносится наиболее отчётливо. В долгих слогах различается ещё и интонация слога (priegaidė). Используются три знака:",
+    primerGraveName: "Гравис",
+    primerGraveDesc: "краткий ударный слог.",
+    primerGraveEx: "bùs, vìsas, làbas",
+    primerAcuteName: "Акут",
+    primerAcuteDesc:
+      "долгий слог, нисходящая интонация — выделяется начало слога.",
+    primerAcuteEx: "výras, káina, áukštas",
+    primerTildeName: "Циркумфлекс",
+    primerTildeDesc:
+      "долгий слог, восходящая интонация — выделяется конец слога.",
+    primerTildeEx: "nãmas, laũkas, geraĩ",
+    primerMixed:
+      "В смешанных дифтонгах (il, ir, al, an…) циркумфлекс ставится на сонорном: šil̃tas, var̃das.",
+    primerPair:
+      "Интонация различает слова: áušta (светает) и aũšta (остывает).",
+    primerMore: "Подробнее — VLKK: произношение и ударение (на литовском)",
     taggerNotice:
       "Контекстный анализ недоступен — для неоднозначных слов выбраны формы по умолчанию.",
     unknownTitle: "Нет в словаре",
