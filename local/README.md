@@ -58,7 +58,7 @@ Three fine-tuned litlat-bert taggers, CC BY-SA 4.0, fully NC-free lineage
 | [litlat-bert-lithuanian-morphology](https://huggingface.co/alexbalandi/litlat-bert-lithuanian-morphology) | highest UPOS/slots accuracy, UD categories | UPOS (incl. DET/AUX) + core FEATS |
 | [litlat-bert-lithuanian-morphology-full](https://huggingface.co/alexbalandi/litlat-bert-lithuanian-morphology-full) | complete annotations | full UD FEATS + lemmas |
 | [litlat-bert-lithuanian-morphology-vdu](https://huggingface.co/alexbalandi/litlat-bert-lithuanian-morphology-vdu) | accentuation pipelines | traditional-grammar categories (DET→PRON, AUX→VERB) |
-| [litlat-bert-lithuanian-accentuator](https://huggingface.co/alexbalandi/litlat-bert-lithuanian-accentuator) | single-pass POS + accentuation (the project's best model) | 804 traditional-grammar labels + per-token stress placement incl. no-stress |
+| [litlat-bert-lithuanian-accentuator](https://huggingface.co/alexbalandi/litlat-bert-lithuanian-accentuator) | single-pass POS + accentuation (the project's best model) | combined UPOS|FEATS labels (804) + per-token stress placement incl. no-stress |
 
 ## Benchmarks
 
