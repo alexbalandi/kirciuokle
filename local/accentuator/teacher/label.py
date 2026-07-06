@@ -54,6 +54,12 @@ def pattern_stats(strata: dict[str, Any], pattern: str) -> dict[str, Any] | None
     return item if isinstance(item, dict) else None
 
 
+def pos_accuracy(stat: dict[str, Any]) -> float:
+    if "slot_accuracy" in stat:
+        return float(stat.get("slot_accuracy") or 0.0)
+    return float(stat.get("accuracy") or 0.0)
+
+
 def pct(value: float) -> str:
     return f"{100 * value:.2f}%"
 
@@ -74,6 +80,7 @@ def label_layers(
     accent_accepted = 0
     pos_accepted = 0
     both_accepted = 0
+    no_stress_accepted = 0
     accent_accuracy_sum = 0.0
     pos_accuracy_sum = 0.0
     both_accuracy_sum = 0.0
@@ -99,6 +106,7 @@ def label_layers(
                 if stress_target is not None:
                     accepted_accent_accuracy = float(accent_stat.get("accuracy") or 0.0)
                     accent_accepted += 1
+                    no_stress_accepted += int(stress_target == "none")
                     accent_accuracy_sum += accepted_accent_accuracy
 
             accepted_label = None
@@ -106,10 +114,10 @@ def label_layers(
             if (
                 joint_label
                 and pos_stat
-                and float(pos_stat.get("accuracy") or 0.0) >= min_pos_accuracy
+                and pos_accuracy(pos_stat) >= min_pos_accuracy
             ):
                 accepted_label = joint_label
-                accepted_pos_accuracy = float(pos_stat.get("accuracy") or 0.0)
+                accepted_pos_accuracy = pos_accuracy(pos_stat)
                 pos_accepted += 1
                 pos_accuracy_sum += accepted_pos_accuracy
 
@@ -140,6 +148,7 @@ def label_layers(
         "accent_accepted": accent_accepted,
         "pos_accepted": pos_accepted,
         "both_accepted": both_accepted,
+        "no_stress_accepted": no_stress_accepted,
         "accent_coverage": accent_accepted / total if total else 0.0,
         "pos_coverage": pos_accepted / total if total else 0.0,
         "both_coverage": both_accepted / total if total else 0.0,
@@ -159,7 +168,8 @@ def print_stats(stats: dict[str, Any]) -> None:
     print(
         "accent coverage: "
         f"{int(stats['accent_accepted']):,}/{total:,} ({pct(float(stats['accent_coverage']))}); "
-        f"purity estimate {pct(float(stats['accent_purity_estimate']))}"
+        f"purity estimate {pct(float(stats['accent_purity_estimate']))}; "
+        f"no-stress {int(stats.get('no_stress_accepted') or 0):,}"
     )
     print(
         "POS coverage: "

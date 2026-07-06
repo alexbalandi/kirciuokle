@@ -76,12 +76,20 @@ def part_tokens(text: str) -> list[str]:
     return eval_accenter.tokenize(text)
 
 
+def ud_payload(tok: accent_text.Token | None) -> dict[str, str] | None:
+    if tok is None:
+        return None
+    feats = "|".join(f"{key}={value}" for key, value in tok.feats.items()) if tok.feats else "_"
+    return {"upos": str(tok.upos or "X"), "feats": feats}
+
+
 def append_token_records(
     records: list[dict[str, Any]],
     original_text: str,
     accented_text: str,
     mi: str | None,
     ambiguous: bool,
+    ud: accent_text.Token | None = None,
 ) -> None:
     original_tokens = part_tokens(original_text)
     accented_tokens = part_tokens(accented_text)
@@ -94,6 +102,7 @@ def append_token_records(
                 "accented": lower_form(accented_tokens[index]),
                 "mi": mi if index == 0 else None,
                 "ambiguous": ambiguous if index == 0 else False,
+                "ud": ud_payload(ud) if index == 0 else None,
             }
         )
 
@@ -157,6 +166,7 @@ async def records_for_chunk(
                 str(part.get("string", "")),
                 None,
                 False,
+                None,
             )
             continue
 
@@ -178,7 +188,7 @@ async def records_for_chunk(
         else:
             selected = str(part.get("accented", original))
 
-        append_token_records(records, original, selected, mi, ambiguous)
+        append_token_records(records, original, selected, mi, ambiguous, tok)
     return records
 
 

@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -25,12 +26,22 @@ from _common import DEFAULT_GENERATED, normalize_lt, safe_relative, strip_accent
 import eval_chrestomatija as chrest  # noqa: E402
 import eval_nodict_pipeline as nodict  # noqa: E402
 import eval_joint as joint_eval  # noqa: E402
+from kirciuokle import disambiguate as disamb  # noqa: E402
 from metrics import combined_label, feats_string  # noqa: E402
 
 
 DEFAULT_CHECKPOINT = JOINT_DIR / "checkpoints" / "joint_v1_polish.best.pt"
 DEFAULT_OUTPUT_DIR = ACCENTUATOR_DIR / "data" / "teacher"
 DEFAULT_BATCH_SIZE = 16
+
+
+@dataclass(frozen=True)
+class SilverLayerToken:
+    word: str
+    accented: str
+    mi: str | None
+    ambiguous: bool
+    ud: dict[str, str] | None = None
 
 
 def resolve_input_path(path: Path) -> Path:
@@ -92,6 +103,37 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
             if line.strip():
                 rows.append(json.loads(line))
     return rows
+
+
+def load_silver_layer_tokens(path: Path) -> list[SilverLayerToken]:
+    tokens: list[SilverLayerToken] = []
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            raw = json.loads(line)
+            word = word_key(raw.get("word"))
+            accented = norm_form(raw.get("accented"))
+            if not word or not accented:
+                raise ValueError(f"bad silver row at {path}:{line_number}")
+
+            raw_ud = raw.get("ud") if "ud" in raw else None
+            ud: dict[str, str] | None = None
+            if isinstance(raw_ud, dict) and raw_ud.get("upos"):
+                ud = {
+                    "upos": str(raw_ud.get("upos") or "X"),
+                    "feats": str(raw_ud.get("feats") or "_"),
+                }
+            tokens.append(
+                SilverLayerToken(
+                    word=word,
+                    accented=accented,
+                    mi=raw.get("mi") or None,
+                    ambiguous=bool(raw.get("ambiguous")),
+                    ud=ud,
+                )
+            )
+    return tokens
 
 
 def load_layer_rows(path: Path) -> list[dict[str, Any]]:
@@ -241,21 +283,32 @@ def align_by_key(
 def load_vdu_alignment(
     rows: list[dict[str, Any]],
     silver_path: Path | None,
-) -> tuple[dict[int, Any], tuple[int, int]]:
+) -> tuple[dict[int, SilverLayerToken], tuple[int, int]]:
     if silver_path is None:
         return {}, (0, 0)
-    silver = nodict.load_silver(silver_path)
+    silver = load_silver_layer_tokens(silver_path)
     tokens = flatten_tokens(rows)
     aligned, skipped_tokens, skipped_silver = align_by_key(
         [str(token["key"]) for token in tokens],
         silver,
         lambda item: str(item.word),
     )
-    by_global: dict[int, Any] = {}
+    by_global: dict[int, SilverLayerToken] = {}
     for token, silver_token in zip(tokens, aligned):
         if silver_token is not None:
             by_global[int(token["global_index"])] = silver_token
     return by_global, (skipped_tokens, skipped_silver)
+
+
+def udpipe_slots(ud: dict[str, str] | None, form: str = "") -> dict[str, str] | None:
+    if not ud:
+        return None
+    upos = str(ud.get("upos") or "")
+    if not upos:
+        return None
+    feats = disamb.parse_feats(str(ud.get("feats") or "_"))
+    token = disamb.Token(form=form, lemma=form.casefold(), upos=upos, xpos="_", feats=feats)
+    return {str(key): str(value) for key, value in disamb.token_tags(token).items()}
 
 
 def nvidia_available() -> bool:
@@ -436,6 +489,7 @@ def layer_counts(rows: Iterable[dict[str, Any]]) -> dict[str, int]:
         "dict": 0,
         "dict_default": 0,
         "tagger_pos": 0,
+        "udpipe_slots": 0,
     }
     for row in rows:
         for token in row.get("tokens", []):
@@ -448,6 +502,7 @@ def layer_counts(rows: Iterable[dict[str, Any]]) -> dict[str, int]:
             counts["dict"] += int(bool(layer_form(dict_layer)))
             counts["dict_default"] += int(bool(dict_layer.get("default_form")))
             counts["tagger_pos"] += int(bool(layer_pos(layers.get("tagger"))))
+            counts["udpipe_slots"] += int(bool(token.get("udpipe_slots")))
     return counts
 
 
@@ -566,6 +621,9 @@ def collect_rows(
                 "global_index": global_index,
                 "layers": layers,
             }
+            slots = udpipe_slots(silver_token.ud, str(token.get("word") or "")) if silver_token else None
+            if slots:
+                out_token["udpipe_slots"] = slots
             if "source_token_index" in token:
                 out_token["source_token_index"] = int(token["source_token_index"])
             out_tokens.append(out_token)
