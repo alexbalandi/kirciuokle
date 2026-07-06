@@ -29,3 +29,8 @@ local/accentuator/joint/checkpoints/
 local/accentuator/joint/data/
 local/accentuator/joint/hf_release/
 local/accentuator/joint/data-literary/
+
+# browser pilot local model bundle
+bundled_weights_pilot/model/
+bundled_weights_pilot/__pycache__/
+bundled_weights_pilot/memtest-*.log

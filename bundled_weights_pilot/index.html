@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="lt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Eksperimentinė naršyklinė lietuvių kalbos kirčiuoklė su lokaliais ONNX svoriais."
+    />
+    <title>Kirčiuoklė · bundled weights pilot</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <div class="hero-top">
+          <div>
+            <p class="eyebrow" id="pilot-eyebrow">bundled weights pilot</p>
+            <h1 id="app-title">Kirčiuoklė</h1>
+          </div>
+          <div class="language-switcher" id="language-switcher">
+            <button type="button" data-lang="lt">LT</button>
+            <button type="button" data-lang="en">EN</button>
+            <button type="button" data-lang="ru">RU</button>
+          </div>
+        </div>
+        <p id="hero-tagline"></p>
+        <p class="pilot-subtitle" id="pilot-subtitle"></p>
+        <p id="model-status" class="status-line" role="status" aria-live="polite">
+          Modelis kraunamas...
+        </p>
+      </header>
+
+      <section class="workspace" aria-labelledby="app-title">
+        <form class="input-panel" id="accent-form">
+          <div class="panel-head">
+            <label class="field-label" for="source-text" id="input-label">Tekstas</label>
+            <label class="budget-field">
+              <span id="token-budget-label">Tokenų biudžetas</span>
+              <input
+                id="token-budget"
+                name="tokenBudget"
+                type="number"
+                min="256"
+                max="8192"
+                step="128"
+                value="2048"
+              />
+            </label>
+          </div>
+          <textarea
+            id="source-text"
+            name="text"
+            rows="12"
+            lang="lt"
+            spellcheck="true"
+            autocapitalize="off"
+          ></textarea>
+          <div class="input-actions">
+            <span class="counter" id="char-counter">0</span>
+            <button class="primary-button" id="accent-button" type="submit" disabled>
+              Sukirčiuoti
+            </button>
+          </div>
+        </form>
+
+        <section class="result-panel" aria-labelledby="result-heading">
+          <div class="result-toolbar panel-head">
+            <h2 id="result-heading">Rezultatas</h2>
+            <button class="secondary-button" id="copy-button" type="button" disabled>
+              Kopijuoti
+            </button>
+          </div>
+          <div class="progress-track" aria-hidden="true">
+            <div class="progress-bar" id="progress-bar"></div>
+          </div>
+          <p class="run-status" id="run-status" role="status" aria-live="polite">
+            Paruošta.
+          </p>
+          <p class="memory-status" id="memory-status" role="status" aria-live="polite">
+            Atmintis: WASM nežinomas dydis / JS heap nežinomas dydis
+          </p>
+          <div class="result-output is-empty" id="result-output" lang="lt"></div>
+          <div class="legend" id="legend">
+            <span class="legend-heading" id="legend-label"></span>
+            <span class="legend-items">
+              <span><i class="legend-line legend-resolved"></i><span id="legend-resolved"></span></span>
+              <span><i class="legend-line legend-ambiguous"></i><span id="legend-ambiguous"></span></span>
+              <span><i class="legend-line legend-unknown"></i><span id="legend-unknown"></span></span>
+              <button
+                class="primer-link"
+                id="primer-link"
+                type="button"
+                aria-haspopup="dialog"
+              ></button>
+            </span>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div class="pos-popover" id="pos-popover" role="dialog" hidden></div>
+
+    <div class="primer-backdrop" id="primer-backdrop" hidden>
+      <div
+        class="primer-dialog"
+        id="primer-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="primer-title"
+        tabindex="-1"
+      >
+        <button class="primer-close" id="primer-close" type="button" aria-label="×">×</button>
+        <h2 id="primer-title"></h2>
+        <p id="primer-intro"></p>
+        <div class="primer-mark-list">
+          <section class="primer-mark">
+            <span class="primer-glyph" aria-hidden="true">à</span>
+            <div>
+              <h3 id="primer-grave-name"></h3>
+              <p id="primer-grave-desc"></p>
+              <p class="primer-examples"><span id="primer-grave-ex" lang="lt"></span></p>
+            </div>
+          </section>
+          <section class="primer-mark">
+            <span class="primer-glyph" aria-hidden="true">á</span>
+            <div>
+              <h3 id="primer-acute-name"></h3>
+              <p id="primer-acute-desc"></p>
+              <p class="primer-examples"><span id="primer-acute-ex" lang="lt"></span></p>
+            </div>
+          </section>
+          <section class="primer-mark">
+            <span class="primer-glyph" aria-hidden="true">ã</span>
+            <div>
+              <h3 id="primer-tilde-name"></h3>
+              <p id="primer-tilde-desc"></p>
+              <p class="primer-examples"><span id="primer-tilde-ex" lang="lt"></span></p>
+            </div>
+          </section>
+        </div>
+        <p class="primer-note" id="primer-mixed"></p>
+        <p class="primer-note" id="primer-pair"></p>
+        <a
+          class="primer-more"
+          id="primer-more"
+          href="https://www.vlkk.lt/aktualiausios-temos/tartis-ir-kirciavimas"
+          target="_blank"
+          rel="noopener"
+        ></a>
+      </div>
+    </div>
+
+    <footer class="site-footer" id="site-footer"></footer>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
