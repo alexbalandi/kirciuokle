@@ -8,10 +8,18 @@ calibrated teacher-labeler for manufacturing training data. These docs
 exist so someone (including future us) can build on the work without
 re-deriving it — or repeating the mistakes.
 
+**Start here if any term reads like insider code:**
+[GLOSSARY.md](GLOSSARY.md) defines every term of art — both this
+project's jargon ("gap slice", "silver", "DISJOINT=0 gate", "cascade")
+and the Lithuanian linguistics needed to read the results (priegaidė,
+kirčiuotė, mi labels). Every doc assumes the glossary, not prior
+context.
+
 ## Core references
 
 | doc | contents |
 |---|---|
+| [GLOSSARY.md](GLOSSARY.md) | Every term of art, plain-language — read alongside everything else |
 | [ARCHITECTURES.md](ARCHITECTURES.md) | Exact model architectures: taggers, stress heads v1–v3, the joint model — dims, masks, losses, warm starts |
 | [DATASETS.md](DATASETS.md) | Every dataset: source, license, how obtained, what it may and may not be used for |
 | [EVALUATION.md](EVALUATION.md) | The evaluation methodology ladder: parity → silver → audited silver → gold; metric definitions used everywhere |

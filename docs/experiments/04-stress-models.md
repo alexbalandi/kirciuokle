@@ -1,5 +1,7 @@
 # Experiments: neural stress models v1–v3
 
+> Terms of art (gap slice, silver, DISJOINT, priegaidė…) are defined in [GLOSSARY.md](../GLOSSARY.md).
+
 Architecture details: ../ARCHITECTURES.md §2. All runs: same seed/split
 (word-key-grouped from v2 on), litlat-bert encoder, 3080 Ti laptop GPU,
 ~40–90 min per full run. Trainer: train_stress_nn.py.

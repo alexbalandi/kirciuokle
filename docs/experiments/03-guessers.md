@@ -1,5 +1,7 @@
 # Experiments: OOV stress guessers
 
+> Terms of art (gap slice, silver, DISJOINT, priegaidė…) are defined in [GLOSSARY.md](../GLOSSARY.md).
+
 Goal: answer words the dictionary doesn't cover. Bench harness:
 bench_guessers.py; identical slices everywhere (held = 2% in-domain
 holdout, seed 20260705; gap = 2,751 VDU-cache words the dictionary

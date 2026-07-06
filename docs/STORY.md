@@ -1,5 +1,7 @@
 # The end-path: how the pieces became one system
 
+> Terms of art (gap slice, silver, DISJOINT, priegaidė…) are defined in [GLOSSARY.md](GLOSSARY.md).
+
 Written 2026-07-06, at the point where the joint model became the
 project's best accentuator and the teacher-labeler was being built.
 Read this to understand WHY the current design is what it is.

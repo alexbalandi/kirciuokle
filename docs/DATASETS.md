@@ -1,5 +1,7 @@
 # Datasets: sources, licenses, roles
 
+> Terms of art (gap slice, silver, DISJOINT, priegaidė…) are defined in [GLOSSARY.md](GLOSSARY.md).
+
 Hard rule inherited from the start: **provenance-clean**. The VDU
 kirčiuoklė cache is QA ground truth and may never be copied into any
 artifact we distribute; exclusions (vetoes) are fine, extraction is not.

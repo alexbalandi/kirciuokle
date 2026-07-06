@@ -1,5 +1,7 @@
 # Evaluation methodology
 
+> Terms of art (gap slice, silver, DISJOINT, priegaidė…) are defined in [GLOSSARY.md](GLOSSARY.md).
+
 The project's quality claims climb a four-rung ladder. Each rung exists
 because the one below it was caught being insufficient.
 

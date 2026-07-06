@@ -1,5 +1,7 @@
 # Experiments: POS taggers
 
+> Terms of art (gap slice, silver, DISJOINT, priegaidė…) are defined in [GLOSSARY.md](../GLOSSARY.md).
+
 Goal: replace the external UDPipe dependency with own models at equal or
 better quality, on open-licensed data. Full benchmark table:
 ../../local/README.md.

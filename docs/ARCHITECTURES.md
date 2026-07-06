@@ -1,5 +1,7 @@
 # Model architectures
 
+> Terms of art (gap slice, silver, DISJOINT, priegaidė…) are defined in [GLOSSARY.md](GLOSSARY.md).
+
 Everything uses the same encoder: **EMBEDDIA/litlat-bert** (XLM-RoBERTa
 architecture, 12 layers, hidden 768, ~84k-token trilingual LT/LV/EN
 vocabulary; encoder ≈150.7M params, of which the embedding matrix is

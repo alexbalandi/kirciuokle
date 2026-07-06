@@ -1,5 +1,7 @@
 # Experiments: the teacher-labeler (in progress)
 
+> Terms of art (gap slice, silver, DISJOINT, priegaidė…) are defined in [GLOSSARY.md](../GLOSSARY.md).
+
 Goal: manufacture training data with MEASURED purity from any Lithuanian
 corpus, because gold accent data cannot be bought or downloaded
 (../DATASETS.md, rejected-sources). Design: SPEC34; code under

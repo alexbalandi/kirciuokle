@@ -1,5 +1,7 @@
 # Experiments: the joint POS + accentuation model
 
+> Terms of art (gap slice, silver, DISJOINT, priegaidė…) are defined in [GLOSSARY.md](../GLOSSARY.md).
+
 The architectural bet (user's design): one encoder, one pass per
 sentence, POS head + per-token char/mark stress head, shared loss, warm
 starts from the released tagger and stress_nn3. Architecture:

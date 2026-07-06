@@ -1,5 +1,7 @@
 # Experiments: the open dictionary
 
+> Terms of art (gap slice, silver, DISJOINT, priegaidė…) are defined in [GLOSSARY.md](../GLOSSARY.md).
+
 Goal: a provenance-clean accentuation dictionary from open sources,
 QA'd against the VDU cache at DISJOINT=0. Architecture and rules:
 ../ACCENTUATOR.md. Coverage arc: 62.4% → 75.3% over ~10 module rounds.
