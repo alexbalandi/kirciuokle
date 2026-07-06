@@ -910,13 +910,20 @@ def deterministic_split(
     return train, dev
 
 
-def step_schedule(total_steps: int, warmup_steps: int = 500):
+def step_schedule(total_steps: int, warmup_steps: int = 500, mode: str = "cosine"):
     total_steps = max(1, total_steps)
-    warmup_steps = max(1, min(warmup_steps, total_steps))
+    if mode not in {"cosine", "constant"}:
+        raise ValueError(f"unknown schedule mode: {mode}")
+    if mode == "constant":
+        warmup_steps = max(1, warmup_steps)
+    else:
+        warmup_steps = max(1, min(warmup_steps, total_steps))
 
     def schedule(step: int) -> float:
         if step < warmup_steps:
             return (step + 1) / warmup_steps
+        if mode == "constant":
+            return 1.0
         progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
         return 0.5 * (1.0 + math.cos(math.pi * min(1.0, progress)))
 
