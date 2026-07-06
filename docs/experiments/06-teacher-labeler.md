@@ -29,9 +29,23 @@ local/accentuator/teacher/.
   threshold (defaults: 0.98 accents, 0.95 POS); output in the joint
   dataset builder's format with purity/coverage stats.
 
-## Calibration results
-(to be filled when SPEC34 lands — expected: full-agreement stratum
-≥99%, usable coverage well above 50%)
+## Calibration results (2026-07-06, chrestomatija accents / ALKSNIS POS)
+
+ACCENTS: with the default 0.98 stratum threshold, coverage
+**84.8% at 99.52% purity** on literary gold — the teacher labels harder
+text more accurately than any single component (best single: vdu-udpipe
+95.8%). Full-consensus strata sit ≥99%; the disagreement tail (e.g.
+`vdu vs joint`: 2.1% of tokens, 44% accuracy) is masked, not learned.
+
+POS: **collapsed to 0% coverage at the 0.95 threshold — by design, and
+the collapse was the lesson.** The `joint=tagger` agreement stratum
+(97.6% of tokens) reaches only 85.9% full-label accuracy because the
+two voters are CORRELATED: the joint model's encoder warm-started from
+that tagger. Agreement only purifies INDEPENDENT lineages (the accent
+voters are; the POS voters aren't). Teacher v2 fix: add a
+UDPipe-lineage POS voter at silver-build time and recalibrate.
+Interim: literary fine-tuning proceeds with POS loss masked on
+teacher-labeled tokens + MATAS rehearsal rows carrying gold POS.
 
 ## Intended first uses
 1. Public-domain Lithuanian classics (Maironis, Žemaitė…) →
