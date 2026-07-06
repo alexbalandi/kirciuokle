@@ -20,6 +20,7 @@ Token exact is measured over all gold word tokens; an unmarked gold token counts
 | joint | ok | 42,849/43,209 (99.2%) | 37,555/43,209 (86.9%) | 38,366/42,849 (89.5%) | 842/2,969 (0.284; 28.4%) | 50.6s |
 | dict-default | ok | 32,021/43,209 (74.1%) | 29,310/43,209 (67.8%) | 29,376/32,021 (91.7%) | 161/2,969 (0.054; 5.4%) | 0.8s |
 | liepa | ok | 34,439/43,209 (79.7%) | 33,120/43,209 (76.7%) | 33,784/34,439 (98.1%) | 320/2,969 (0.108; 10.8%) | 7.6s |
+| vdu-udpipe (online) | ok | 42,718/43,209 (98.9%) | 41,380/43,209 (95.8%) | 41,363/42,718 (96.8%) | 1,815/2,969 (0.611; 61.1%) | 0.7s |
 
 Thesis context: the 2026 VU thesis reports sentence-level sequence accuracy 0.711 for its transformer and 0.702 for VDU Kirciuoklis on 2,303 Chrestomatija samples. Tokenization and normalization protocols may differ from this reimplementation, so the cross-paper comparison is indicative.
 
@@ -30,6 +31,7 @@ Thesis context: the 2026 VU thesis reports sentence-level sequence accuracy 0.71
 | joint | 360 | 0 |
 | dict-default | 0 | 0 |
 | liepa | 0 | 0 |
+| vdu-udpipe (online) | 0 | 0 |
 
 ## Sample Disagreements
 
