@@ -24,3 +24,6 @@ local/data/
 local/tagger-hf/artifacts/
 local/tagger-hf/release/hf-*/
 local/accentuator/data/
+local/accentuator/onnx/*.onnx
+local/accentuator/joint/checkpoints/
+local/accentuator/joint/data/

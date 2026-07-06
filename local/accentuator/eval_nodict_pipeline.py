@@ -170,7 +170,15 @@ def audited_gold_forms(
 def prediction_unmarked_or_abstained(word: str, predicted: str | None) -> bool:
     if predicted is None:
         return True
+    if predicted == "":
+        return True
     return word_key(predicted) == word_key(word) and stress_of(predicted) is None
+
+
+def prediction_answer_form(word: str, predicted: str | None) -> str | None:
+    if predicted is None:
+        return None
+    return word if predicted == "" else predicted
 
 
 def has_letter(text: str) -> bool:
@@ -614,18 +622,18 @@ def pick_dict_form(
 
 
 class StressNN2:
-    def __init__(self) -> None:
+    def __init__(self, checkpoint_path: Path = DEFAULT_CKPT) -> None:
         import torch
         from transformers import AutoModel, AutoTokenizer
 
-        from train_stress_nn import ENCODER, OUT_DIR_V2, StressModel, batch_predict
+        from train_stress_nn import ENCODER, StressModel, batch_predict
 
-        checkpoint_path = OUT_DIR_V2 / "stress_nn2.pt"
         ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         tokenizer = AutoTokenizer.from_pretrained(ckpt.get("encoder", ENCODER))
         model = StressModel(
             AutoModel.from_pretrained(ckpt.get("encoder", ENCODER)),
             len(ckpt["char_vocab"]) + 2,
+            no_stress=bool(ckpt.get("no_stress")),
         )
         model.load_state_dict(ckpt["state_dict"])
         model = model.to("cpu")
@@ -731,6 +739,7 @@ def _score_predictions(
     foreign_unmarked_tokens = 0
     foreign_unmarked_ok = 0
     for row, predicted in zip(rows, predictions):
+        answer = prediction_answer_form(row.word, predicted)
         gold_forms = {norm_form(row.silver)}
         if audit:
             category, gold_forms = audited_gold_forms(
@@ -750,16 +759,16 @@ def _score_predictions(
         total_tokens += 1
         if predicted is not None:
             answered += 1
-        if exact_match_any(predicted, gold_forms):
+        if exact_match_any(answer, gold_forms):
             exact += 1
-        if position_match_any(predicted, gold_forms):
+        if position_match_any(answer, gold_forms):
             position += 1
         if row.word in type_seen:
             continue
         type_seen.add(row.word)
         if predicted is not None:
             answered_types += 1
-        if exact_match_any(predicted, gold_forms):
+        if exact_match_any(answer, gold_forms):
             type_exact += 1
     return (
         Metrics(
@@ -875,12 +884,13 @@ def nodict_disagreements(
     samples: list[tuple[str, str, str, str]] = []
     seen: set[tuple[str, str, str, str]] = set()
     for row, predicted in zip(rows, predictions):
-        if exact_match(predicted, row.silver):
+        answer = prediction_answer_form(row.word, predicted)
+        if exact_match(answer, row.silver):
             continue
         sample = (
             row.word,
             row.silver,
-            predicted or "(unanswered)",
+            answer if answer is not None else "(unanswered)",
             row.label or "(empty)",
         )
         if sample in seen:
@@ -900,6 +910,7 @@ def format_report(
     corpus_path: Path,
     silver_path: Path,
     generated_path: Path,
+    checkpoint_path: Path,
     raw_metrics: list[Metrics],
     audited_metrics: list[Metrics],
     audit_path: Path,
@@ -920,7 +931,7 @@ def format_report(
         f"- corpus: `{safe_relative(corpus_path)}`",
         f"- silver: `{safe_relative(silver_path)}`",
         f"- generated DB: `{safe_relative(generated_path)}`",
-        f"- stress checkpoint: `{safe_relative(DEFAULT_CKPT)}`",
+        f"- stress checkpoint: `{safe_relative(checkpoint_path)}`",
         f"- silver tokens: {total_silver:,}",
         f"- aligned tokens: {aligned_count:,}",
         f"- skipped silver tokens: {skipped_silver:,} ({skip_rate:.2%})",
@@ -974,6 +985,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--generated", type=Path, default=DEFAULT_GENERATED)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     parser.add_argument("--audit", type=Path, default=DEFAULT_AUDIT)
+    parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CKPT)
     parser.add_argument("--tagger-url", help="Existing UDPipe-compatible tagger URL.")
     parser.add_argument("--tagger-timeout", type=float, default=180.0)
     parser.add_argument("--request-timeout", type=float, default=180.0)
@@ -988,7 +1000,7 @@ def main(argv: list[str] | None = None) -> int:
         (args.corpus, "corpus"),
         (args.silver, "silver JSONL"),
         (args.generated, "generated DB"),
-        (DEFAULT_CKPT, "stress checkpoint"),
+        (args.checkpoint, "stress checkpoint"),
     ):
         if not path.exists():
             parser.error(f"missing {label}: {path}")
@@ -1021,8 +1033,8 @@ def main(argv: list[str] | None = None) -> int:
     words = [row.word for row in rows]
     labels = [row.label for row in rows]
 
-    print("loading stress_nn2 on CPU")
-    stress_model = StressNN2()
+    print(f"loading stress checkpoint on CPU: {safe_relative(args.checkpoint)}")
+    stress_model = StressNN2(args.checkpoint)
     nodict_raw = stress_model.raw_predict(words, labels)
     uncond_raw = stress_model.raw_predict(words, [""] * len(words))
 
@@ -1060,6 +1072,7 @@ def main(argv: list[str] | None = None) -> int:
         corpus_path=args.corpus,
         silver_path=args.silver,
         generated_path=args.generated,
+        checkpoint_path=args.checkpoint,
         raw_metrics=raw_metrics,
         audited_metrics=audited_metrics,
         audit_path=args.audit,
