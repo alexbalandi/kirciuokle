@@ -619,6 +619,7 @@ def main(argv=None) -> int:
     for epoch in range(args.epochs):
         model.train()
         running = 0.0
+        window = 0
         for input_ids, attention_mask, char_ids, valid, target, _w in loader:
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=device == "cuda"):
                 if args.v3:
@@ -645,10 +646,14 @@ def main(argv=None) -> int:
             optim.step()
             sched.step()
             running += loss.item()
+            window += 1
             step += 1
             if step % 200 == 0:
-                print(f"epoch {epoch} step {step}/{total_steps} loss {running / 200:.4f}", flush=True)
+                # divide by the real window size: the epoch-start reset used to
+                # leave a partial window whose /200 average read ~8x too low
+                print(f"epoch {epoch} step {step}/{total_steps} loss {running / window:.4f}", flush=True)
                 running = 0.0
+                window = 0
         # crash insurance: a lost run costs at most one epoch (2026-07-06 outage)
         save_checkpoint()
         print(f"epoch {epoch} checkpoint saved", flush=True)
