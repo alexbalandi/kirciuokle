@@ -107,15 +107,26 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def load_silver_layer_tokens(path: Path) -> list[SilverLayerToken]:
     tokens: list[SilverLayerToken] = []
+    skipped_bad = 0
+    total_rows = 0
     with path.open(encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
             if not line.strip():
                 continue
             raw = json.loads(line)
+            total_rows += 1
             word = word_key(raw.get("word"))
             accented = norm_form(raw.get("accented"))
             if not word or not accented:
-                raise ValueError(f"bad silver row at {path}:{line_number}")
+                # exotic-Unicode tokenizer debris (bare combining marks from
+                # Wikipedia etymology glosses etc.) — skip, but refuse a
+                # silver file that is broken wholesale
+                skipped_bad += 1
+                if skipped_bad > max(200, total_rows // 100):
+                    raise ValueError(
+                        f"too many bad silver rows ({skipped_bad}) by {path}:{line_number}"
+                    )
+                continue
 
             raw_ud = raw.get("ud") if "ud" in raw else None
             ud: dict[str, str] | None = None
@@ -133,6 +144,8 @@ def load_silver_layer_tokens(path: Path) -> list[SilverLayerToken]:
                     ud=ud,
                 )
             )
+    if skipped_bad:
+        print(f"silver loader: skipped {skipped_bad} bad rows in {path}")
     return tokens
 
 
