@@ -39,15 +39,44 @@
           ></textarea>
           <div class="input-actions">
             <span class="counter" id="char-counter">0 / 20000</span>
+            <div class="mode-controls" aria-label="Režimas">
+              <span class="segmented-label" id="mode-label"></span>
+              <span class="segmented-control" id="mode-switch">
+                <button type="button" data-mode="web"></button>
+                <button type="button" data-mode="local"></button>
+              </span>
+            </div>
             <button class="primary-button" id="accent-button" type="submit"></button>
           </div>
+          <p class="mode-explainer" id="mode-explainer"></p>
+          <div class="local-status" id="local-status" role="status" aria-live="polite" hidden></div>
           <p class="message" id="form-message" role="status" aria-live="polite"></p>
         </form>
 
         <section class="result-panel" aria-labelledby="result-heading">
           <div class="result-toolbar panel-head">
             <h2 id="result-heading"></h2>
-            <button class="secondary-button" id="copy-button" type="button" disabled></button>
+            <div class="result-actions">
+              <div class="display-controls" aria-label="Rodymas">
+                <span class="segmented-label" id="display-label"></span>
+                <span class="segmented-control" id="display-switch">
+                  <button type="button" data-display="top"></button>
+                  <button type="button" data-display="all"></button>
+                </span>
+              </div>
+              <button
+                class="icon-button stats-button"
+                id="local-stats-button"
+                type="button"
+                aria-haspopup="dialog"
+                hidden
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M3 12h4l2.5-7 5 14 2.5-7h4" />
+                </svg>
+              </button>
+              <button class="secondary-button" id="copy-button" type="button" disabled></button>
+            </div>
           </div>
           <div class="tagger-notice" id="tagger-notice" hidden>
             <span id="tagger-notice-text"></span>

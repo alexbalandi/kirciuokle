@@ -2,21 +2,41 @@ import type {
   AccentResponse,
   ErrorResponse,
   Part,
+  Variant,
   WordResponse,
 } from "../shared/types";
 import { parseMi, scoreTags } from "../shared/tags";
+import { formatProbability } from "./format";
+import {
+  formatBytes,
+  hasCachedLocalModel,
+  LOCAL_MODEL_SIZE_FALLBACK,
+} from "./local/assets";
+import {
+  createLocalDownloadGate,
+  type LocalDownloadGateState,
+} from "./local/consent";
+import type { LocalAccentEngine } from "./local/engine";
+import type {
+  CacheStatus,
+  ExecutionMode,
+  LocalModelStatus,
+  LocalRunStatus,
+  LocalStats,
+} from "./local/types";
 import {
   detectLang,
   LANGS,
-  morphologySegments,
+  parallelMorphologyLines,
   UI,
   type Lang,
-  type MorphSegment,
   type UiStrings,
 } from "./i18n";
 import "./style.css";
 
 const MAX_TEXT_LENGTH = 20_000;
+const MODE_STORAGE_KEY = "accent-mode";
+const DISPLAY_STORAGE_KEY = "accent-display";
 const VLKK_PRIMER_URL =
   "https://www.vlkk.lt/aktualiausios-temos/tartis-ir-kirciavimas";
 const FOCUSABLE_SELECTOR =
@@ -34,6 +54,9 @@ type RenderedPart = Part & {
   userChosen?: boolean;
 };
 
+type AccentMode = "web" | "local";
+type DisplayMode = "top" | "all";
+
 class AccentRequestError extends Error {
   constructor(readonly status: number) {
     super(`Accent request failed with status ${status}`);
@@ -49,10 +72,23 @@ const form = getElement<HTMLFormElement>("accent-form");
 const inputLabel = getElement<HTMLLabelElement>("input-label");
 const textarea = getElement<HTMLTextAreaElement>("source-text");
 const charCounter = getElement<HTMLSpanElement>("char-counter");
+const modeLabel = getElement<HTMLSpanElement>("mode-label");
+const modeSwitch = getElement<HTMLSpanElement>("mode-switch");
+const modeButtons = Array.from(
+  modeSwitch.querySelectorAll<HTMLButtonElement>("button[data-mode]"),
+);
+const modeExplainer = getElement<HTMLParagraphElement>("mode-explainer");
+const localStatusLine = getElement<HTMLDivElement>("local-status");
 const accentButton = getElement<HTMLButtonElement>("accent-button");
 const copyButton = getElement<HTMLButtonElement>("copy-button");
 const message = getElement<HTMLParagraphElement>("form-message");
 const resultHeading = getElement<HTMLHeadingElement>("result-heading");
+const displayLabel = getElement<HTMLSpanElement>("display-label");
+const displaySwitch = getElement<HTMLSpanElement>("display-switch");
+const displayButtons = Array.from(
+  displaySwitch.querySelectorAll<HTMLButtonElement>("button[data-display]"),
+);
+const localStatsButton = getElement<HTMLButtonElement>("local-stats-button");
 const resultOutput = getElement<HTMLDivElement>("result-output");
 const taggerNotice = getElement<HTMLDivElement>("tagger-notice");
 const taggerNoticeText = getElement<HTMLSpanElement>("tagger-notice-text");
@@ -87,18 +123,56 @@ const metaDescription = document.querySelector<HTMLMetaElement>(
 );
 
 let lang: Lang = detectLang();
+let accentMode: AccentMode = readStoredMode();
+let displayMode: DisplayMode = readStoredDisplayMode();
 let renderedParts: RenderedPart[] = [];
 let activePopover: HTMLDivElement | null = null;
+let activeStatsPopover: HTMLDivElement | null = null;
 let isLoading = false;
 let messageKey: MessageKey | null = null;
 let copyResetTimer: number | undefined;
 let copied = false;
+let localEngine: LocalAccentEngine | null = null;
+let localEnginePromise: Promise<LocalAccentEngine> | null = null;
+let localModelStatus: LocalModelStatus = { type: "idle" };
+let localRunStatus: LocalRunStatus = { type: "ready" };
+let localStats: LocalStats | null = null;
+let localExpectedBytes: number = LOCAL_MODEL_SIZE_FALLBACK;
+let localDownloadGateState: LocalDownloadGateState = "inactive";
+
+const localDownloadGate = createLocalDownloadGate({
+  hasCachedModel: hasCachedLocalModel,
+  ensureEngine: ensureLocalEngine,
+  isEngineReady: () => Boolean(localEngine),
+  onState: (state) => {
+    localDownloadGateState = state;
+    renderUi();
+  },
+});
 
 languageButtons.forEach((button) => {
   button.addEventListener("click", () => {
     const nextLang = parseLang(button.dataset.lang);
     if (nextLang) {
       setLanguage(nextLang);
+    }
+  });
+});
+
+modeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const nextMode = parseMode(button.dataset.mode);
+    if (nextMode) {
+      void setAccentMode(nextMode);
+    }
+  });
+});
+
+displayButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const nextDisplay = parseDisplayMode(button.dataset.display);
+    if (nextDisplay && accentMode === "web") {
+      setDisplayMode(nextDisplay);
     }
   });
 });
@@ -122,6 +196,11 @@ form.addEventListener("submit", (event) => {
 
 copyButton.addEventListener("click", () => {
   void copyResult();
+});
+
+localStatsButton.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleStatsPopover();
 });
 
 taggerNoticeClose.addEventListener("click", () => {
@@ -183,11 +262,21 @@ document.addEventListener("keydown", (event) => {
     }
 
     closePopover();
+    closeStatsPopover();
   }
 });
 
 document.addEventListener("click", (event) => {
   const target = event.target;
+  if (
+    target instanceof Node &&
+    activeStatsPopover &&
+    !activeStatsPopover.contains(target) &&
+    !(target instanceof HTMLElement && target.closest("#local-stats-button"))
+  ) {
+    closeStatsPopover();
+  }
+
   if (
     target instanceof Node &&
     activePopover &&
@@ -201,10 +290,14 @@ document.addEventListener("click", (event) => {
 setLanguage(lang, { persist: false });
 resizeTextarea();
 updateCounter();
+if (accentMode === "local") {
+  void enterLocalMode();
+}
 
 async function submitText(): Promise<void> {
   const text = textarea.value;
   closePopover();
+  closeStatsPopover();
   setMessage(null);
 
   if (text.trim().length === 0) {
@@ -220,34 +313,9 @@ async function submitText(): Promise<void> {
   setLoading(true);
 
   try {
-    const response = await fetch("/api/accent", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-
-    const payload = (await response.json().catch(() => null)) as
-      | AccentResponse
-      | ErrorResponse
-      | null;
-    if (!response.ok || !payload || "error" in payload) {
-      throw new AccentRequestError(response.status);
-    }
-
-    renderedParts = payload.parts.map((part) => ({
-      ...part,
-      text: part.text.normalize("NFC"),
-      accented: part.accented?.normalize("NFC"),
-      variants: part.variants?.map((variant) => ({
-        ...variant,
-        form: variant.form.normalize("NFC"),
-      })),
-      current: (part.accented ?? part.text).normalize("NFC"),
-    }));
-
-    showTaggerNotice(payload.tagger === "unavailable");
-    renderResult();
-    copyButton.disabled = renderedParts.length === 0;
+    const payload =
+      accentMode === "local" ? await accentTextLocal(text) : await accentTextWeb(text);
+    applyAccentResponse(payload);
   } catch (error) {
     renderedParts = [];
     showTaggerNotice(false);
@@ -261,6 +329,146 @@ async function submitText(): Promise<void> {
   } finally {
     setLoading(false);
   }
+}
+
+async function accentTextWeb(text: string): Promise<AccentResponse> {
+  const response = await fetch("/api/accent", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | AccentResponse
+    | ErrorResponse
+    | null;
+  if (!response.ok || !payload || "error" in payload) {
+    throw new AccentRequestError(response.status);
+  }
+
+  return payload;
+}
+
+async function accentTextLocal(text: string): Promise<AccentResponse> {
+  if (
+    !localEngine &&
+    localDownloadGateState !== "loading" &&
+    localDownloadGateState !== "ready"
+  ) {
+    throw new Error("Local model download has not been approved.");
+  }
+
+  const engine = await ensureLocalEngine();
+  const result = await engine.accent(text, (status) => {
+    localRunStatus = status;
+    renderLocalStatus();
+  });
+  localStats = result.stats;
+  return {
+    source: "local",
+    tagger: "ok",
+    parts: result.parts,
+  };
+}
+
+function applyAccentResponse(payload: AccentResponse): void {
+  renderedParts = payload.parts.map((part) => ({
+    ...part,
+    text: part.text.normalize("NFC"),
+    accented: part.accented?.normalize("NFC"),
+    variants: part.variants?.map((variant) => ({
+      ...variant,
+      form: variant.form.normalize("NFC"),
+    })),
+    current: (part.accented ?? part.text).normalize("NFC"),
+  }));
+
+  showTaggerNotice(payload.tagger === "unavailable");
+  renderResult();
+  copyButton.disabled = renderedParts.length === 0;
+}
+
+async function setAccentMode(nextMode: AccentMode): Promise<void> {
+  if (accentMode === nextMode) {
+    return;
+  }
+
+  accentMode = nextMode;
+  localStorage.setItem(MODE_STORAGE_KEY, accentMode);
+  closePopover();
+  closeStatsPopover();
+  renderUi();
+
+  if (accentMode === "local") {
+    await enterLocalMode();
+  } else {
+    localDownloadGate.leaveLocalMode();
+  }
+}
+
+async function enterLocalMode(): Promise<void> {
+  try {
+    await localDownloadGate.enterLocalMode();
+  } catch {
+    setMessage("errUnexpected");
+  }
+}
+
+async function consentToLocalDownload(): Promise<void> {
+  try {
+    await localDownloadGate.consentToDownload();
+  } catch {
+    setMessage("errUnexpected");
+  }
+}
+
+function setDisplayMode(nextDisplay: DisplayMode): void {
+  displayMode = nextDisplay;
+  localStorage.setItem(DISPLAY_STORAGE_KEY, displayMode);
+  closePopover();
+  renderUi();
+}
+
+async function ensureLocalEngine(): Promise<LocalAccentEngine> {
+  if (localEngine) {
+    return localEngine;
+  }
+
+  if (localEnginePromise) {
+    return localEnginePromise;
+  }
+
+  localRunStatus = { type: "ready" };
+  localEnginePromise = import("./local/engine")
+    .then(({ LocalAccentEngine: Engine }) =>
+      Engine.create((status) => {
+        localModelStatus = status;
+        if ("expectedBytes" in status && status.expectedBytes) {
+          localExpectedBytes = status.expectedBytes;
+        }
+        if ("bytes" in status && status.bytes) {
+          localExpectedBytes = status.bytes;
+        }
+        renderUi();
+      }),
+    )
+    .then((engine) => {
+      localEngine = engine;
+      localStats = engine.getStats();
+      localModelStatus =
+        localModelStatus.type === "ready" ? localModelStatus : { type: "idle" };
+      renderUi();
+      return engine;
+    })
+    .catch((error: unknown) => {
+      localEnginePromise = null;
+      localModelStatus = { type: "failed", message: errorMessage(error) };
+      renderUi();
+      throw error;
+    });
+
+  renderUi();
+  return localEnginePromise;
 }
 
 function renderResult(): void {
@@ -314,6 +522,14 @@ function renderResult(): void {
       return;
     }
 
+    if (part.numeralFragment) {
+      const span = document.createElement("span");
+      span.className = "token token-numeral";
+      span.textContent = visibleText;
+      resultOutput.append(span);
+      return;
+    }
+
     if (part.accented || (part.variants && part.variants.length > 0)) {
       // Plain resolved word: clickable for morphology info, but not
       // underlined — it is not a choice. Readings not shipped with the
@@ -347,21 +563,24 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
   const popover = document.createElement("div");
   popover.className = "variant-popover";
   popover.role = "dialog";
+  const body = document.createElement("div");
+  body.className = "variant-popover-scroll";
+  popover.append(body);
   document.body.append(popover);
   activePopover = popover;
 
   const variants = part.variants ?? [];
 
   if (variants.length === 0) {
-    if (part.type === "word" && !part.unknown) {
-      popover.textContent = UI[lang].variantsLoading;
-      positionPopover(popover, anchor);
+    if (accentMode === "web" && part.type === "word" && !part.unknown) {
+      renderPopoverStatus(popover, UI[lang].variantsLoading);
+      positionVariantPopover(popover, anchor);
       void loadWordInfo(popover, anchor, index);
       return;
     }
 
-    popover.textContent = UI[lang].variantsNone;
-    positionPopover(popover, anchor);
+    renderPopoverStatus(popover, UI[lang].variantsNone);
+    positionVariantPopover(popover, anchor);
     return;
   }
 
@@ -383,73 +602,178 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
     order.unshift(first);
   }
 
-  order.forEach((variantIndex) => {
+  const topOnly = accentMode === "web" && displayMode === "top" && order.length > 1;
+  const visibleOrder = topOnly ? order.slice(0, 1) : order;
+
+  visibleOrder.forEach((variantIndex) => {
     const variant = variants[variantIndex]!;
-    const option = document.createElement(interactive ? "button" : "div");
-    option.className = "variant-option";
-
-    if (interactive) {
-      (option as HTMLButtonElement).type = "button";
-    } else {
-      option.classList.add("variant-option--static");
-    }
-
-    if (interactive && part.chosen === variantIndex) {
-      option.classList.add("is-selected");
-      option.setAttribute("aria-current", "true");
-    }
-
-    const formText = document.createElement("strong");
-    formText.textContent = variant.form.normalize("NFC");
-    option.append(formText);
-
-    if (variant.info) {
-      // Mark the exact reading the tagger matched — only meaningful on the
-      // variant that is actually shown in the result.
-      const markChosen =
-        Boolean(chosenMi) &&
-        !part.userChosen &&
-        (!interactive || part.chosen === variantIndex);
-      const info = document.createElement("span");
-      info.className = "variant-info";
-      const readings = variant.info.split("; ");
-      const displayReadings = markChosen
-        ? [...readings].sort(
-            (a, b) =>
-              Number(readingMatchesMi(b, chosenMi!)) -
-              Number(readingMatchesMi(a, chosenMi!)),
-          )
+    const readings = splitVariantReadings(variant.info);
+    const matchedReadings =
+      topOnly && chosenMi
+        ? readings.filter((reading) => readingMatchesMi(reading, chosenMi))
+        : [];
+    const displayReadings =
+      topOnly && chosenMi
+        ? matchedReadings.length > 0
+          ? matchedReadings
+          : readings.slice(0, 1)
         : readings;
-      displayReadings.forEach((reading) => {
-        const row = document.createElement("span");
-        row.className = "variant-reading";
-        if (markChosen && readingMatchesMi(reading, chosenMi!)) {
-          row.classList.add("is-chosen");
-          row.title = UI[lang].legendResolved;
-        }
-        appendMorphologyInfo(row, morphologySegments(reading, lang));
-        info.append(row);
-      });
-      option.append(info);
-    }
 
-    if (interactive) {
-      option.addEventListener("click", () => {
-        renderedParts[index] = {
-          ...part,
-          chosen: variantIndex,
-          current: matchCase(variant.form.normalize("NFC"), part.text).normalize("NFC"),
-          userChosen: true,
-        };
-        closePopover();
-        renderResult();
-      });
-    }
+    displayReadings.forEach((reading, readingIndex) => {
+      const option = document.createElement(interactive ? "button" : "div");
+      option.className = "variant-row";
 
-    popover.append(option);
+      if (interactive) {
+        (option as HTMLButtonElement).type = "button";
+      } else {
+        option.classList.add("variant-row--static");
+      }
+
+      const selected = isSelectedReading(
+        part,
+        variantIndex,
+        readingIndex,
+        reading,
+        chosenMi,
+        order,
+      );
+      if (selected) {
+        option.classList.add("is-selected");
+        option.setAttribute("aria-current", "true");
+      }
+
+      const formLine = document.createElement("span");
+      formLine.className = "variant-headword-line";
+
+      const formText = document.createElement("span");
+      formText.className = "variant-headword";
+      formText.lang = "lt";
+      formText.textContent = variant.form.normalize("NFC");
+      formLine.append(formText);
+
+      const metaText = variantMetaText(variant, selected);
+      if (metaText) {
+        const meta = document.createElement("span");
+        meta.className =
+          accentMode === "local"
+            ? "variant-meta variant-probability"
+            : "variant-meta variant-check";
+        meta.textContent = metaText;
+        formLine.append(meta);
+      }
+
+      option.append(formLine);
+
+      const lines = parallelMorphologyLines(reading, lang);
+      if (lines.morphology) {
+        const morphology = document.createElement("span");
+        morphology.className = "variant-morphology";
+        morphology.textContent = lines.morphology;
+        option.append(morphology);
+      }
+      if (lang !== "lt" && lines.gloss) {
+        const gloss = document.createElement("span");
+        gloss.className = "variant-gloss";
+        gloss.textContent = lines.gloss;
+        option.append(gloss);
+      }
+
+      if (interactive) {
+        option.addEventListener("click", () => {
+          const selectedMi = readingMi(reading);
+          renderedParts[index] = {
+            ...part,
+            chosen: variantIndex,
+            ...(selectedMi
+              ? { chosenMi: selectedMi, tokenTags: parseMi(selectedMi) }
+              : {}),
+            current: matchCase(variant.form.normalize("NFC"), part.text).normalize(
+              "NFC",
+            ),
+            userChosen: true,
+          };
+          closePopover();
+          renderResult();
+        });
+      }
+
+      body.append(option);
+    });
   });
 
-  positionPopover(popover, anchor);
+  if (topOnly) {
+    const showAll = document.createElement("button");
+    showAll.type = "button";
+    showAll.className = "variant-show-all";
+    showAll.textContent = UI[lang].displayShowAll;
+    showAll.addEventListener("click", () => {
+      setDisplayMode("all");
+      closePopover();
+      openVariantPopover(anchor, index);
+    });
+    body.append(showAll);
+  }
+
+  positionVariantPopover(popover, anchor);
+}
+
+function renderPopoverStatus(popover: HTMLDivElement, text: string): void {
+  const body = variantPopoverBody(popover);
+  const row = document.createElement("div");
+  row.className = "variant-row variant-row--static variant-status";
+  row.textContent = text;
+  body.replaceChildren(row);
+}
+
+function variantPopoverBody(popover: HTMLElement): HTMLElement {
+  return popover.querySelector<HTMLElement>(".variant-popover-scroll") ?? popover;
+}
+
+function splitVariantReadings(info: string): string[] {
+  const readings = info
+    .split("; ")
+    .map((reading) => reading.trim())
+    .filter(Boolean);
+  return readings.length > 0 ? readings : [""];
+}
+
+function isSelectedReading(
+  part: RenderedPart,
+  variantIndex: number,
+  readingIndex: number,
+  reading: string,
+  chosenMi: string | undefined,
+  order: number[],
+): boolean {
+  if (part.userChosen) {
+    if (chosenMi) {
+      return part.chosen === variantIndex && readingMatchesMi(reading, chosenMi);
+    }
+    return part.chosen === variantIndex && readingIndex === 0;
+  }
+
+  if (chosenMi && readingMatchesMi(reading, chosenMi)) {
+    return true;
+  }
+
+  if (typeof part.chosen === "number") {
+    return part.chosen === variantIndex && readingIndex === 0;
+  }
+
+  return accentMode === "local" && variantIndex === order[0] && readingIndex === 0;
+}
+
+function variantMetaText(variant: Variant, selected: boolean): string {
+  if (accentMode === "local" && typeof variant.p === "number") {
+    return formatProbability(variant.p);
+  }
+
+  return accentMode === "web" && selected ? "✓" : "";
+}
+
+function readingMi(reading: string): string | undefined {
+  const mi = reading.split(" - ")[0]?.trim();
+  return mi || undefined;
 }
 
 function bestReadingMi(part: RenderedPart): string | undefined {
@@ -512,8 +836,8 @@ async function loadWordInfo(
     }
 
     if (variants.length === 0) {
-      popover.textContent = UI[lang].variantsNone;
-      positionPopover(popover, anchor);
+      renderPopoverStatus(popover, UI[lang].variantsNone);
+      positionVariantPopover(popover, anchor);
       return;
     }
 
@@ -521,33 +845,10 @@ async function loadWordInfo(
     openVariantPopover(anchor, index);
   } catch {
     if (activePopover === popover) {
-      popover.textContent = UI[lang].variantsError;
-      positionPopover(popover, anchor);
+      renderPopoverStatus(popover, UI[lang].variantsError);
+      positionVariantPopover(popover, anchor);
     }
   }
-}
-
-function appendMorphologyInfo(
-  container: HTMLElement,
-  segments: MorphSegment[],
-): void {
-  segments.forEach((segment) => {
-    if (!segment.lt) {
-      container.append(document.createTextNode(segment.text));
-      return;
-    }
-
-    // Lithuanian term is the primary text; the translation is the small
-    // helper annotation underneath.
-    const ruby = document.createElement("ruby");
-    ruby.append(document.createTextNode(segment.lt));
-
-    const rt = document.createElement("rt");
-    rt.textContent = segment.text;
-    ruby.append(rt);
-
-    container.append(ruby);
-  });
 }
 
 function closePopover(): void {
@@ -555,8 +856,106 @@ function closePopover(): void {
   activePopover = null;
 }
 
+function toggleStatsPopover(): void {
+  if (activeStatsPopover) {
+    closeStatsPopover();
+    return;
+  }
+
+  openStatsPopover();
+}
+
+function openStatsPopover(): void {
+  closePopover();
+  closeStatsPopover();
+
+  const popover = document.createElement("div");
+  popover.className = "stats-popover";
+  popover.role = "dialog";
+  document.body.append(popover);
+  activeStatsPopover = popover;
+
+  renderStatsPopover(popover);
+  positionPopover(popover, localStatsButton);
+}
+
+function renderStatsPopover(popover: HTMLDivElement): void {
+  const strings = UI[lang];
+  const stats = localStats ?? localEngine?.getStats() ?? null;
+  const title = document.createElement("strong");
+  title.className = "stats-title";
+  title.textContent = strings.statsTitle;
+  popover.append(title);
+
+  appendStatsRow(
+    popover,
+    strings.statsInferenceMode,
+    stats ? executionModeLabel(stats.executionMode) : strings.statsModeUnknown,
+  );
+  appendStatsRow(
+    popover,
+    strings.statsMemory,
+    stats
+      ? `WASM ${formatMemory(stats.memory.wasmBytes)} / JS ${formatMemory(
+          stats.memory.jsHeapBytes,
+        )}`
+      : strings.statsModeUnknown,
+  );
+  appendStatsRow(
+    popover,
+    strings.statsLastRun,
+    stats?.lastRun
+      ? `${stats.lastRun.tokensPerSecond.toFixed(1)} ${
+          strings.localTokensPerSecond
+        } · ${stats.lastRun.batches}`
+      : strings.statsLastRunEmpty,
+  );
+  appendStatsRow(
+    popover,
+    strings.statsModel,
+    stats?.modelFile
+      ? `${stats.modelFile}${stats.modelVersion ? ` · ${stats.modelVersion}` : ""}`
+      : strings.statsModeUnknown,
+  );
+  appendStatsRow(popover, strings.statsCache, cacheLabel(stats?.cacheStatus ?? null));
+}
+
+function appendStatsRow(container: HTMLElement, label: string, value: string): void {
+  const row = document.createElement("p");
+  const labelNode = document.createElement("span");
+  labelNode.textContent = label;
+  const valueNode = document.createElement("span");
+  valueNode.textContent = value;
+  row.append(labelNode, valueNode);
+  container.append(row);
+}
+
+function closeStatsPopover(): void {
+  activeStatsPopover?.remove();
+  activeStatsPopover = null;
+}
+
+function executionModeLabel(mode: ExecutionMode | null): string {
+  const strings = UI[lang];
+  if (mode === "worker") {
+    return strings.statsModeWorker;
+  }
+  if (mode === "main") {
+    return strings.statsModeMain;
+  }
+  return strings.statsModeUnknown;
+}
+
+function formatMemory(bytes: number | null): string {
+  if (!bytes) {
+    return UI[lang].unknownSize;
+  }
+  return `${(Number(bytes) / 1024 / 1024).toFixed(1)} MB`;
+}
+
 function openPrimer(): void {
   closePopover();
+  closeStatsPopover();
   primerBackdrop.hidden = false;
   document.body.classList.add("has-primer-open");
   primerDialog.focus({ preventScroll: true });
@@ -602,6 +1001,44 @@ function trapPrimerFocus(event: KeyboardEvent): void {
   }
 }
 
+function positionVariantPopover(popover: HTMLElement, anchor: HTMLElement): void {
+  const rect = anchor.getBoundingClientRect();
+  const margin = 8;
+  const caret = 10;
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const width = popover.offsetWidth;
+  const height = popover.offsetHeight;
+  const anchorCenterX = rect.left + rect.width / 2;
+
+  const minLeft = window.scrollX + margin;
+  const maxLeft = window.scrollX + viewportWidth - width - margin;
+  const unclampedLeft = window.scrollX + anchorCenterX - width / 2;
+  const left = Math.max(minLeft, Math.min(unclampedLeft, Math.max(minLeft, maxLeft)));
+
+  const roomBelow = viewportHeight - rect.bottom;
+  const roomAbove = rect.top;
+  const fitsBelow = roomBelow >= height + caret + margin;
+  const fitsAbove = roomAbove >= height + caret + margin;
+  const placeAbove = !fitsBelow && (fitsAbove || roomAbove > roomBelow);
+  const rawTop = placeAbove
+    ? window.scrollY + rect.top - height - caret
+    : window.scrollY + rect.bottom + caret;
+  const minTop = window.scrollY + margin;
+  const maxTop = window.scrollY + viewportHeight - height - margin;
+  const top = Math.max(minTop, Math.min(rawTop, Math.max(minTop, maxTop)));
+  const caretLeft = window.scrollX + anchorCenterX - left;
+
+  popover.classList.toggle("is-above", placeAbove);
+  popover.classList.toggle("is-below", !placeAbove);
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
+  popover.style.setProperty(
+    "--popover-caret-left",
+    `${Math.max(12, Math.min(caretLeft, width - 12))}px`,
+  );
+}
+
 function positionPopover(popover: HTMLElement, anchor: HTMLElement): void {
   const rect = anchor.getBoundingClientRect();
   const gap = 8;
@@ -641,10 +1078,15 @@ function setLoading(nextLoading: boolean): void {
   copyResetTimer = undefined;
   isLoading = nextLoading;
   copied = false;
-  accentButton.disabled = nextLoading;
+  updateAccentButtonState();
   accentButton.textContent = nextLoading
     ? UI[lang].accentButtonLoading
     : UI[lang].accentButton;
+}
+
+function updateAccentButtonState(): void {
+  accentButton.disabled =
+    isLoading || (accentMode === "local" && isLocalModelUnavailableBeforeReady());
 }
 
 function updateCounter(): void {
@@ -689,11 +1131,29 @@ function renderUi(): void {
   metaDescription?.setAttribute("content", strings.tagline);
   heroTagline.textContent = strings.tagline;
   inputLabel.textContent = strings.inputLabel;
+  modeLabel.textContent = strings.modeLabel;
+  modeButtons.forEach((button) => {
+    const buttonMode = parseMode(button.dataset.mode);
+    const isCurrent = buttonMode === accentMode;
+    button.textContent = buttonMode === "local" ? strings.modeLocal : strings.modeWeb;
+    button.classList.toggle("is-active", isCurrent);
+    button.setAttribute("aria-pressed", String(isCurrent));
+  });
+  modeExplainer.textContent =
+    accentMode === "local"
+      ? strings.modeLocalExplainer.replace("{size}", formatBytes(localExpectedBytes))
+      : strings.modeWebExplainer;
   accentButton.textContent = isLoading
     ? strings.accentButtonLoading
     : strings.accentButton;
+  updateAccentButtonState();
   copyButton.textContent = copied ? strings.copied : strings.copyButton;
   resultHeading.textContent = strings.resultHeading;
+  renderDisplayControl(strings);
+  renderLocalStatus();
+  localStatsButton.hidden = accentMode !== "local" || !localEngine;
+  localStatsButton.setAttribute("aria-label", strings.statsButtonLabel);
+  localStatsButton.title = strings.statsButtonLabel;
   taggerNoticeText.textContent = strings.taggerNotice;
   legend.setAttribute("aria-label", strings.legendLabel);
   legendLabel.textContent = strings.legendLabel;
@@ -712,6 +1172,212 @@ function renderUi(): void {
   });
 
   renderFooter(strings);
+}
+
+function renderDisplayControl(strings: UiStrings): void {
+  const effectiveDisplay = effectiveDisplayMode();
+  displayLabel.textContent = strings.displayLabel;
+  displaySwitch.title = accentMode === "local" ? strings.displayLocalTooltip : "";
+
+  displayButtons.forEach((button) => {
+    const buttonDisplay = parseDisplayMode(button.dataset.display);
+    const isCurrent = buttonDisplay === effectiveDisplay;
+    button.textContent = buttonDisplay === "all" ? strings.displayAll : strings.displayTop;
+    button.disabled = accentMode === "local";
+    button.classList.toggle("is-active", isCurrent);
+    button.setAttribute("aria-pressed", String(isCurrent));
+    if (accentMode === "local") {
+      button.title = strings.displayLocalTooltip;
+    } else {
+      button.removeAttribute("title");
+    }
+  });
+}
+
+function renderLocalStatus(): void {
+  if (accentMode !== "local") {
+    localStatusLine.hidden = true;
+    localStatusLine.replaceChildren();
+    return;
+  }
+
+  localStatusLine.hidden = false;
+  localStatusLine.replaceChildren();
+
+  if (!localEngine && localDownloadGateState === "needs-consent") {
+    localStatusLine.append(renderLocalConsentCard(UI[lang]));
+    return;
+  }
+
+  const text =
+    localDownloadGateState === "checking-cache"
+      ? UI[lang].localCheckingCache
+      : localRunStatusText() || localModelStatusText();
+  localStatusLine.textContent = text;
+}
+
+function renderLocalConsentCard(strings: UiStrings): HTMLElement {
+  const card = document.createElement("div");
+  card.className = "local-consent-card";
+
+  const copy = document.createElement("p");
+  copy.textContent = template(strings.localConsentText, {
+    size: formatBytes(localExpectedBytes),
+  });
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "primary-button local-consent-button";
+  button.append(createCloudArrowDownIcon());
+  button.append(
+    document.createTextNode(
+      template(strings.localConsentButton, {
+        size: formatBytes(localExpectedBytes),
+      }),
+    ),
+  );
+  button.addEventListener("click", () => {
+    void consentToLocalDownload();
+  });
+
+  card.append(copy, button);
+  return card;
+}
+
+function createCloudArrowDownIcon(): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+
+  [
+    "M12 13v8",
+    "m8 17 4 4 4-4",
+    "M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3",
+  ].forEach((d) => {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    svg.append(path);
+  });
+
+  return svg;
+}
+
+function localModelStatusText(): string {
+  const strings = UI[lang];
+  const status = localModelStatus;
+
+  switch (status.type) {
+    case "metadata":
+      return strings.localMetadata;
+    case "verify-runtime":
+      return template(strings.localVerifyingRuntime, {
+        file: status.file,
+        done: formatBytes(status.received),
+        total: formatBytes(status.total),
+      });
+    case "modelInfo":
+      return template(strings.localModelInfo, {
+        size: formatBytes(status.expectedBytes),
+        cache: status.cacheState ? strings.cacheHit : strings.cacheMiss,
+        threads: String(status.threads),
+      });
+    case "transfer":
+      return template(status.cached ? strings.localReadingCache : strings.localDownloading, {
+        done: formatBytes(status.received),
+        total: formatBytes(status.total),
+      });
+    case "session":
+      if (status.mode === "worker") {
+        return strings.localSessionWorker;
+      }
+      if (status.mode === "fallback") {
+        return strings.localSessionFallback;
+      }
+      return strings.localSessionMain;
+    case "ready":
+      return template(strings.localReady, {
+        model: status.modelFile,
+        size: formatBytes(status.bytes),
+        cache: cacheLabel(status.cacheStatus),
+      });
+    case "failed":
+      return template(strings.localFailed, { message: status.message });
+    default:
+      return strings.localIdle;
+  }
+}
+
+function localRunStatusText(): string {
+  const strings = UI[lang];
+  const status = localRunStatus;
+
+  switch (status.type) {
+    case "running":
+      return template(strings.localRunning, {
+        sentences: String(status.sentences),
+        batches: String(status.batches),
+      });
+    case "batch":
+      return template(strings.localBatch, {
+        done: String(status.renderedSentences),
+        sentences: String(status.sentences),
+        batch: String(status.batch),
+        batches: String(status.batches),
+        speed: status.tokensPerSecond.toFixed(1),
+      });
+    case "done":
+      return template(strings.localDone, {
+        tokens: String(status.inferredTokens),
+        total: String(status.totalTokens),
+        speed: status.tokensPerSecond.toFixed(1),
+        seconds: (status.elapsedMs / 1000).toFixed(2),
+      });
+    case "memoryLimit":
+      return strings.localMemoryLimit;
+    case "error":
+      return status.message;
+    default:
+      return "";
+  }
+}
+
+function effectiveDisplayMode(): DisplayMode {
+  return accentMode === "local" ? "top" : displayMode;
+}
+
+function isLocalModelUnavailableBeforeReady(): boolean {
+  return (
+    !localEngine &&
+    (localDownloadGateState === "checking-cache" ||
+      localDownloadGateState === "needs-consent" ||
+      localDownloadGateState === "loading")
+  );
+}
+
+function cacheLabel(status: CacheStatus | null): string {
+  const strings = UI[lang];
+  switch (status) {
+    case "hit":
+      return strings.cacheHit;
+    case "stored":
+      return strings.cacheStored;
+    case "failed":
+      return strings.cacheFailed;
+    case "unavailable":
+      return strings.cacheUnavailable;
+    case "miss":
+      return strings.cacheMiss;
+    default:
+      return strings.statsModeUnknown;
+  }
+}
+
+function template(text: string, values: Record<string, string>): string {
+  return Object.entries(values).reduce(
+    (out, [key, value]) => out.split(`{${key}}`).join(value),
+    text,
+  );
 }
 
 function renderPrimer(strings: UiStrings): void {
@@ -792,28 +1458,35 @@ function getPrimerPairWords(): string[] {
 }
 
 function renderFooter(strings: UiStrings): void {
-  const vduLink = document.createElement("a");
-  vduLink.href = "https://kalbu.vdu.lt";
-  vduLink.rel = "noreferrer";
-  vduLink.target = "_blank";
-  vduLink.textContent = "VDU kirčiuoklė";
-
-  const kirtisLink = document.createElement("a");
-  kirtisLink.href = "https://kirtis.info";
-  kirtisLink.rel = "noreferrer";
-  kirtisLink.target = "_blank";
-  kirtisLink.textContent = "kirtis.info";
-
-  siteFooter.replaceChildren(
-    document.createTextNode(`${strings.footerData}: `),
-    vduLink,
-    document.createTextNode(` (kalbu.vdu.lt) · ${strings.footerInspired} `),
-    kirtisLink,
-  );
+  // Attribution moved into the per-mode explainer (web mode names VDU +
+  // UDPipe; local mode runs our own model). Footer holds only the small
+  // project credit; kirtis.info reference removed.
+  const repoLink = document.createElement("a");
+  repoLink.href = "https://github.com/alexbalandi/kirciuokle";
+  repoLink.rel = "noreferrer";
+  repoLink.target = "_blank";
+  repoLink.textContent = strings.footerProject;
+  siteFooter.replaceChildren(repoLink);
 }
 
 function parseLang(value: string | undefined): Lang | null {
   return LANGS.find((candidate) => candidate === value) ?? null;
+}
+
+function parseMode(value: string | undefined): AccentMode | null {
+  return value === "web" || value === "local" ? value : null;
+}
+
+function parseDisplayMode(value: string | undefined): DisplayMode | null {
+  return value === "top" || value === "all" ? value : null;
+}
+
+function readStoredMode(): AccentMode {
+  return parseMode(localStorage.getItem(MODE_STORAGE_KEY) ?? undefined) ?? "web";
+}
+
+function readStoredDisplayMode(): DisplayMode {
+  return parseDisplayMode(localStorage.getItem(DISPLAY_STORAGE_KEY) ?? undefined) ?? "all";
 }
 
 function getMessageKeyForStatus(status: number): MessageKey {
@@ -827,6 +1500,10 @@ function getMessageKeyForStatus(status: number): MessageKey {
     default:
       return "errUnexpected";
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function matchCase(accented: string, original: string): string {

@@ -2,17 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   detectLang,
   morphologySegments,
+  parallelMorphologyLines,
   translateMorphology,
 } from "../src/client/i18n";
-
-declare global {
-  var localStorage: {
-    getItem(key: string): string | null;
-  };
-  var navigator: {
-    language?: string;
-  };
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -122,6 +114,22 @@ describe("morphologySegments", () => {
       translateMorphology(twoReadings, "lt"),
     );
     expect(segments.some((segment) => "lt" in segment)).toBe(false);
+  });
+});
+
+describe("parallelMorphologyLines", () => {
+  it("keeps Lithuanian abbreviations and translates glosses in parallel order", () => {
+    expect(parallelMorphologyLines("dkt., mot. g., vns. kilm.", "ru")).toEqual({
+      morphology: "dkt. · mot. g. · vns. · kilm.",
+      gloss: "существительное · женский род · ед. число · родительный",
+    });
+  });
+
+  it("keeps dictionary meanings as the final parallel item", () => {
+    expect(parallelMorphologyLines("vksm., 3 asm. - būti", "en")).toEqual({
+      morphology: "vksm. · 3 asm. · būti",
+      gloss: "verb · 3rd person · būti",
+    });
   });
 });
 

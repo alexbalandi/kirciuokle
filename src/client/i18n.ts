@@ -11,6 +11,52 @@ export type UiStrings = {
   inputLabel: string;
   accentButton: string;
   accentButtonLoading: string;
+  modeLabel: string;
+  modeWeb: string;
+  modeLocal: string;
+  modeWebExplainer: string;
+  modeLocalExplainer: string;
+  displayLabel: string;
+  displayTop: string;
+  displayAll: string;
+  displayShowAll: string;
+  displayLocalTooltip: string;
+  localIdle: string;
+  localCheckingCache: string;
+  localConsentText: string;
+  localConsentButton: string;
+  localMetadata: string;
+  localVerifyingRuntime: string;
+  localModelInfo: string;
+  localDownloading: string;
+  localReadingCache: string;
+  localSessionWorker: string;
+  localSessionFallback: string;
+  localSessionMain: string;
+  localReady: string;
+  localFailed: string;
+  localRunning: string;
+  localBatch: string;
+  localDone: string;
+  localMemoryLimit: string;
+  localTokensPerSecond: string;
+  statsButtonLabel: string;
+  statsTitle: string;
+  statsInferenceMode: string;
+  statsModeWorker: string;
+  statsModeMain: string;
+  statsModeUnknown: string;
+  statsMemory: string;
+  statsLastRun: string;
+  statsLastRunEmpty: string;
+  statsModel: string;
+  statsCache: string;
+  cacheHit: string;
+  cacheMiss: string;
+  cacheStored: string;
+  cacheFailed: string;
+  cacheUnavailable: string;
+  unknownSize: string;
   copyButton: string;
   copied: string;
   resultHeading: string;
@@ -44,8 +90,7 @@ export type UiStrings = {
   errTooLong: string;
   errUpstream: string;
   errUnexpected: string;
-  footerData: string;
-  footerInspired: string;
+  footerProject: string;
 };
 
 export const UI: Record<Lang, UiStrings> = {
@@ -54,6 +99,58 @@ export const UI: Record<Lang, UiStrings> = {
     inputLabel: "Tekstas",
     accentButton: "Sukirčiuoti",
     accentButtonLoading: "Kirčiuojama...",
+    modeLabel: "Režimas",
+    modeWeb: "Internetu",
+    modeLocal: "Vietinis",
+    modeWebExplainer:
+      "Tekstas siunčiamas į serverį — kirčiuoja VDU kirčiuoklė (kalbu.vdu.lt), morfologiją žymi UDPipe (LINDAT).",
+    modeLocalExplainer:
+      "Viskas vyksta jūsų naršyklėje po vienkartinio modelio atsisiuntimo (~{size}); tekstas nepalieka įrenginio.",
+    displayLabel: "Rodymas",
+    displayTop: "geriausi",
+    displayAll: "visi",
+    displayShowAll: "rodyti visus",
+    displayLocalTooltip:
+      "Modelis variantus rikiuoja pagal tikimybę; rodomi tik >10% variantai.",
+    localIdle: "Vietinis modelis bus įkeltas pasirinkus vietinį režimą.",
+    localCheckingCache: "Tikrinama, ar modelis jau išsaugotas naršyklėje...",
+    localConsentText:
+      "Vietiniam kirčiavimui svetainė vieną kartą atsisiunčia modelį — apie {size} duomenų. Vėlesniems apsilankymams jis lieka išsaugotas naršyklėje.",
+    localConsentButton: "Atsisiųsti modelį ({size})",
+    localMetadata: "Skaitomi modelio metaduomenys...",
+    localVerifyingRuntime: "Tikrinamas WASM runtime: {file} {done}/{total}.",
+    localModelInfo: "Modelis {size}; talpykla: {cache}; WASM gijos: {threads}.",
+    localDownloading: "Atsisiunčiamas modelis {done}/{total}.",
+    localReadingCache: "Skaitomas modelis iš talpyklos {done}/{total}.",
+    localSessionWorker: "Modelis inicijuojamas darbinėje gijoje...",
+    localSessionFallback: "Darbinė gija neatsakė; bandomas atsarginis režimas...",
+    localSessionMain: "Modelis inicijuojamas pagrindinėje gijoje...",
+    localReady: "Vietinis modelis paruoštas: {model} · {size} · talpykla: {cache}.",
+    localFailed: "Vietinio modelio įkelti nepavyko: {message}",
+    localRunning: "Kirčiuojama vietiškai: {sentences} sak. · {batches} pak.",
+    localBatch:
+      "Vietiškai: {done}/{sentences} sak. · pak. {batch}/{batches} · {speed} tok./s.",
+    localDone:
+      "Baigta vietiškai: {tokens}/{total} tok. · {speed} tok./s · {seconds} s.",
+    localMemoryLimit: "Naršyklės WASM atminties riba pasiekta; perkraukite puslapį.",
+    localTokensPerSecond: "tok./s",
+    statsButtonLabel: "WASM statistika",
+    statsTitle: "WASM statistika",
+    statsInferenceMode: "Vykdymas",
+    statsModeWorker: "darbinė gija",
+    statsModeMain: "pagrindinė gija",
+    statsModeUnknown: "nežinoma",
+    statsMemory: "Atmintis",
+    statsLastRun: "Paskutinis vykdymas",
+    statsLastRunEmpty: "dar nevykdyta",
+    statsModel: "Modelis",
+    statsCache: "Talpykla",
+    cacheHit: "rasta",
+    cacheMiss: "nerasta",
+    cacheStored: "išsaugota",
+    cacheFailed: "nepavyko",
+    cacheUnavailable: "nepasiekiama",
+    unknownSize: "nežinoma",
     copyButton: "Kopijuoti",
     copied: "Nukopijuota ✓",
     resultHeading: "Rezultatas",
@@ -69,7 +166,7 @@ export const UI: Record<Lang, UiStrings> = {
       "Kirčiuotas skiemuo tariamas ryškiausiai. Ilguosiuose skiemenyse dar skiriama priegaidė — balso „kryptis“ skiemens viduje. Žymimi trys ženklai:",
     primerGraveName: "Kairinis",
     primerGraveDesc: "trumpas kirčiuotas skiemuo.",
-    primerGraveEx: "bùs, vìsas, làbas",
+    primerGraveEx: "bùs, vìsas, kàd",
     primerAcuteName: "Dešininis",
     primerAcuteDesc:
       "ilgas skiemuo, tvirtapradė priegaidė — pabrėžiama skiemens pradžia.",
@@ -93,14 +190,64 @@ export const UI: Record<Lang, UiStrings> = {
     errTooLong: "Tekstas per ilgas.",
     errUpstream: "Kirčiavimo paslauga laikinai nepasiekiama.",
     errUnexpected: "Nepavyko sukirčiuoti.",
-    footerData: "Duomenys",
-    footerInspired: "įkvėpta",
+    footerProject: "Atvirojo kodo projektas",
   },
   en: {
     tagline: "Paste Lithuanian text — get it fully stress-marked.",
     inputLabel: "Text",
     accentButton: "Add stress marks",
     accentButtonLoading: "Working...",
+    modeLabel: "Mode",
+    modeWeb: "Web",
+    modeLocal: "Local",
+    modeWebExplainer:
+      "Text is sent to the server — accents by VDU kirčiuoklė (kalbu.vdu.lt), morphology tagging by UDPipe (LINDAT).",
+    modeLocalExplainer:
+      "Everything runs in your browser after a one-time model download (~{size}); nothing leaves this device.",
+    displayLabel: "Display",
+    displayTop: "top",
+    displayAll: "all",
+    displayShowAll: "show all",
+    displayLocalTooltip:
+      "The model ranks labels by probability; only >10% readings are shown.",
+    localIdle: "The local model will load when Local mode is selected.",
+    localCheckingCache: "Checking whether the model is already saved in this browser...",
+    localConsentText:
+      "To accentuate locally, the site downloads the model once — about {size} of traffic. It stays saved in your browser for future visits.",
+    localConsentButton: "Download model ({size})",
+    localMetadata: "Reading model metadata...",
+    localVerifyingRuntime: "Verifying WASM runtime: {file} {done}/{total}.",
+    localModelInfo: "Model {size}; cache: {cache}; WASM threads: {threads}.",
+    localDownloading: "Downloading model {done}/{total}.",
+    localReadingCache: "Reading model from cache {done}/{total}.",
+    localSessionWorker: "Initializing model in a worker...",
+    localSessionFallback: "Worker did not respond; trying fallback mode...",
+    localSessionMain: "Initializing model on the main thread...",
+    localReady: "Local model ready: {model} · {size} · cache: {cache}.",
+    localFailed: "Could not load the local model: {message}",
+    localRunning: "Running locally: {sentences} sent. · {batches} batches.",
+    localBatch:
+      "Local: {done}/{sentences} sent. · batch {batch}/{batches} · {speed} tok/s.",
+    localDone: "Done locally: {tokens}/{total} tok. · {speed} tok/s · {seconds} s.",
+    localMemoryLimit: "Browser WASM memory limit reached; reload the page.",
+    localTokensPerSecond: "tok/s",
+    statsButtonLabel: "WASM stats",
+    statsTitle: "WASM stats",
+    statsInferenceMode: "Inference",
+    statsModeWorker: "worker",
+    statsModeMain: "main thread",
+    statsModeUnknown: "unknown",
+    statsMemory: "Memory",
+    statsLastRun: "Last run",
+    statsLastRunEmpty: "not run yet",
+    statsModel: "Model",
+    statsCache: "Cache",
+    cacheHit: "present",
+    cacheMiss: "miss",
+    cacheStored: "stored",
+    cacheFailed: "failed",
+    cacheUnavailable: "unavailable",
+    unknownSize: "unknown",
     copyButton: "Copy",
     copied: "Copied ✓",
     resultHeading: "Result",
@@ -116,7 +263,7 @@ export const UI: Record<Lang, UiStrings> = {
       "The stressed syllable is pronounced most prominently. Long syllables additionally carry a pitch contour (priegaidė). Three marks are used:",
     primerGraveName: "Grave",
     primerGraveDesc: "short stressed syllable.",
-    primerGraveEx: "bùs, vìsas, làbas",
+    primerGraveEx: "bùs, vìsas, kàd",
     primerAcuteName: "Acute",
     primerAcuteDesc:
       "long syllable, falling contour — the start of the syllable is emphasized.",
@@ -140,14 +287,65 @@ export const UI: Record<Lang, UiStrings> = {
     errTooLong: "The text is too long.",
     errUpstream: "The accentuation service is temporarily unavailable.",
     errUnexpected: "Accentuation failed.",
-    footerData: "Data",
-    footerInspired: "inspired by",
+    footerProject: "Open-source project",
   },
   ru: {
     tagline: "Вставьте литовский текст — получите его с расставленными ударениями.",
     inputLabel: "Текст",
     accentButton: "Расставить ударения",
     accentButtonLoading: "Обработка...",
+    modeLabel: "Режим",
+    modeWeb: "Онлайн",
+    modeLocal: "Локально",
+    modeWebExplainer:
+      "Текст отправляется на сервер — ударения ставит VDU kirčiuoklė (kalbu.vdu.lt), морфологию размечает UDPipe (LINDAT).",
+    modeLocalExplainer:
+      "Всё выполняется в браузере после однократной загрузки модели (~{size}); текст не покидает устройство.",
+    displayLabel: "Показ",
+    displayTop: "лучшие",
+    displayAll: "все",
+    displayShowAll: "показать все",
+    displayLocalTooltip:
+      "Модель ранжирует варианты по вероятности; показаны только варианты >10%.",
+    localIdle: "Локальная модель загрузится при выборе локального режима.",
+    localCheckingCache: "Проверяем, сохранена ли модель в этом браузере...",
+    localConsentText:
+      "Для локальной расстановки ударений сайт один раз скачивает модель — около {size} трафика. Она останется сохранённой в браузере для следующих посещений.",
+    localConsentButton: "Скачать модель ({size})",
+    localMetadata: "Чтение метаданных модели...",
+    localVerifyingRuntime: "Проверка WASM runtime: {file} {done}/{total}.",
+    localModelInfo: "Модель {size}; кеш: {cache}; потоки WASM: {threads}.",
+    localDownloading: "Загрузка модели {done}/{total}.",
+    localReadingCache: "Чтение модели из кеша {done}/{total}.",
+    localSessionWorker: "Инициализация модели в воркере...",
+    localSessionFallback: "Воркер не ответил; пробуем резервный режим...",
+    localSessionMain: "Инициализация модели в основном потоке...",
+    localReady: "Локальная модель готова: {model} · {size} · кеш: {cache}.",
+    localFailed: "Не удалось загрузить локальную модель: {message}",
+    localRunning: "Локально: {sentences} предл. · {batches} пак.",
+    localBatch:
+      "Локально: {done}/{sentences} предл. · пак. {batch}/{batches} · {speed} ток./с.",
+    localDone:
+      "Готово локально: {tokens}/{total} ток. · {speed} ток./с · {seconds} с.",
+    localMemoryLimit: "Достигнут лимит WASM-памяти браузера; перезагрузите страницу.",
+    localTokensPerSecond: "ток./с",
+    statsButtonLabel: "Статистика WASM",
+    statsTitle: "Статистика WASM",
+    statsInferenceMode: "Выполнение",
+    statsModeWorker: "воркер",
+    statsModeMain: "основной поток",
+    statsModeUnknown: "неизвестно",
+    statsMemory: "Память",
+    statsLastRun: "Последний запуск",
+    statsLastRunEmpty: "ещё не запускалось",
+    statsModel: "Модель",
+    statsCache: "Кеш",
+    cacheHit: "найден",
+    cacheMiss: "нет",
+    cacheStored: "сохранён",
+    cacheFailed: "ошибка",
+    cacheUnavailable: "недоступен",
+    unknownSize: "неизвестно",
     copyButton: "Копировать",
     copied: "Скопировано ✓",
     resultHeading: "Результат",
@@ -163,7 +361,7 @@ export const UI: Record<Lang, UiStrings> = {
       "Ударный слог произносится наиболее отчётливо. В долгих слогах различается ещё и интонация слога (priegaidė). Используются три знака:",
     primerGraveName: "Гравис",
     primerGraveDesc: "краткий ударный слог.",
-    primerGraveEx: "bùs, vìsas, làbas",
+    primerGraveEx: "bùs, vìsas, kàd",
     primerAcuteName: "Акут",
     primerAcuteDesc:
       "долгий слог, нисходящая интонация — выделяется начало слога.",
@@ -187,8 +385,7 @@ export const UI: Record<Lang, UiStrings> = {
     errTooLong: "Текст слишком длинный.",
     errUpstream: "Сервис расстановки ударений временно недоступен.",
     errUnexpected: "Не удалось расставить ударения.",
-    footerData: "Данные",
-    footerInspired: "вдохновлено",
+    footerProject: "Проект с открытым кодом",
   },
 };
 
@@ -326,6 +523,7 @@ export const MORPH_GLOSSES: Record<string, Gloss> = {
 const MORPH_KEYS = Object.keys(MORPH_GLOSSES).sort((a, b) => b.length - a.length);
 
 export type MorphSegment = { text: string; lt?: string };
+export type ParallelMorphologyLines = { morphology: string; gloss: string };
 
 type MorphToken = { text: string; gloss?: Gloss };
 
@@ -431,6 +629,39 @@ export function morphologySegments(info: string, lang: Lang): MorphSegment[] {
   });
 
   return segments;
+}
+
+export function parallelMorphologyLines(
+  reading: string,
+  lang: Lang,
+): ParallelMorphologyLines {
+  const dash = reading.indexOf(" - ");
+  const mi = (dash === -1 ? reading : reading.slice(0, dash)).trim();
+  const meaning = dash === -1 ? "" : reading.slice(dash + 3).trim();
+  const morphology: string[] = [];
+  const glosses: string[] = [];
+
+  mi.split(", ").forEach((piece) => {
+    walkMorphPiece(piece).forEach((token) => {
+      const text = token.text.trim();
+      if (!text) {
+        return;
+      }
+
+      morphology.push(text);
+      glosses.push(token.gloss ? token.gloss[lang] : text);
+    });
+  });
+
+  if (meaning) {
+    morphology.push(meaning);
+    glosses.push(meaning);
+  }
+
+  return {
+    morphology: morphology.join(" · "),
+    gloss: glosses.join(" · "),
+  };
 }
 
 export function detectLang(): Lang {
