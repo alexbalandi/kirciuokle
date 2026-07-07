@@ -137,11 +137,14 @@ from the "Edit Cloudflare Workers" template at
 https://dash.cloudflare.com/profile/api-tokens) and your account ID. Then:
 
 ```sh
-npm run deploy
+npm run deploy:dev     # -> kirciuokle-dev.<subdomain>.workers.dev (serves the model from R2)
+npm run deploy:prod    # -> kirciuokle.<subdomain>.workers.dev  (production)
 ```
 
 Wrangler reads the credentials from `.env` automatically. Alternatively,
-`npx wrangler login` for interactive OAuth.
+`npx wrangler login` for interactive OAuth. The bare `npm run deploy` is
+disabled on purpose — pick `dev` or `prod` explicitly. Deploy/rollback flow and
+the dev-auto / prod-gated policy live in [`AGENTS.md`](AGENTS.md).
 
 ## API
 
