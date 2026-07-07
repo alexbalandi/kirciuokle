@@ -19,6 +19,12 @@
       "database_id": "09f3ad62-f4b7-4869-bf69-b941f4316bd1"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "MODEL_BUCKET",
+      "bucket_name": "kirciuokle-models"
+    }
+  ],
   "env": {
     "dev": {
       "name": "kirciuokle-dev",
