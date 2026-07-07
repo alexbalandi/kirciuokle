@@ -135,6 +135,9 @@ const legendResolved = getElement<HTMLSpanElement>("legend-resolved");
 const legendAmbiguous = getElement<HTMLSpanElement>("legend-ambiguous");
 const legendUser = getElement<HTMLSpanElement>("legend-user");
 const legendUnknown = getElement<HTMLSpanElement>("legend-unknown");
+const inputLegend = getElement<HTMLDivElement>("input-legend");
+const legendAutofix = getElement<HTMLSpanElement>("legend-autofix");
+const legendClickfix = getElement<HTMLSpanElement>("legend-clickfix");
 const primerLink = getElement<HTMLButtonElement>("primer-link");
 const primerBackdrop = getElement<HTMLDivElement>("primer-backdrop");
 const primerDialog = getElement<HTMLDivElement>("primer-dialog");
@@ -834,21 +837,27 @@ function renderLeftOverlay(): void {
   // accentuation), covering every early-return path below.
   updateFixAllButtonState();
 
-  if (leftTokens.length === 0) {
+  if (
+    leftTokens.length === 0 ||
+    leftTokens.map((part) => part.text).join("") !== textarea.value
+  ) {
+    inputLegend.hidden = true;
     syncLeftOverlayScroll();
     return;
   }
 
-  const tiledText = leftTokens.map((part) => part.text).join("");
-  if (tiledText !== textarea.value) {
-    syncLeftOverlayScroll();
-    return;
-  }
-
+  let underlineCount = 0;
   leftTokens.forEach((part, index) => {
-    if (part.type === "word" && isCorrectableSpelling(part.spelling)) {
+    const spelling = part.spelling;
+    if (part.type === "word" && isCorrectableSpelling(spelling)) {
+      underlineCount += 1;
       const span = document.createElement("span");
-      span.className = "spell-underline";
+      // Red = fix-all will apply it unattended (a restore with an autofix);
+      // muted = ambiguous, needs a click to choose.
+      const autofixable = spelling.status === "restore" && Boolean(spelling.autofix);
+      span.className = autofixable
+        ? "spell-underline spell-underline--auto"
+        : "spell-underline";
       span.textContent = part.text;
       span.dataset.index = String(index);
       span.addEventListener("click", (event) => {
@@ -862,6 +871,7 @@ function renderLeftOverlay(): void {
     sourceOverlay.append(document.createTextNode(part.text));
   });
 
+  inputLegend.hidden = underlineCount === 0;
   syncLeftOverlayScroll();
 }
 
@@ -2028,6 +2038,8 @@ function renderUi(): void {
   legendAmbiguous.textContent = strings.legendAmbiguous;
   legendUser.textContent = strings.legendUser;
   legendUnknown.textContent = strings.legendUnknown;
+  legendAutofix.textContent = strings.legendAutofix;
+  legendClickfix.textContent = strings.legendClickfix;
   message.textContent = messageKey ? strings[messageKey] : "";
   renderPrimer(strings);
 

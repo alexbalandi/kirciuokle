@@ -80,6 +80,8 @@ export type UiStrings = {
   legendAmbiguous: string;
   legendUser: string;
   legendUnknown: string;
+  legendAutofix: string;
+  legendClickfix: string;
   primerLink: string;
   primerTitle: string;
   primerIntro: string;
@@ -191,6 +193,8 @@ export const UI: Record<Lang, UiStrings> = {
     legendAmbiguous: "Kelì variántai",
     legendUser: "Jū́sų pasìrinkta",
     legendUnknown: "Žodýne nèrasta / taisytina",
+    legendAutofix: "Bùs pataisýta automãtiškai",
+    legendClickfix: "Spustelė́kite taisýti",
     primerLink: "Kàs yrà kir̃čio ženklaĩ?",
     primerTitle: "Kir̃čio ženklaĩ",
     primerIntro:
@@ -305,6 +309,8 @@ export const UI: Record<Lang, UiStrings> = {
     legendAmbiguous: "Multiple variants",
     legendUser: "Chosen by you",
     legendUnknown: "Not in dictionary / needs correction",
+    legendAutofix: "Will be auto-fixed",
+    legendClickfix: "Click to fix",
     primerLink: "What do the stress marks mean?",
     primerTitle: "Lithuanian stress marks",
     primerIntro:
@@ -420,6 +426,8 @@ export const UI: Record<Lang, UiStrings> = {
     legendAmbiguous: "Несколько вариантов",
     legendUser: "Выбрано пользователем",
     legendUnknown: "Нет в словаре / нужно исправить",
+    legendAutofix: "Исправится автоматически",
+    legendClickfix: "Нажмите, чтобы исправить",
     primerLink: "Что означают знаки ударения?",
     primerTitle: "Литовские знаки ударения",
     primerIntro:

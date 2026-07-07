@@ -44,6 +44,10 @@
               aria-hidden="true"
             ></div>
           </div>
+          <div class="input-legend" id="input-legend" hidden>
+            <span><i class="legend-line legend-line--auto"></i><span id="legend-autofix"></span></span>
+            <span><i class="legend-line legend-line--click"></i><span id="legend-clickfix"></span></span>
+          </div>
           <div class="input-actions">
             <span class="counter" id="char-counter">0 / 20000</span>
             <div class="mode-controls" aria-label="Režimas">
@@ -73,8 +77,8 @@
                 disabled
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path d="M20 6 9 17l-5-5" />
-                  <path d="M20 13v5a2 2 0 0 1-2 2h-5" />
+                  <path d="M4 7.5 L9.5 13 L20 2.5" />
+                  <path class="fix-all-underline" d="M4 18.5 q2 2 4 0 t4 0 t4 0 t4 0" />
                 </svg>
               </button>
               <button
