@@ -2,6 +2,7 @@ import type { AccentResponse, Part } from "../shared/types";
 import {
   alignTokens,
   matchCase,
+  parseConllu,
   pickReadingMi,
   pickVariant,
   tokenTags,
@@ -282,6 +283,10 @@ export type AccentTextOptions = {
   /** Cheap (no-network) lookup used for the non-ambiguous words when
       attachInfoForAll is set; defaults to lookupVariants. */
   lookupInfoVariants?: (word: string) => Promise<AccentVariant[]>;
+  /** Raw CoNLL-U supplied by the client (it called UDPipe from the user's own
+      IP). Used instead of a server-side UDPipe call; falls back to one if this
+      is absent or unparseable. */
+  providedTags?: string;
 };
 
 type TaggerResult =
@@ -303,7 +308,11 @@ export async function accentTextParts(
   textParts: VduTextPart[],
   options: AccentTextOptions = {},
 ): Promise<Omit<AccentResponse, "source">> {
-  const taggerPromise = getTaggerResult(text, options.useTagger !== false);
+  const taggerPromise = getTaggerResult(
+    text,
+    options.useTagger !== false,
+    options.providedTags,
+  );
   const taggerResult = await taggerPromise;
   const parts = normalizeTextParts(textParts);
   const wordParts = textParts.filter(isWordPart);
@@ -448,9 +457,22 @@ type TokenOrNull = Awaited<ReturnType<typeof tagText>>[number] | null;
 async function getTaggerResult(
   text: string,
   useTagger: boolean,
+  providedTags?: string,
 ): Promise<TaggerResult> {
   if (!useTagger) {
     return { tagger: "unavailable", tokens: [] };
+  }
+
+  // Prefer tags the client already fetched from UDPipe (from the user's own IP).
+  if (providedTags) {
+    try {
+      const tokens = parseConllu(providedTags);
+      if (tokens.length > 0) {
+        return { tagger: "ok", tokens };
+      }
+    } catch {
+      // Unparseable — fall back to a server-side call below.
+    }
   }
 
   try {

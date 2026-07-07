@@ -21,6 +21,10 @@ export type Part = {
 
 export type AccentRequest = {
   text: string;
+  /** Raw CoNLL-U tags the client fetched from UDPipe (browser-side, from the
+      user's own IP). Optional — the worker falls back to a server-side UDPipe
+      call when absent. */
+  tags?: string;
 };
 
 export type AccentResponse = {

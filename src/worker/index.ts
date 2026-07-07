@@ -210,12 +210,14 @@ async function handleAccent(
     return json<ErrorResponse>({ error: "Tekstas per ilgas." }, 413);
   }
 
+  const providedTags = typeof payload.tags === "string" ? payload.tags : undefined;
   const source = getAccentSource(url, env);
   const response =
     source === "local"
-      ? await accentTextLocalFirst(payload.text, env, ctx)
+      ? await accentTextLocalFirst(payload.text, env, ctx, { providedTags })
       : await accentText(payload.text, {
           lookupVariants: (word) => lookupWordVariantsD1(word, env, ctx),
+          providedTags,
         });
   return json<AccentResponse>(response);
 }

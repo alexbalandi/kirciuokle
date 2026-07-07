@@ -15,27 +15,32 @@ Web mode is dictionary-first (`src/worker/localAccent.ts`), not a raw VDU passth
 ## Web mode: VDU vs UDPipe
 
 Both external services are called **server-side from the Worker**
-([vdu.ts](../src/worker/vdu.ts), [udpipe.ts](../src/worker/udpipe.ts)) — so from
-Cloudflare's egress IP, **shared across all users**. There is no per-user API key or
-quota anywhere; the only exposure is the Worker's shared origin being rate-limited if
-aggregate traffic gets high. The two services differ sharply:
+**VDU** is called server-side from the Worker ([vdu.ts](../src/worker/vdu.ts)) — from
+Cloudflare's shared egress IP. **UDPipe** is now called from the browser (from each
+user's own IP), with a server-side fallback ([udpipe.ts](../src/worker/udpipe.ts)).
+There is no per-user API key or quota anywhere. The two services differ sharply:
 
 | | VDU kirčiuoklė (`kalbu.vdu.lt`) | UDPipe (`lindat.mff.cuni.cz`) |
 |---|---|---|
 | Purpose | word accentuation | context POS tagging (homograph disambiguation) |
+| Called from | Worker (shared IP) | **browser (user's IP)**, server fallback |
 | Cached? | **Yes** — per word in D1 (`kirciuokle-words`), self-warming | **No** — tagging is sentence-contextual |
 | Hit frequency | only novel words (≤10 misses/request, `MISS_BUDGET`); → ~0 as D1 warms | ~once per Web-mode request |
 | On failure | upstream error surfaced (502) | graceful: `tagger:"unavailable"`, default reading |
 
-So **UDPipe is the shared hot path**; VDU is well-insulated by the cache.
+VDU is well-insulated by the D1 cache; UDPipe used to be the shared hot path but now
+egresses from the user's own IP (see below), leaving no per-request shared-IP load.
 
-**CORS finding (measured):** UDPipe returns `Access-Control-Allow-Origin: *` and the
-call is a CORS *simple request* (form-encoded, safelisted headers) → it can be called
-**directly from the browser**. VDU sends no CORS headers and its nonce is
-session-bound → it stays server-only. **Planned (flow A, not yet shipped):** move the
-UDPipe call to the browser so tagging egresses from each user's own IP; the Worker
-keeps orchestrating VDU-cache + disambiguation and falls back to a server-side UDPipe
-call when the client doesn't supply tags.
+**UDPipe runs from the browser (shipped).** UDPipe returns
+`Access-Control-Allow-Origin: *` and the call is a CORS *simple request*
+(form-encoded, safelisted headers), so the client calls it **directly from the user's
+own IP** ([`fetchUdpipeTags`](../src/client/main.ts)) and posts the raw CoNLL-U to
+`/api/accent` as `tags`. The Worker uses those tags for alignment/disambiguation
+([`getTaggerResult`](../src/worker/vdu.ts) → `parseConllu`) and **falls back to a
+server-side UDPipe call** when `tags` is absent or unparseable (old clients, blocked
+networks, a failed browser call). So UDPipe no longer routes through the Worker's
+shared IP in the common case. VDU stays server-only — it sends no CORS headers and its
+nonce is session-bound.
 
 ## Spellcheck (fully client-side)
 

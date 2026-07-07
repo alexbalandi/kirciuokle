@@ -474,11 +474,51 @@ async function submitText(): Promise<void> {
   }
 }
 
+const UDPIPE_URL = "https://lindat.mff.cuni.cz/services/udpipe/api/process";
+const UDPIPE_MODEL = "lithuanian-alksnis";
+const UDPIPE_TIMEOUT_MS = 10_000;
+
+// Tag the text against UDPipe directly from the browser, so the request
+// egresses from the user's own IP rather than the Worker's shared one. Returns
+// the raw CoNLL-U for the Worker to align; on any failure returns undefined and
+// the Worker falls back to a server-side UDPipe call. This is a CORS "simple
+// request" (form-encoded + safelisted headers), so it needs no preflight.
+async function fetchUdpipeTags(text: string): Promise<string | undefined> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), UDPIPE_TIMEOUT_MS);
+  try {
+    const response = await fetch(UDPIPE_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "application/json",
+      },
+      body: new URLSearchParams({
+        tokenizer: "",
+        tagger: "",
+        model: UDPIPE_MODEL,
+        data: text,
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    const payload = (await response.json().catch(() => null)) as { result?: unknown } | null;
+    return typeof payload?.result === "string" ? payload.result : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 async function accentTextWeb(text: string): Promise<AccentResponse> {
+  const tags = await fetchUdpipeTags(text);
   const response = await fetch("/api/accent", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(tags ? { text, tags } : { text }),
   });
 
   const payload = (await response.json().catch(() => null)) as
@@ -2268,7 +2308,16 @@ function renderFooter(strings: UiStrings): void {
   repoLink.href = "https://github.com/alexbalandi/kirciuokle";
   repoLink.rel = "noreferrer";
   repoLink.target = "_blank";
-  repoLink.textContent = strings.footerProject;
+  repoLink.className = "footer-repo-link";
+  // GitHub's own "mark" logo (Octocat silhouette) so the link visibly reads as
+  // "this goes to GitHub". Inlined — a strict CSP blocks external assets.
+  repoLink.insertAdjacentHTML(
+    "afterbegin",
+    '<svg class="github-mark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 012-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>',
+  );
+  const label = document.createElement("span");
+  label.textContent = strings.footerProject;
+  repoLink.append(label);
   siteFooter.replaceChildren(repoLink);
 }
 

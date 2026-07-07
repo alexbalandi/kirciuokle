@@ -91,7 +91,7 @@ export const ABBREVIATIONS = new Set([
   "žr",
 ]);
 
-type LocalAccentOptions = Pick<AccentTextOptions, "useTagger">;
+type LocalAccentOptions = Pick<AccentTextOptions, "useTagger" | "providedTags">;
 
 type LocalWord = {
   partIndex: number;
@@ -121,6 +121,7 @@ export async function accentTextLocalFirst(
     return accentText(normalizedText, {
       lookupVariants: (word) => lookupWordVariantsD1(word, env, ctx),
       useTagger: options.useTagger,
+      providedTags: options.providedTags,
       // reading info still comes from the entries we already batch-loaded;
       // never fetch per plain word on the over-budget path
       attachInfoForAll: true,
@@ -148,6 +149,7 @@ export async function accentTextLocalFirst(
     lookupVariants: async (word) =>
       entriesByWord.get(normalizeWordKey(word))?.variants ?? [],
     useTagger: options.useTagger,
+    providedTags: options.providedTags,
     attachInfoForAll: true,
   });
 

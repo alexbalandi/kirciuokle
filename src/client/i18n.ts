@@ -195,14 +195,14 @@ export const UI: Record<Lang, UiStrings> = {
     primerTitle: "Kir̃čio ženklaĩ",
     primerIntro:
       "Kirčiúotas skiemuõ tãriamas ryškiáusiai. Ilguõsiuose skiemenysè dár skìriama príegaidė — bal̃so „kryptìs“ skiemeñs vidujè. Žymimì trỹs ženklaĩ:",
-    primerGraveName: "Kairìnis",
+    primerGraveName: "Gravis",
     primerGraveDesc: "trum̃pas kirčiúotas skiemuõ.",
     primerGraveEx: "bùs, vìsas, kàd",
-    primerAcuteName: "Dešinìnis",
+    primerAcuteName: "Akūtas",
     primerAcuteDesc:
       "ìlgas skiemuõ, tvirtaprãdė príegaidė — pabrė́žiama skiemeñs pradžià.",
     primerAcuteEx: "výras, káina, áukštas",
-    primerTildeName: "Riestìnis",
+    primerTildeName: "Cirkumfleksas",
     primerTildeDesc:
       "ìlgas skiemuõ, tvirtagãlė príegaidė — pabrė́žiama skiemeñs pabaigà.",
     primerTildeEx: "nãmas, laũkas, geraĩ",
