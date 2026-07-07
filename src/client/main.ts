@@ -1743,10 +1743,15 @@ function updateAccentButtonState(): void {
 }
 
 function updateFixAllButtonState(): void {
-  fixAllButton.disabled =
+  const disabled =
     isLoading ||
     (accentMode === "local" && isLocalModelUnavailableBeforeReady()) ||
     singleCandidateRestores().length === 0;
+  fixAllButton.disabled = disabled;
+  // When there are corrections to apply, light up with the exact same accent
+  // fill as the Accentuate button (borrow its classes so every theme matches).
+  fixAllButton.classList.toggle("primary-button", !disabled);
+  fixAllButton.classList.toggle("accent-icon-button", !disabled);
 }
 
 function updateCopyButtonState(): void {

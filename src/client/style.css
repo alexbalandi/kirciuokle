@@ -535,6 +535,16 @@ button:disabled {
   background: var(--accent-strong);
 }
 
+/* Fix-all sits quiet (plain icon button) until there is something to fix, then
+   the JS borrows the Accentuate button's classes to light it up. Ease the change
+   so it visibly turns on rather than snapping. */
+.fix-all-button {
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    border-color 0.18s ease;
+}
+
 /* "Stress all" reads as a letter carrying an acute mark — the same cue as the
    acute glyph in the primer — so it's obvious it adds stress marks. */
 .accent-icon-glyph {
