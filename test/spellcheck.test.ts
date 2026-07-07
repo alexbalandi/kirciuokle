@@ -88,4 +88,75 @@ describe("SpellcheckEngine.suggest", () => {
       "aš",
     ]);
   });
+
+  it("ranks the common restoration first (aciu → ačiū, not ačiu)", () => {
+    const restoreEngine = createSpellcheckEngine(["ačiū\t14413", "ačiu\t83"]);
+    const suggestion = restoreEngine.suggest("aciu");
+
+    expect(suggestion.status).toBe("restore");
+    expect(suggestion.candidates[0]).toBe("ačiū");
+    expect(suggestion.autofix).toBe("ačiū"); // dominant → auto-fixable
+  });
+
+  it("does not set autofix when restorations are close in frequency", () => {
+    // both fold to "sasas"; neither dominates → needs a human choice
+    const ambiguous = createSpellcheckEngine(["šašas\t50", "sašas\t48"]);
+    const suggestion = ambiguous.suggest("sasas");
+
+    expect(suggestion.status).toBe("restore");
+    expect(suggestion.autofix).toBeUndefined();
+  });
+});
+
+describe("SpellcheckEngine — real-text robustness", () => {
+  it("accepts a word from the accept vocabulary (no false positive)", () => {
+    const engine = createSpellcheckEngine(["skelbti\t24", "pramonės\t46"]);
+
+    expect(engine.suggest("skelbti").status).toBe("ok");
+    expect(engine.suggest("pramonės").status).toBe("ok");
+  });
+
+  it("restores an accepted ASCII word whose diacritic form is far more frequent", () => {
+    // "as" is itself listed (freq 2297) but "aš" (116732) dominates → it's a drop.
+    const engine = createSpellcheckEngine(["aš\t116732", "as\t2297"]);
+    const suggestion = engine.suggest("as");
+
+    expect(suggestion.status).toBe("restore");
+    expect(suggestion.candidates).toContain("aš");
+    expect(suggestion.autofix).toBe("aš");
+  });
+
+  it("keeps a valid ASCII word accepted when its diacritic sibling is rare", () => {
+    // "padaryta" is a real word; "padarytą" (21) does not dominate → stay accepted.
+    const engine = createSpellcheckEngine(["padaryta\t297", "padarytą\t21"]);
+
+    expect(engine.suggest("padaryta").status).toBe("ok");
+  });
+
+  it("strips combining stress marks before lookup (accented paste)", () => {
+    // ã / ù carry a stress mark; the un-stressed word is in the dictionary.
+    expect(engine.suggest("nãmas").status).toBe("ok");
+    expect(engine.suggest("žmogùs").status).toBe("ok");
+  });
+
+  it("does not flag single-letter words", () => {
+    expect(engine.suggest("i")).toEqual({ status: "ok", candidates: [] });
+    expect(engine.suggest("a")).toEqual({ status: "ok", candidates: [] });
+  });
+
+  it("suppresses typo suggestions for Capitalized and ALL-CAPS words", () => {
+    const engine = createSpellcheckEngine(["namas\t50"]);
+
+    expect(engine.suggest("namaz").status).toBe("typo"); // lowercase misspelling
+    expect(engine.suggest("Namaz").status).not.toBe("typo"); // proper-noun-like
+    expect(engine.suggest("NAMAZ").status).not.toBe("typo"); // acronym-like
+  });
+
+  it("still restores a Capitalized diacritic drop (sentence-initial Aciu)", () => {
+    const engine = createSpellcheckEngine(["ačiū\t14413"]);
+    const suggestion = engine.suggest("Aciu");
+
+    expect(suggestion.status).toBe("restore");
+    expect(suggestion.candidates).toContain("Ačiū");
+  });
 });

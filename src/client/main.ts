@@ -1247,6 +1247,12 @@ function autofixableRestores(): Array<{ start: number; end: number; text: string
 function replaceTextareaRanges(
   replacements: Array<{ start: number; end: number; text: string }>,
 ): void {
+  // Applying a fix must not move the user's viewport. Setting `.value` can yank a
+  // focused textarea's scroll (and caret) to the end, and syncBoxHeights can reflow
+  // the page — capture and restore both scroll positions.
+  const { scrollTop, scrollLeft } = textarea;
+  const { scrollX, scrollY } = window;
+
   let nextText = textarea.value;
   const sorted = [...replacements].sort((left, right) => right.start - left.start);
 
@@ -1255,9 +1261,14 @@ function replaceTextareaRanges(
   });
 
   textarea.value = nextText;
+  textarea.scrollTop = scrollTop;
+  textarea.scrollLeft = scrollLeft;
   updateCounter();
   updateFixAllButtonState();
   syncBoxHeights();
+  if (window.scrollX !== scrollX || window.scrollY !== scrollY) {
+    window.scrollTo(scrollX, scrollY);
+  }
 }
 
 function canRewriteRenderedSource(): boolean {
