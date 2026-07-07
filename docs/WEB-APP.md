@@ -68,11 +68,23 @@ two static files. Full design + rationale: [SPEC56.md](SPEC56.md).
   forms) drives *suggestion generation and ranking* only: the fold/delete indexes for
   candidates, plus the frequencies that rank them. It does **not** decide acceptance
   (Hunspell does), so it can stay small and browser-memory-bounded.
+- **Suggestions come from wordlist + Hunspell, and are validity-filtered.** Typo
+  candidates are the wordlist's fold/delete matches **plus `hunspell.suggest()`** —
+  the latter covers valid forms too rare to be in the slimmed wordlist (the correct
+  `kalbeti`→`kalbėti` even when `kalbėti` isn't indexed). Then every candidate is run
+  back through Hunspell and **dropped if it isn't itself a valid word**: the corpus
+  wordlist carries diacritic-less noise like `pakalbeti`, and we must never offer a
+  "fix" that is itself misspelled. (Double errors — `pokalbeti` = wrong vowel *and*
+  dropped diacritic — still can't always be reached; Hunspell offers its nearest valid
+  word instead.)
 - **Ranking**: edit-distance band → context bigram (`spellcheck-bigrams.txt`) →
   frequency → deterministic tie-breaks. Statuses: `restore` (ASCII→diacritics,
   `as`→`aš`, fired even for Hunspell-accepted ASCII words when the diacritic form
   dominates by frequency), `typo` (edit distance ≤2, Damerau, transposition = 1 edit),
-  `ok`, `unknown`.
+  `ok`, `unknown`. Plain-`e` words that are genuinely valid (`gera`, `tema`, `erdvė`'s
+  base) are accepted by Hunspell and never flagged, so `e`→`ę`/`ė` false positives
+  don't happen at the accept layer; the only `e`→diacritic *restore* on an accepted
+  word requires the diacritic sibling to dominate by frequency (≥8×, ≥100).
 - **Web Worker + Cache API** ([spellcheck.worker.ts](../src/client/spellcheck.worker.ts),
   [spellcheckClient.ts](../src/client/spellcheckClient.ts)): builds the engine + the
   Hunspell instance off the main thread (Hunspell builds the ~85k-lemma dict in tens of

@@ -112,11 +112,16 @@ export class SpellcheckEngine {
   readonly deleteIndex = new Map<string, string[]>();
 
   private readonly forms: string[] = [];
-  // Comprehensive accept check (the hunspell dictionary via nspell in the worker).
+  // Comprehensive accept check (the real hunspell dictionary, run in the worker).
   // When unset (tests, or if hunspell fails to load) the wordlist `valid` set is
   // used as a fallback. Receives the stress-stripped word WITH case (hunspell is
   // case-aware for proper nouns).
   private acceptPredicate?: (casedWord: string) => boolean;
+  // hunspell's own morphology-aware suggestions. Fills the gap left by the slimmed
+  // correction wordlist: hunspell can produce the correct form (usually a dropped
+  // diacritic, kalbeti→kalbėti) of any valid word even when that form is too rare
+  // to be in the wordlist indexes. Called only for rejected words.
+  private suggestProvider?: (casedWord: string) => string[];
 
   constructor(
     forms: Iterable<string>,
@@ -177,6 +182,33 @@ export class SpellcheckEngine {
     this.acceptPredicate = fn;
   }
 
+  /** Provide hunspell's own suggestion list (morphology-aware corrections).
+      Word is stress-stripped, case preserved. */
+  setSuggestProvider(fn: (casedWord: string) => string[]): void {
+    this.suggestProvider = fn;
+  }
+
+  // hunspell suggestions that are plausible corrections: a single token, close
+  // enough to be the same word misspelled (≤2 edits), not the query itself.
+  private providerCandidates(cased: string, normalized: string): string[] {
+    if (!this.suggestProvider) {
+      return [];
+    }
+    const out: string[] = [];
+    for (const raw of this.suggestProvider(cased).slice(0, 8)) {
+      const candidate = normalizeForm(raw);
+      if (
+        candidate &&
+        candidate !== normalized &&
+        !/\s/.test(candidate) &&
+        boundedDamerauLevenshteinCap2(normalized, candidate) <= 2
+      ) {
+        out.push(candidate);
+      }
+    }
+    return out;
+  }
+
   private isAccepted(casedWord: string, normalized: string): boolean {
     return this.acceptPredicate
       ? this.acceptPredicate(casedWord)
@@ -227,7 +259,21 @@ export class SpellcheckEngine {
     // Typo suggestions for a Capitalized / ALL-CAPS word are almost always wrong —
     // it's a proper noun or acronym (Ankaroje, Erdogano, NATO), not a misspelling.
     // Restore (handled above) still applies, e.g. sentence-initial "Aciu" → "Ačiū".
-    const typoCandidates = startsWithUppercase(word) ? [] : this.typoCandidates(normalized);
+    // Wordlist typo candidates + hunspell's own suggestions (which cover valid
+    // forms too rare to be in the slimmed wordlist — the correct dropped-diacritic
+    // form of "kalbeti" is "kalbėti" even if that form isn't frequent enough to be
+    // indexed). Then drop any candidate that isn't itself a valid word — the corpus
+    // wordlist carries diacritic-less noise ("pakalbeti"), and we must never offer a
+    // "fix" that is itself misspelled. Ranking (edit distance → bigram → frequency)
+    // picks the winner from what survives.
+    const typoCandidates = startsWithUppercase(word)
+      ? []
+      : [
+          ...new Set([
+            ...this.typoCandidates(normalized),
+            ...this.providerCandidates(cased, normalized),
+          ]),
+        ].filter((candidate) => this.isAccepted(candidate, candidate));
     if (typoCandidates.length > 0) {
       return {
         status: "typo",

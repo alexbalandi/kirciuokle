@@ -160,6 +160,44 @@ describe("SpellcheckEngine — real-text robustness", () => {
     expect(suggestion.candidates).toContain("Ačiū");
   });
 
+  it("uses the hunspell suggest provider for a correction the wordlist lacks", () => {
+    // "kalbėti" is valid but too rare to be in the slimmed wordlist; hunspell both
+    // accepts it and suggests it for the dropped-diacritic misspelling "kalbeti".
+    const engine = createSpellcheckEngine(["namas\t50"]);
+    engine.setAcceptPredicate((w) => w === "kalbėti");
+    engine.setSuggestProvider((w) =>
+      w === "kalbeti" ? ["kalbėti", "kalba", "labai negalima"] : [],
+    );
+
+    const suggestion = engine.suggest("kalbeti");
+    expect(suggestion.status).toBe("typo");
+    expect(suggestion.candidates[0]).toBe("kalbėti");
+    // multi-token and far suggestions are filtered out
+    expect(suggestion.candidates).not.toContain("labai negalima");
+  });
+
+  it("never offers a candidate that is itself invalid (drops wordlist noise)", () => {
+    // "pakalbeti" (no ė) is diacritic-less corpus noise in the wordlist; the delete
+    // index would surface it as a fix for "pakalbet", but it's not a real word.
+    const engine = createSpellcheckEngine(["pakalbeti\t9"]);
+    engine.setAcceptPredicate((w) => w !== "pakalbeti"); // hunspell rejects the junk
+
+    expect(engine.suggest("pakalbet").candidates).not.toContain("pakalbeti");
+  });
+
+  it("does not call the suggest provider for an accepted word", () => {
+    const engine = createSpellcheckEngine(["namas\t50"]);
+    engine.setAcceptPredicate((w) => w === "namas");
+    let calls = 0;
+    engine.setSuggestProvider(() => {
+      calls += 1;
+      return [];
+    });
+
+    expect(engine.suggest("namas").status).toBe("ok");
+    expect(calls).toBe(0);
+  });
+
   it("uses an injected accept predicate (hunspell) over the wordlist", () => {
     // "sąjungininkių" isn't in the wordlist, but hunspell accepts it → not flagged.
     const engine = createSpellcheckEngine(["namas\t50"]);

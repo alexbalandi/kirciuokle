@@ -85,16 +85,21 @@ function toLines(text: string): string[] {
     .filter(Boolean);
 }
 
-async function buildHunspell(
-  aff: string,
-  dic: string,
-): Promise<(word: string) => boolean> {
+type HunspellOracle = {
+  spell: (word: string) => boolean;
+  suggest: (word: string) => string[];
+};
+
+async function buildHunspell(aff: string, dic: string): Promise<HunspellOracle> {
   const factory = await loadModule();
   const encoder = new TextEncoder();
   const affPath = factory.mountBuffer(encoder.encode(aff), "lt.aff");
   const dicPath = factory.mountBuffer(encoder.encode(dic), "lt.dic");
   const hunspell = factory.create(affPath, dicPath);
-  return (word) => hunspell.spell(word);
+  return {
+    spell: (word) => hunspell.spell(word),
+    suggest: (word) => hunspell.suggest(word),
+  };
 }
 
 function loadEngine(): Promise<SpellcheckEngine> {
@@ -109,8 +114,9 @@ function loadEngine(): Promise<SpellcheckEngine> {
     // load/build, the engine falls back to the wordlist's own `valid` set.
     if (aff && dic) {
       try {
-        const spell = await buildHunspell(aff, dic);
-        engine.setAcceptPredicate(spell);
+        const hunspell = await buildHunspell(aff, dic);
+        engine.setAcceptPredicate(hunspell.spell);
+        engine.setSuggestProvider(hunspell.suggest);
         postDiag({ hunspell: "active", affLen: aff.length, dicLen: dic.length });
       } catch (e) {
         postDiag({
