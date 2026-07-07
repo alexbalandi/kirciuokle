@@ -3,7 +3,15 @@ export type SpellcheckStatus = "ok" | "restore" | "typo" | "unknown";
 export type SpellcheckSuggestion = {
   status: SpellcheckStatus;
   candidates: string[];
+  /** For `restore`: the candidate "fix all" should apply automatically — set only
+      when unambiguous (one candidate, or one clearly dominant by frequency). */
+  autofix?: string;
 };
+
+// Words this short aren't worth spellchecking: a single letter has no fold
+// candidates (the wordlist starts at length 2) and matches dozens of two-letter
+// words by one insertion, so it produces noise, not corrections.
+const MIN_CHECK_LENGTH = 2;
 
 export type SpellcheckContext = { prev?: string; next?: string };
 
@@ -142,8 +150,8 @@ export class SpellcheckEngine {
 
   suggest(word: string, context?: SpellcheckContext): SpellcheckSuggestion {
     const normalized = normalizeForm(word);
-    if (!normalized) {
-      return { status: "unknown", candidates: [] };
+    if (!normalized || Array.from(normalized).length < MIN_CHECK_LENGTH) {
+      return { status: "ok", candidates: [] };
     }
 
     if (this.valid.has(normalized)) {
@@ -153,15 +161,24 @@ export class SpellcheckEngine {
     const folded = foldAscii(normalized);
     const restoreCandidates = this.foldIndex.get(folded) ?? [];
     if (restoreCandidates.length > 0 && isPureAscii(word)) {
+      // Restore ranks by frequency (and context) before the diacritic-distance
+      // band: the most common real word for an ASCII spelling is almost always
+      // the intended one, even if it needs more diacritics restored (e.g.
+      // "aciu" → "ačiū" (14413), not "ačiu" (83, one fewer diacritic)).
+      const ranked = rankCandidates(
+        normalized,
+        restoreCandidates,
+        this,
+        context,
+        restoreDistanceBand,
+        true,
+      );
       return {
         status: "restore",
-        candidates: rankCandidates(
-          normalized,
-          restoreCandidates,
-          this,
-          context,
-          restoreDistanceBand,
-        ).map((candidate) => reapplyCase(candidate, word)),
+        candidates: ranked.map((candidate) => reapplyCase(candidate, word)),
+        autofix: dominantRestore(ranked, this.freq)
+          ? reapplyCase(dominantRestore(ranked, this.freq)!, word)
+          : undefined,
       };
     }
 
@@ -364,29 +381,35 @@ function rankCandidates(
   engine: SpellcheckEngine,
   context: SpellcheckContext | undefined,
   distance: (query: string, candidate: string) => number,
+  // Restore: rank frequency before the distance band (a common word is the
+  // intended one even if it restores more diacritics). Typo: keep edit distance
+  // primary (a 1-edit fix beats a 2-edit one).
+  preferFrequency = false,
 ): string[] {
   const normalizedContext = {
     prev: normalizeContextWord(context?.prev),
     next: normalizeContextWord(context?.next),
   };
 
+  const editScore = (left: string, right: string): number =>
+    distance(query, left) - distance(query, right);
+  const contextScore = (left: string, right: string): number =>
+    contextScoreFor(engine, normalizedContext, right) -
+    contextScoreFor(engine, normalizedContext, left);
+  const freqScore = (left: string, right: string): number =>
+    (engine.freq.get(right) ?? 0) - (engine.freq.get(left) ?? 0);
+
   return [...new Set(candidates)]
     .sort((left, right) => {
-      const edit = distance(query, left) - distance(query, right);
-      if (edit !== 0) {
-        return edit;
-      }
-
-      const contextScore =
-        contextScoreFor(engine, normalizedContext, right) -
-        contextScoreFor(engine, normalizedContext, left);
-      if (contextScore !== 0) {
-        return contextScore;
-      }
-
-      const freq = (engine.freq.get(right) ?? 0) - (engine.freq.get(left) ?? 0);
-      if (freq !== 0) {
-        return freq;
+      const primary = preferFrequency
+        ? contextScore(left, right) ||
+          freqScore(left, right) ||
+          editScore(left, right)
+        : editScore(left, right) ||
+          contextScore(left, right) ||
+          freqScore(left, right);
+      if (primary !== 0) {
+        return primary;
       }
 
       const diacritics = countLtDiacritics(left) - countLtDiacritics(right);
@@ -398,6 +421,24 @@ function rankCandidates(
       return length || compareForms(left, right);
     })
     .slice(0, MAX_CANDIDATES);
+}
+
+// The candidate "fix all" may apply for a restore without asking: either the only
+// option, or one whose frequency dominates the runner-up by a wide margin (so
+// there's effectively one common word for that ASCII spelling).
+function dominantRestore(
+  ranked: readonly string[],
+  freq: ReadonlyMap<string, number>,
+): string | undefined {
+  if (ranked.length === 0) {
+    return undefined;
+  }
+  if (ranked.length === 1) {
+    return ranked[0];
+  }
+  const top = freq.get(ranked[0]!) ?? 0;
+  const second = freq.get(ranked[1]!) ?? 0;
+  return top > 0 && top >= Math.max(second * 8, second + 1) ? ranked[0] : undefined;
 }
 
 function restoreDistanceBand(query: string, candidate: string): number {

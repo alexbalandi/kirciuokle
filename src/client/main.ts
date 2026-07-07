@@ -829,6 +829,10 @@ function primeLeftOverlayForCurrentText(): void {
 
 function renderLeftOverlay(): void {
   sourceOverlay.replaceChildren();
+  // Fix-all reflects the left overlay's autofixable restores — refresh it here so
+  // the button lights up as soon as spellcheck annotates the tokens (before any
+  // accentuation), covering every early-return path below.
+  updateFixAllButtonState();
 
   if (leftTokens.length === 0) {
     syncLeftOverlayScroll();
@@ -1195,40 +1199,38 @@ async function applyLeftSpellingCorrection(
 }
 
 async function fixAllRestores(): Promise<void> {
-  const replacements = singleCandidateRestores();
+  const replacements = autofixableRestores();
   if (replacements.length === 0) {
     updateFixAllButtonState();
     return;
   }
 
+  // Fix-all works on the LEFT overlay (before accentuation too) and does NOT
+  // accentuate — consistent with left-side single fixes.
   closePopover();
   replaceTextareaRanges(replacements);
-  void runLeftSpellcheck();
-  await reaccentuateEdits(replacements);
+  await runLeftSpellcheck();
 }
 
-function singleCandidateRestores(): Array<{ start: number; end: number; text: string }> {
-  if (!canRewriteRenderedSource()) {
+// Restores in the left overlay that "fix all" can apply unattended — each token's
+// engine-chosen `autofix` (unambiguous restore). Guarded against stale offsets by
+// requiring the tokens to still tile the current textarea value exactly.
+function autofixableRestores(): Array<{ start: number; end: number; text: string }> {
+  if (leftTokens.map((part) => part.text).join("") !== textarea.value) {
     return [];
   }
 
-  return renderedParts.flatMap((part) => {
+  return leftTokens.flatMap((part) => {
+    const autofix = part.spelling?.status === "restore" ? part.spelling.autofix : undefined;
     if (
-      part.spelling?.status !== "restore" ||
-      part.spelling.candidates.length !== 1 ||
+      !autofix ||
       typeof part.sourceStart !== "number" ||
       typeof part.sourceEnd !== "number"
     ) {
       return [];
     }
 
-    return [
-      {
-        start: part.sourceStart,
-        end: part.sourceEnd,
-        text: part.spelling.candidates[0]!.normalize("NFC"),
-      },
-    ];
+    return [{ start: part.sourceStart, end: part.sourceEnd, text: autofix.normalize("NFC") }];
   });
 }
 
@@ -1903,7 +1905,7 @@ function updateFixAllButtonState(): void {
   const disabled =
     isLoading ||
     (accentMode === "local" && isLocalModelUnavailableBeforeReady()) ||
-    singleCandidateRestores().length === 0;
+    autofixableRestores().length === 0;
   fixAllButton.disabled = disabled;
   // When there are corrections to apply, light up with the exact same accent
   // fill as the Accentuate button (borrow its classes so every theme matches).
