@@ -170,6 +170,7 @@ a {
    they share the base letter's advance width. Keep these two rule blocks in
    lockstep — any divergence drifts the two columns apart. */
 textarea,
+.textarea-overlay,
 .result-output {
   padding: 14px;
   font: inherit;
@@ -186,9 +187,14 @@ textarea,
   scrollbar-gutter: stable;
 }
 
+.textarea-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+}
+
 textarea {
   display: block;
-  flex: 0 0 auto;
   width: 100%;
   min-height: 240px;
   max-height: 62vh;
@@ -200,6 +206,30 @@ textarea {
   color: inherit;
   background: color-mix(in srgb, var(--surface) 92%, var(--surface-muted));
   outline: none;
+}
+
+.textarea-overlay {
+  position: absolute;
+  inset: 1px;
+  z-index: 1;
+  min-height: calc(240px - 2px);
+  max-height: calc(62vh - 2px);
+  overflow: hidden;
+  border-radius: 8px;
+  color: transparent;
+  background: transparent;
+  pointer-events: none;
+}
+
+.spell-underline {
+  color: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: var(--unknown);
+  text-decoration-thickness: 0.12em;
+  text-underline-offset: 0.18em;
 }
 
 textarea:focus {

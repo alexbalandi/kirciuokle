@@ -28,15 +28,22 @@
           <div class="panel-head">
             <label class="field-label" for="source-text" id="input-label"></label>
           </div>
-          <textarea
-            id="source-text"
-            name="text"
-            maxlength="20000"
-            rows="7"
-            lang="lt"
-            spellcheck="true"
-            autocapitalize="off"
-          ></textarea>
+          <div class="textarea-wrap">
+            <textarea
+              id="source-text"
+              name="text"
+              maxlength="20000"
+              rows="7"
+              lang="lt"
+              spellcheck="true"
+              autocapitalize="off"
+            ></textarea>
+            <div
+              class="textarea-overlay"
+              id="source-overlay"
+              aria-hidden="true"
+            ></div>
+          </div>
           <div class="input-actions">
             <span class="counter" id="char-counter">0 / 20000</span>
             <div class="mode-controls" aria-label="Režimas">

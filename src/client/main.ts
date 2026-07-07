@@ -95,6 +95,7 @@ const heroTagline = getElement<HTMLParagraphElement>("hero-tagline");
 const form = getElement<HTMLFormElement>("accent-form");
 const inputLabel = getElement<HTMLLabelElement>("input-label");
 const textarea = getElement<HTMLTextAreaElement>("source-text");
+const sourceOverlay = getElement<HTMLDivElement>("source-overlay");
 const charCounter = getElement<HTMLSpanElement>("char-counter");
 const modeLabel = getElement<HTMLSpanElement>("mode-label");
 const modeSwitch = getElement<HTMLSpanElement>("mode-switch");
@@ -163,12 +164,14 @@ let displayMode: DisplayMode = readStoredDisplayMode();
 let localTier: LocalModelTier = readStoredLocalTier();
 let localTierInfo: Partial<Record<LocalModelTier, LocalModelTierInfo>> = {};
 let renderedParts: RenderedPart[] = [];
+let leftTokens: RenderedPart[] = [];
 let renderedSourceText = "";
 let activePopover: HTMLDivElement | null = null;
 let activeStatsPopover: HTMLDivElement | null = null;
 let isLoading = false;
 let spellcheckRequestId = 0;
-let previewSpellcheckTimer: number | undefined;
+let leftSpellcheckRequestId = 0;
+let leftSpellcheckTimer: number | undefined;
 let messageKey: MessageKey | null = null;
 let copyResetTimer: number | undefined;
 let copied = false;
@@ -236,14 +239,15 @@ textarea.addEventListener("input", () => {
   syncBoxHeights();
   updateCounter();
   updateFixAllButtonState();
-  schedulePreviewSpellcheck();
+  primeLeftOverlayForCurrentText();
+  scheduleLeftSpellcheck();
 });
 
 textarea.addEventListener("paste", () => {
   requestAnimationFrame(() => {
-    window.clearTimeout(previewSpellcheckTimer);
-    previewSpellcheckTimer = undefined;
-    void runPreviewSpellcheck();
+    window.clearTimeout(leftSpellcheckTimer);
+    leftSpellcheckTimer = undefined;
+    void runLeftSpellcheck();
   });
 });
 
@@ -328,20 +332,42 @@ function syncScroll(source: HTMLElement, target: HTMLElement): void {
   if (scrollIgnore.delete(source)) {
     return;
   }
-  const targetMax = target.scrollHeight - target.clientHeight;
-  if (targetMax <= 0) {
-    return;
+
+  let changed = false;
+  const targetMaxTop = target.scrollHeight - target.clientHeight;
+  const nextTop = targetMaxTop > 0 ? Math.min(source.scrollTop, targetMaxTop) : 0;
+  if (Math.abs(target.scrollTop - nextTop) >= 1) {
+    changed = true;
   }
-  const next = Math.min(source.scrollTop, targetMax);
-  if (Math.abs(target.scrollTop - next) < 1) {
+
+  const targetMaxLeft = target.scrollWidth - target.clientWidth;
+  const nextLeft =
+    targetMaxLeft > 0 ? Math.min(source.scrollLeft, targetMaxLeft) : 0;
+  if (Math.abs(target.scrollLeft - nextLeft) >= 1) {
+    changed = true;
+  }
+
+  if (!changed) {
     return;
   }
   scrollIgnore.add(target);
-  target.scrollTop = next;
+  target.scrollTop = nextTop;
+  target.scrollLeft = nextLeft;
 }
 
-textarea.addEventListener("scroll", () => syncScroll(textarea, resultOutput));
-resultOutput.addEventListener("scroll", () => syncScroll(resultOutput, textarea));
+function syncLeftOverlayScroll(): void {
+  sourceOverlay.scrollTop = textarea.scrollTop;
+  sourceOverlay.scrollLeft = textarea.scrollLeft;
+}
+
+textarea.addEventListener("scroll", () => {
+  syncLeftOverlayScroll();
+  syncScroll(textarea, resultOutput);
+});
+resultOutput.addEventListener("scroll", () => {
+  syncScroll(resultOutput, textarea);
+  syncLeftOverlayScroll();
+});
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
@@ -373,7 +399,9 @@ document.addEventListener("click", (event) => {
     !activePopover.contains(target) &&
     !(
       target instanceof HTMLElement &&
-      target.closest(".token-ambiguous, .token-plain, .token-correctable")
+      target.closest(
+        ".token-ambiguous, .token-plain, .token-correctable, .spell-underline",
+      )
     )
   ) {
     closePopover();
@@ -387,54 +415,74 @@ if (accentMode === "local") {
   void enterLocalMode();
 }
 
-function schedulePreviewSpellcheck(): void {
-  window.clearTimeout(previewSpellcheckTimer);
-  previewSpellcheckTimer = window.setTimeout(() => {
-    previewSpellcheckTimer = undefined;
-    void runPreviewSpellcheck();
+function scheduleLeftSpellcheck(): void {
+  window.clearTimeout(leftSpellcheckTimer);
+  leftSpellcheckTimer = window.setTimeout(() => {
+    leftSpellcheckTimer = undefined;
+    void runLeftSpellcheck();
   }, PREVIEW_SPELLCHECK_DEBOUNCE_MS);
 }
 
-async function runPreviewSpellcheck(): Promise<void> {
-  window.clearTimeout(previewSpellcheckTimer);
-  previewSpellcheckTimer = undefined;
+async function runLeftSpellcheck(): Promise<void> {
+  window.clearTimeout(leftSpellcheckTimer);
+  leftSpellcheckTimer = undefined;
 
-  if (isLoading) {
-    return;
-  }
-
-  const requestId = ++spellcheckRequestId;
+  const requestId = ++leftSpellcheckRequestId;
   const text = textarea.value;
   closePopover();
   closeStatsPopover();
 
   if (text.trim().length === 0) {
-    renderedParts = [];
-    renderedSourceText = "";
-    showTaggerNotice(false);
-    renderResult();
-    updateCopyButtonState();
+    leftTokens = [];
+    renderLeftOverlay();
     return;
   }
 
-  if (canRewriteRenderedSource() && !isPreviewResult()) {
+  const tokens = tokenizeForPreview(text) as RenderedPart[];
+  leftTokens = tokens;
+  renderLeftOverlay();
+
+  const targets = tokens
+    .map((part, index) => ({ index, part }))
+    .filter((item) => item.part.type === "word" && !item.part.numeralFragment);
+  const words = targets.map(({ index, part }) => {
+    const context = spellingContextForIndex(index, tokens);
+    return { word: part.text, prev: context?.prev, next: context?.next };
+  });
+
+  let suggestions: SpellcheckSuggestion[] = [];
+  try {
+    suggestions = await suggestBatch(words);
+  } catch {
+    suggestions = [];
+  }
+
+  if (requestId !== leftSpellcheckRequestId || textarea.value !== text) {
     return;
   }
 
-  renderedParts = tokenizeForPreview(text) as RenderedPart[];
-  renderedSourceText = text;
-  showTaggerNotice(false);
-  updateCopyButtonState();
+  const suggestionsByIndex = new Map(
+    targets.map(({ index }, position) => [
+      index,
+      suggestions[position] ??
+        ({ status: "unknown", candidates: [] } satisfies SpellcheckSuggestion),
+    ]),
+  );
+  leftTokens = tokens.map((part, index) => {
+    const spelling = suggestionsByIndex.get(index);
+    if (!spelling) {
+      return part;
+    }
 
-  await annotateUnknownWordsWithSpellcheck();
-  if (requestId === spellcheckRequestId) {
-    renderResult();
-  }
+    return {
+      ...part,
+      spelling,
+    };
+  });
+  renderLeftOverlay();
 }
 
 async function submitText(): Promise<void> {
-  window.clearTimeout(previewSpellcheckTimer);
-  previewSpellcheckTimer = undefined;
   spellcheckRequestId += 1;
   const text = textarea.value;
   closePopover();
@@ -771,6 +819,48 @@ async function ensureLocalEngine(): Promise<LocalAccentEngine> {
   return localEnginePromise;
 }
 
+function primeLeftOverlayForCurrentText(): void {
+  leftSpellcheckRequestId += 1;
+  const text = textarea.value;
+  leftTokens =
+    text.trim().length === 0 ? [] : (tokenizeForPreview(text) as RenderedPart[]);
+  renderLeftOverlay();
+}
+
+function renderLeftOverlay(): void {
+  sourceOverlay.replaceChildren();
+
+  if (leftTokens.length === 0) {
+    syncLeftOverlayScroll();
+    return;
+  }
+
+  const tiledText = leftTokens.map((part) => part.text).join("");
+  if (tiledText !== textarea.value) {
+    syncLeftOverlayScroll();
+    return;
+  }
+
+  leftTokens.forEach((part, index) => {
+    if (part.type === "word" && isCorrectableSpelling(part.spelling)) {
+      const span = document.createElement("span");
+      span.className = "spell-underline";
+      span.textContent = part.text;
+      span.dataset.index = String(index);
+      span.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openCorrectionPopover(span, index, leftTokens, applyLeftSpellingCorrection);
+      });
+      sourceOverlay.append(span);
+      return;
+    }
+
+    sourceOverlay.append(document.createTextNode(part.text));
+  });
+
+  syncLeftOverlayScroll();
+}
+
 function renderResult(): void {
   resultOutput.replaceChildren();
 
@@ -893,7 +983,7 @@ async function annotateUnknownWordsWithSpellcheck(): Promise<void> {
   // One batched round-trip to the spellcheck Web Worker: all words are checked
   // off the main thread, so the ~580k engine's first build never freezes the UI.
   const words = targets.map(({ index, part }) => {
-    const context = spellingContextForIndex(index);
+    const context = spellingContextForIndex(index, renderedParts);
     return { word: part.text, prev: context?.prev, next: context?.next };
   });
 
@@ -934,19 +1024,26 @@ async function annotateUnknownWordsWithSpellcheck(): Promise<void> {
   }
 }
 
-function spellingContextForIndex(index: number): SpellcheckContext | undefined {
-  const prev = nearestWordText(index, -1);
-  const next = nearestWordText(index, 1);
+function spellingContextForIndex(
+  index: number,
+  parts: readonly RenderedPart[],
+): SpellcheckContext | undefined {
+  const prev = nearestWordText(index, -1, parts);
+  const next = nearestWordText(index, 1, parts);
   return prev || next ? { prev, next } : undefined;
 }
 
-function nearestWordText(index: number, direction: -1 | 1): string | undefined {
+function nearestWordText(
+  index: number,
+  direction: -1 | 1,
+  parts: readonly RenderedPart[],
+): string | undefined {
   for (
     let cursor = index + direction;
-    cursor >= 0 && cursor < renderedParts.length;
+    cursor >= 0 && cursor < parts.length;
     cursor += direction
   ) {
-    const part = renderedParts[cursor];
+    const part = parts[cursor];
     if (part?.type === "word") {
       return part.text;
     }
@@ -979,15 +1076,21 @@ function shouldShowCorrection(part: RenderedPart): boolean {
     return true;
   }
   if (spelling.status === "typo") {
-    return part.preview === true || Boolean(part.unknown);
+    return Boolean(part.unknown);
   }
   return false;
 }
 
-function openCorrectionPopover(anchor: HTMLElement, index: number): void {
+function openCorrectionPopover(
+  anchor: HTMLElement,
+  index: number,
+  parts: readonly RenderedPart[] = renderedParts,
+  applyCorrection: (index: number, candidate: string) => void | Promise<void> =
+    applySpellingCorrection,
+): void {
   closePopover();
 
-  const part = renderedParts[index];
+  const part = parts[index];
   if (!part) {
     return;
   }
@@ -1035,7 +1138,7 @@ function openCorrectionPopover(anchor: HTMLElement, index: number): void {
 
     option.append(formLine);
     option.addEventListener("click", () => {
-      void applySpellingCorrection(index, candidate);
+      void applyCorrection(index, candidate);
     });
     body.append(option);
   });
@@ -1063,7 +1166,32 @@ async function applySpellingCorrection(index: number, candidate: string): Promis
   ];
   replaceTextareaRanges(edits);
   closePopover();
+  void runLeftSpellcheck();
   await reaccentuateEdits(edits);
+}
+
+async function applyLeftSpellingCorrection(
+  index: number,
+  candidate: string,
+): Promise<void> {
+  const part = leftTokens[index];
+  if (
+    !part ||
+    typeof part.sourceStart !== "number" ||
+    typeof part.sourceEnd !== "number"
+  ) {
+    return;
+  }
+
+  replaceTextareaRanges([
+    {
+      start: part.sourceStart,
+      end: part.sourceEnd,
+      text: candidate.normalize("NFC"),
+    },
+  ]);
+  closePopover();
+  await runLeftSpellcheck();
 }
 
 async function fixAllRestores(): Promise<void> {
@@ -1075,6 +1203,7 @@ async function fixAllRestores(): Promise<void> {
 
   closePopover();
   replaceTextareaRanges(replacements);
+  void runLeftSpellcheck();
   await reaccentuateEdits(replacements);
 }
 
@@ -1115,6 +1244,7 @@ function replaceTextareaRanges(
 
   textarea.value = nextText;
   updateCounter();
+  updateFixAllButtonState();
   syncBoxHeights();
 }
 
@@ -1122,20 +1252,11 @@ function canRewriteRenderedSource(): boolean {
   return Boolean(renderedSourceText) && textarea.value === renderedSourceText;
 }
 
-function isPreviewResult(): boolean {
-  return renderedParts.length > 0 && renderedParts.every((part) => part.preview === true);
-}
-
 async function reaccentuateEdits(edits: TextEdit[]): Promise<void> {
   const oldText = renderedSourceText;
   const oldParts = renderedParts;
 
-  if (
-    accentMode === "web" ||
-    isPreviewResult() ||
-    !oldText ||
-    oldParts.length === 0
-  ) {
+  if (accentMode === "web" || !oldText || oldParts.length === 0) {
     await submitText();
     return;
   }
@@ -1736,10 +1857,6 @@ function positionPopover(popover: HTMLElement, anchor: HTMLElement): void {
 }
 
 async function copyResult(): Promise<void> {
-  if (isPreviewResult()) {
-    return;
-  }
-
   const text = renderedParts.map(getVisibleText).join("").normalize("NFC");
   if (!text) {
     return;
@@ -1795,7 +1912,7 @@ function updateFixAllButtonState(): void {
 }
 
 function updateCopyButtonState(): void {
-  copyButton.disabled = isLoading || renderedParts.length === 0 || isPreviewResult();
+  copyButton.disabled = isLoading || renderedParts.length === 0;
 }
 
 function renderIconButtonLabel(
@@ -1826,6 +1943,7 @@ function syncBoxHeights(): void {
   const height = Math.max(minPx, Math.min(content, maxPx));
   textarea.style.height = `${height}px`;
   resultOutput.style.height = `${height}px`;
+  syncLeftOverlayScroll();
 
   // Lock the two panel footers (input actions / result legend) to one height so
   // that with the extras collapsed the input card's border lines up exactly with
