@@ -333,6 +333,10 @@ export function partsFromDecodedSentences(
   for (const sentence of sentences) {
     if (sentence.start > cursor) {
       appendSep(parts, text.slice(cursor, sentence.start));
+      // Advance past the inter-sentence gap — otherwise the first token's own
+      // leading-gap slice below re-emits it, doubling every sentence-boundary
+      // space and every paragraph newline (which desyncs the left/right scroll).
+      cursor = sentence.start;
     }
 
     for (let index = 0; index < sentence.tokens.length; index += 1) {
