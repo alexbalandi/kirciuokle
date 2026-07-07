@@ -179,6 +179,11 @@ textarea,
   overflow-wrap: break-word;
   word-break: normal;
   tab-size: 4;
+  /* Always reserve the scrollbar gutter so the content width is constant
+     (and identical on both boxes) whether or not a scrollbar is showing —
+     otherwise a box that gains a scrollbar re-wraps and drifts out of
+     alignment with the other. */
+  scrollbar-gutter: stable;
 }
 
 textarea {
