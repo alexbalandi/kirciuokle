@@ -224,6 +224,13 @@ textarea:focus {
   min-height: 52px;
 }
 
+.input-action-buttons {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
 .mode-controls,
 .display-controls,
 .local-tier-controls {
@@ -512,6 +519,22 @@ button:disabled {
   stroke-linejoin: round;
 }
 
+.input-action-buttons .icon-button {
+  width: 42px;
+  height: 42px;
+}
+
+.accent-icon-button {
+  border-color: var(--accent);
+  color: white;
+  background: var(--accent);
+}
+
+.accent-icon-button:hover:not(:disabled),
+.accent-icon-button:focus-visible:not(:disabled) {
+  background: var(--accent-strong);
+}
+
 .tagger-notice {
   display: flex;
   align-items: flex-start;
@@ -629,6 +652,16 @@ button:disabled {
   text-decoration-color: var(--unknown);
   text-decoration-thickness: 0.12em;
   text-underline-offset: 0.18em;
+}
+
+.token-correctable {
+  cursor: pointer;
+}
+
+.token-correctable:hover,
+.token-correctable:focus-visible {
+  background: color-mix(in srgb, var(--unknown) 14%, transparent);
+  outline: none;
 }
 
 /* Plain resolved words open the info popover but carry no underline —
@@ -955,6 +988,13 @@ button.variant-row.is-selected:focus-visible {
 .variant-status {
   color: var(--text-muted);
   font-size: 0.88rem;
+}
+
+.correction-heading {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .variant-headword-line {

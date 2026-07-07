@@ -8,6 +8,10 @@ import type {
 import { parseMi, scoreTags } from "../shared/tags";
 import { formatProbability } from "./format";
 import {
+  suggest as suggestSpelling,
+  type SpellcheckSuggestion,
+} from "./spellcheck";
+import {
   formatBytes,
   hasCachedLocalModel,
   loadModelTierInfo,
@@ -61,6 +65,9 @@ type MessageKey = Extract<
 
 type RenderedPart = Part & {
   current?: string;
+  sourceEnd?: number;
+  sourceStart?: number;
+  spelling?: SpellcheckSuggestion;
   userChosen?: boolean;
 };
 
@@ -99,6 +106,7 @@ const localUpdateControl = getElement<HTMLDivElement>("local-update");
 const panelExtras = getElement<HTMLDivElement>("panel-extras");
 const detailsToggle = getElement<HTMLButtonElement>("details-toggle");
 const inputActions = form.querySelector<HTMLDivElement>(".input-actions")!;
+const fixAllButton = getElement<HTMLButtonElement>("fix-all-button");
 const accentButton = getElement<HTMLButtonElement>("accent-button");
 const copyButton = getElement<HTMLButtonElement>("copy-button");
 const message = getElement<HTMLParagraphElement>("form-message");
@@ -148,9 +156,11 @@ let displayMode: DisplayMode = readStoredDisplayMode();
 let localTier: LocalModelTier = readStoredLocalTier();
 let localTierInfo: Partial<Record<LocalModelTier, LocalModelTierInfo>> = {};
 let renderedParts: RenderedPart[] = [];
+let renderedSourceText = "";
 let activePopover: HTMLDivElement | null = null;
 let activeStatsPopover: HTMLDivElement | null = null;
 let isLoading = false;
+let spellcheckRequestId = 0;
 let messageKey: MessageKey | null = null;
 let copyResetTimer: number | undefined;
 let copied = false;
@@ -217,6 +227,7 @@ displayButtons.forEach((button) => {
 textarea.addEventListener("input", () => {
   syncBoxHeights();
   updateCounter();
+  updateFixAllButtonState();
 });
 
 // Keep the two boxes the same height when the viewport (and thus wrapping)
@@ -248,6 +259,10 @@ detailsToggle.addEventListener("click", () => {
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   void submitText();
+});
+
+fixAllButton.addEventListener("click", () => {
+  void fixAllRestores();
 });
 
 copyButton.addEventListener("click", () => {
@@ -339,7 +354,10 @@ document.addEventListener("click", (event) => {
     target instanceof Node &&
     activePopover &&
     !activePopover.contains(target) &&
-    !(target instanceof HTMLElement && target.closest(".token-ambiguous, .token-plain"))
+    !(
+      target instanceof HTMLElement &&
+      target.closest(".token-ambiguous, .token-plain, .token-correctable")
+    )
   ) {
     closePopover();
   }
@@ -376,6 +394,8 @@ async function submitText(): Promise<void> {
     applyAccentResponse(payload);
   } catch (error) {
     renderedParts = [];
+    renderedSourceText = "";
+    spellcheckRequestId += 1;
     showTaggerNotice(false);
     renderResult();
     copyButton.disabled = true;
@@ -430,19 +450,31 @@ async function accentTextLocal(text: string): Promise<AccentResponse> {
 }
 
 function applyAccentResponse(payload: AccentResponse): void {
-  renderedParts = payload.parts.map((part) => ({
-    ...part,
-    text: part.text.normalize("NFC"),
-    accented: part.accented?.normalize("NFC"),
-    variants: part.variants?.map((variant) => ({
-      ...variant,
-      form: variant.form.normalize("NFC"),
-    })),
-    current: (part.accented ?? part.text).normalize("NFC"),
-  }));
+  let cursor = 0;
+  renderedSourceText = textarea.value;
+  spellcheckRequestId += 1;
+  renderedParts = payload.parts.map((part) => {
+    const sourceStart = cursor;
+    cursor += part.text.length;
+    const sourceEnd = cursor;
+
+    return {
+      ...part,
+      text: part.text.normalize("NFC"),
+      accented: part.accented?.normalize("NFC"),
+      variants: part.variants?.map((variant) => ({
+        ...variant,
+        form: variant.form.normalize("NFC"),
+      })),
+      current: (part.accented ?? part.text).normalize("NFC"),
+      sourceEnd,
+      sourceStart,
+    };
+  });
 
   showTaggerNotice(payload.tagger === "unavailable");
   renderResult();
+  void annotateUnknownWordsWithSpellcheck();
   copyButton.disabled = renderedParts.length === 0;
 }
 
@@ -658,6 +690,7 @@ function renderResult(): void {
   if (renderedParts.length === 0) {
     resultOutput.classList.add("is-empty");
     resultOutput.textContent = UI[lang].resultEmpty;
+    updateFixAllButtonState();
     syncBoxHeights();
     return;
   }
@@ -696,6 +729,23 @@ function renderResult(): void {
     }
 
     if (part.unknown) {
+      if (isCorrectableSpelling(part.spelling)) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "token token-unknown token-correctable";
+        button.title = UI[lang].correctionHeading;
+        button.textContent = visibleText;
+        button.dataset.index = String(index);
+        button.dataset.correctable = part.spelling.status;
+        button.setAttribute("aria-haspopup", "dialog");
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openCorrectionPopover(button, index);
+        });
+        resultOutput.append(button);
+        return;
+      }
+
       const span = document.createElement("span");
       span.className = "token token-unknown";
       span.title = UI[lang].unknownTitle;
@@ -733,7 +783,212 @@ function renderResult(): void {
     resultOutput.append(document.createTextNode(visibleText));
   });
 
+  updateFixAllButtonState();
   syncBoxHeights();
+}
+
+async function annotateUnknownWordsWithSpellcheck(): Promise<void> {
+  const requestId = spellcheckRequestId;
+  const targets = renderedParts
+    .map((part, index) => ({ index, part }))
+    .filter(
+      (item) =>
+        item.part.type === "word" &&
+        item.part.unknown &&
+        !item.part.numeralFragment,
+    );
+
+  if (targets.length === 0) {
+    updateFixAllButtonState();
+    return;
+  }
+
+  const results = await Promise.all(
+    targets.map(async ({ index, part }) => {
+      try {
+        return {
+          index,
+          spelling: await suggestSpelling(part.text),
+          text: part.text,
+        };
+      } catch {
+        return {
+          index,
+          spelling: { status: "unknown", candidates: [] } satisfies SpellcheckSuggestion,
+          text: part.text,
+        };
+      }
+    }),
+  );
+
+  if (requestId !== spellcheckRequestId) {
+    return;
+  }
+
+  let changed = false;
+  results.forEach(({ index, spelling, text }) => {
+    const part = renderedParts[index];
+    if (!part || part.text !== text) {
+      return;
+    }
+
+    renderedParts[index] = { ...part, spelling };
+    changed = true;
+  });
+
+  if (changed) {
+    renderResult();
+  } else {
+    updateFixAllButtonState();
+  }
+}
+
+function isCorrectableSpelling(
+  spelling: SpellcheckSuggestion | undefined,
+): spelling is SpellcheckSuggestion {
+  return (
+    spelling !== undefined &&
+    (spelling.status === "restore" || spelling.status === "typo") &&
+    spelling.candidates.length > 0
+  );
+}
+
+function openCorrectionPopover(anchor: HTMLElement, index: number): void {
+  closePopover();
+
+  const part = renderedParts[index];
+  if (!part) {
+    return;
+  }
+
+  const popover = document.createElement("div");
+  popover.className = "variant-popover correction-popover";
+  popover.role = "dialog";
+  const body = document.createElement("div");
+  body.className = "variant-popover-scroll";
+  popover.append(body);
+  document.body.append(popover);
+  activePopover = popover;
+
+  const heading = document.createElement("div");
+  heading.className = "variant-row variant-row--static correction-heading";
+  heading.textContent = UI[lang].correctionHeading;
+  body.append(heading);
+
+  const candidates = isCorrectableSpelling(part.spelling)
+    ? part.spelling.candidates
+    : [];
+
+  if (candidates.length === 0) {
+    const status = document.createElement("div");
+    status.className = "variant-row variant-row--static variant-status";
+    status.textContent = UI[lang].correctionNone;
+    body.append(status);
+    positionVariantPopover(popover, anchor);
+    return;
+  }
+
+  candidates.forEach((candidate) => {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "variant-row correction-option";
+
+    const formLine = document.createElement("span");
+    formLine.className = "variant-headword-line";
+
+    const formText = document.createElement("span");
+    formText.className = "variant-headword";
+    formText.lang = "lt";
+    formText.textContent = candidate.normalize("NFC");
+    formLine.append(formText);
+
+    option.append(formLine);
+    option.addEventListener("click", () => {
+      void applySpellingCorrection(index, candidate);
+    });
+    body.append(option);
+  });
+
+  positionVariantPopover(popover, anchor);
+}
+
+async function applySpellingCorrection(index: number, candidate: string): Promise<void> {
+  const part = renderedParts[index];
+  if (
+    !part ||
+    typeof part.sourceStart !== "number" ||
+    typeof part.sourceEnd !== "number" ||
+    !canRewriteRenderedSource()
+  ) {
+    return;
+  }
+
+  replaceTextareaRanges([
+    {
+      start: part.sourceStart,
+      end: part.sourceEnd,
+      text: candidate.normalize("NFC"),
+    },
+  ]);
+  closePopover();
+  await submitText();
+}
+
+async function fixAllRestores(): Promise<void> {
+  const replacements = singleCandidateRestores();
+  if (replacements.length === 0) {
+    updateFixAllButtonState();
+    return;
+  }
+
+  closePopover();
+  replaceTextareaRanges(replacements);
+  await submitText();
+}
+
+function singleCandidateRestores(): Array<{ start: number; end: number; text: string }> {
+  if (!canRewriteRenderedSource()) {
+    return [];
+  }
+
+  return renderedParts.flatMap((part) => {
+    if (
+      part.spelling?.status !== "restore" ||
+      part.spelling.candidates.length !== 1 ||
+      typeof part.sourceStart !== "number" ||
+      typeof part.sourceEnd !== "number"
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        start: part.sourceStart,
+        end: part.sourceEnd,
+        text: part.spelling.candidates[0]!.normalize("NFC"),
+      },
+    ];
+  });
+}
+
+function replaceTextareaRanges(
+  replacements: Array<{ start: number; end: number; text: string }>,
+): void {
+  let nextText = textarea.value;
+  const sorted = [...replacements].sort((left, right) => right.start - left.start);
+
+  sorted.forEach(({ start, end, text }) => {
+    nextText = `${nextText.slice(0, start)}${text}${nextText.slice(end)}`;
+  });
+
+  textarea.value = nextText;
+  renderedSourceText = "";
+  updateCounter();
+  syncBoxHeights();
+}
+
+function canRewriteRenderedSource(): boolean {
+  return Boolean(renderedSourceText) && textarea.value === renderedSourceText;
 }
 
 function openVariantPopover(anchor: HTMLElement, index: number): void {
@@ -786,8 +1041,11 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
     order.unshift(first);
   }
 
-  const topOnly = accentMode === "web" && displayMode === "top" && order.length > 1;
-  const visibleOrder = topOnly ? order.slice(0, 1) : order;
+  const populate = (forceAll: boolean): void => {
+    body.replaceChildren();
+    const topOnly =
+      !forceAll && accentMode === "web" && displayMode === "top" && order.length > 1;
+    const visibleOrder = topOnly ? order.slice(0, 1) : order;
 
   visibleOrder.forEach((variantIndex) => {
     const variant = variants[variantIndex]!;
@@ -890,14 +1148,19 @@ function openVariantPopover(anchor: HTMLElement, index: number): void {
     showAll.type = "button";
     showAll.className = "variant-show-all";
     showAll.textContent = UI[lang].displayShowAll;
-    showAll.addEventListener("click", () => {
-      setDisplayMode("all");
-      closePopover();
-      openVariantPopover(anchor, index);
+    showAll.addEventListener("click", (event) => {
+      // Expand in place. stopPropagation so the document-level click handler
+      // (which closes the popover) doesn't fire after populate() detaches this
+      // button from the DOM — that detach is exactly what closed it before.
+      event.stopPropagation();
+      populate(true);
+      positionVariantPopover(popover, anchor);
     });
     body.append(showAll);
   }
+  };
 
+  populate(false);
   positionVariantPopover(popover, anchor);
 }
 
@@ -1285,14 +1548,33 @@ function setLoading(nextLoading: boolean): void {
   isLoading = nextLoading;
   copied = false;
   updateAccentButtonState();
-  accentButton.textContent = nextLoading
-    ? UI[lang].accentButtonLoading
-    : UI[lang].accentButton;
+  updateFixAllButtonState();
+  renderIconButtonLabel(
+    accentButton,
+    nextLoading ? UI[lang].accentButtonLoading : UI[lang].stressAllLabel,
+    UI[lang].stressAllLabel,
+  );
 }
 
 function updateAccentButtonState(): void {
   accentButton.disabled =
     isLoading || (accentMode === "local" && isLocalModelUnavailableBeforeReady());
+}
+
+function updateFixAllButtonState(): void {
+  fixAllButton.disabled =
+    isLoading ||
+    (accentMode === "local" && isLocalModelUnavailableBeforeReady()) ||
+    singleCandidateRestores().length === 0;
+}
+
+function renderIconButtonLabel(
+  button: HTMLButtonElement,
+  ariaLabel: string,
+  title: string,
+): void {
+  button.setAttribute("aria-label", ariaLabel);
+  button.title = title;
 }
 
 function updateCounter(): void {
@@ -1372,10 +1654,14 @@ function renderUi(): void {
       ? strings.modeLocalExplainer.replace("{size}", formatBytes(localExpectedBytes))
       : strings.modeWebExplainer;
   renderLocalTierControl(strings);
-  accentButton.textContent = isLoading
-    ? strings.accentButtonLoading
-    : strings.accentButton;
+  renderIconButtonLabel(
+    accentButton,
+    isLoading ? strings.accentButtonLoading : strings.stressAllLabel,
+    strings.stressAllLabel,
+  );
+  renderIconButtonLabel(fixAllButton, strings.fixAllLabel, strings.fixAllLabel);
   updateAccentButtonState();
+  updateFixAllButtonState();
   copyButton.textContent = copied ? strings.copied : strings.copyButton;
   resultHeading.textContent = strings.resultHeading;
   renderDisplayControl(strings);

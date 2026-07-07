@@ -11,6 +11,8 @@ export type UiStrings = {
   inputLabel: string;
   accentButton: string;
   accentButtonLoading: string;
+  stressAllLabel: string;
+  fixAllLabel: string;
   modeLabel: string;
   modeWeb: string;
   modeLocal: string;
@@ -98,6 +100,8 @@ export type UiStrings = {
   variantsLoading: string;
   variantsNone: string;
   variantsError: string;
+  correctionHeading: string;
+  correctionNone: string;
   errEmpty: string;
   errTooLong: string;
   errUpstream: string;
@@ -111,6 +115,8 @@ export const UI: Record<Lang, UiStrings> = {
     inputLabel: "Tèkstas",
     accentButton: "Sukirčiúoti",
     accentButtonLoading: "Kirčiúojama...",
+    stressAllLabel: "Sukirčiúoti",
+    fixAllLabel: "Taisyti viską",
     modeLabel: "Režìmas",
     modeWeb: "Internetù",
     modeLocal: "Viẽtinis",
@@ -184,7 +190,7 @@ export const UI: Record<Lang, UiStrings> = {
     legendResolved: "Pàrinkta pagal̃ kontèkstą",
     legendAmbiguous: "Kelì variántai",
     legendUser: "Jū́sų pasìrinkta",
-    legendUnknown: "Žodýne nèrasta",
+    legendUnknown: "Žodýne nèrasta / taisytina",
     primerLink: "Kàs yrà kir̃čio ženklaĩ?",
     primerTitle: "Kir̃čio ženklaĩ",
     primerIntro:
@@ -211,6 +217,8 @@ export const UI: Record<Lang, UiStrings> = {
     variantsLoading: "Kráunama...",
     variantsNone: "Variántų nèrasta.",
     variantsError: "Variántų gáuti nepavỹko.",
+    correctionHeading: "Ar turėjote omenyje?",
+    correctionNone: "Žinomos pataisos nėra.",
     errEmpty: "Įvèskite tèkstą.",
     errTooLong: "Tèkstas per̃ ìlgas.",
     errUpstream: "Kirčiãvimo paslaugà laĩkinai nepasiekiamà.",
@@ -222,6 +230,8 @@ export const UI: Record<Lang, UiStrings> = {
     inputLabel: "Text",
     accentButton: "Add stress marks",
     accentButtonLoading: "Working...",
+    stressAllLabel: "Add stress marks",
+    fixAllLabel: "Fix all",
     modeLabel: "Mode",
     modeWeb: "Web",
     modeLocal: "Local",
@@ -294,7 +304,7 @@ export const UI: Record<Lang, UiStrings> = {
     legendResolved: "Chosen by context",
     legendAmbiguous: "Multiple variants",
     legendUser: "Chosen by you",
-    legendUnknown: "Not in dictionary",
+    legendUnknown: "Not in dictionary / needs correction",
     primerLink: "What do the stress marks mean?",
     primerTitle: "Lithuanian stress marks",
     primerIntro:
@@ -321,6 +331,8 @@ export const UI: Record<Lang, UiStrings> = {
     variantsLoading: "Loading...",
     variantsNone: "No variants found.",
     variantsError: "Could not fetch variants.",
+    correctionHeading: "Did you mean?",
+    correctionNone: "No known correction.",
     errEmpty: "Enter some text.",
     errTooLong: "The text is too long.",
     errUpstream: "The accentuation service is temporarily unavailable.",
@@ -332,6 +344,8 @@ export const UI: Record<Lang, UiStrings> = {
     inputLabel: "Текст",
     accentButton: "Расставить ударения",
     accentButtonLoading: "Обработка...",
+    stressAllLabel: "Расставить ударения",
+    fixAllLabel: "Исправить всё",
     modeLabel: "Режим",
     modeWeb: "Онлайн",
     modeLocal: "Локально",
@@ -405,7 +419,7 @@ export const UI: Record<Lang, UiStrings> = {
     legendResolved: "Выбрано по контексту",
     legendAmbiguous: "Несколько вариантов",
     legendUser: "Выбрано пользователем",
-    legendUnknown: "Нет в словаре",
+    legendUnknown: "Нет в словаре / нужно исправить",
     primerLink: "Что означают знаки ударения?",
     primerTitle: "Литовские знаки ударения",
     primerIntro:
@@ -432,6 +446,8 @@ export const UI: Record<Lang, UiStrings> = {
     variantsLoading: "Загрузка...",
     variantsNone: "Варианты не найдены.",
     variantsError: "Не удалось получить варианты.",
+    correctionHeading: "Вы имели в виду?",
+    correctionNone: "Подходящего исправления нет.",
     errEmpty: "Введите текст.",
     errTooLong: "Текст слишком длинный.",
     errUpstream: "Сервис расстановки ударений временно недоступен.",

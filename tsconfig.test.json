@@ -6,6 +6,7 @@
   },
   "include": [
     "test/**/*.ts",
+    "src/client/spellcheck.ts",
     "src/client/i18n.ts",
     "src/client/format.ts",
     "src/client/local/**/*.ts",
