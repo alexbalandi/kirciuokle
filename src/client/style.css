@@ -535,6 +535,15 @@ button:disabled {
   background: var(--accent-strong);
 }
 
+/* "Stress all" reads as a letter carrying an acute mark — the same cue as the
+   acute glyph in the primer — so it's obvious it adds stress marks. */
+.accent-icon-glyph {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateY(0.06em);
+}
+
 .tagger-notice {
   display: flex;
   align-items: flex-start;

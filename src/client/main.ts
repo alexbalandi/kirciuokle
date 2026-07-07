@@ -705,6 +705,23 @@ function renderResult(): void {
       return;
     }
 
+    if (shouldShowCorrection(part)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "token token-unknown token-correctable";
+      button.title = UI[lang].correctionHeading;
+      button.textContent = visibleText;
+      button.dataset.index = String(index);
+      button.dataset.correctable = part.spelling!.status;
+      button.setAttribute("aria-haspopup", "dialog");
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openCorrectionPopover(button, index);
+      });
+      resultOutput.append(button);
+      return;
+    }
+
     if (part.ambiguous) {
       const button = document.createElement("button");
       button.type = "button";
@@ -729,23 +746,6 @@ function renderResult(): void {
     }
 
     if (part.unknown) {
-      if (isCorrectableSpelling(part.spelling)) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "token token-unknown token-correctable";
-        button.title = UI[lang].correctionHeading;
-        button.textContent = visibleText;
-        button.dataset.index = String(index);
-        button.dataset.correctable = part.spelling.status;
-        button.setAttribute("aria-haspopup", "dialog");
-        button.addEventListener("click", (event) => {
-          event.stopPropagation();
-          openCorrectionPopover(button, index);
-        });
-        resultOutput.append(button);
-        return;
-      }
-
       const span = document.createElement("span");
       span.className = "token token-unknown";
       span.title = UI[lang].unknownTitle;
@@ -792,10 +792,7 @@ async function annotateUnknownWordsWithSpellcheck(): Promise<void> {
   const targets = renderedParts
     .map((part, index) => ({ index, part }))
     .filter(
-      (item) =>
-        item.part.type === "word" &&
-        item.part.unknown &&
-        !item.part.numeralFragment,
+      (item) => item.part.type === "word" && !item.part.numeralFragment,
     );
 
   if (targets.length === 0) {
@@ -851,6 +848,22 @@ function isCorrectableSpelling(
     (spelling.status === "restore" || spelling.status === "typo") &&
     spelling.candidates.length > 0
   );
+}
+
+// Whether to flag a word as a spelling mistake, even if the accentuator produced
+// something for it. A pure-ASCII diacritic drop ("restore") always wins — that's
+// the "as" → "aš" case, clearly wrong in real LT text. An edit-distance typo is
+// only surfaced when the accentuator itself didn't know the word, to avoid
+// false positives on valid forms the lexicon happens to miss.
+function shouldShowCorrection(part: RenderedPart): boolean {
+  const spelling = part.spelling;
+  if (!spelling || spelling.candidates.length === 0) {
+    return false;
+  }
+  if (spelling.status === "restore") {
+    return true;
+  }
+  return spelling.status === "typo" && Boolean(part.unknown);
 }
 
 function openCorrectionPopover(anchor: HTMLElement, index: number): void {
