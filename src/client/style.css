@@ -312,13 +312,6 @@ textarea:focus {
   overflow: hidden;
 }
 
-.input-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
 .details-toggle {
   display: inline-flex;
   align-items: center;

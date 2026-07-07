@@ -38,8 +38,9 @@
             autocapitalize="off"
           ></textarea>
           <div class="input-actions">
-            <span class="input-meta">
-              <span class="counter" id="char-counter">0 / 20000</span>
+            <span class="counter" id="char-counter">0 / 20000</span>
+            <div class="mode-controls" aria-label="Režimas">
+              <span class="segmented-label" id="mode-label"></span>
               <button
                 class="details-toggle"
                 id="details-toggle"
@@ -52,9 +53,6 @@
                   <path d="M6 15l6-6 6 6" />
                 </svg>
               </button>
-            </span>
-            <div class="mode-controls" aria-label="Režimas">
-              <span class="segmented-label" id="mode-label"></span>
               <span class="segmented-control" id="mode-switch">
                 <button type="button" data-mode="web"></button>
                 <button type="button" data-mode="local"></button>
