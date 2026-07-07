@@ -446,10 +446,42 @@ async function cacheHit(
   return isCachedModelComplete(cache, url, expectedBytes);
 }
 
+let persistentStorageRequest: Promise<boolean> | null = null;
+
+// Ask the browser to exempt this origin from best-effort eviction. The model lives
+// in the Cache API (~130–450 MB) and, without this, Chrome drops it under disk
+// pressure on its own schedule — surfacing as the model mysteriously needing a
+// re-download. Idempotent, best-effort: Chrome decides by engagement heuristics and
+// never prompts; some browsers prompt or deny. Denial just leaves us where we are.
+export function ensurePersistentStorage(): Promise<boolean> {
+  persistentStorageRequest ??= (async () => {
+    try {
+      if (typeof navigator.storage?.persist !== "function") {
+        return false;
+      }
+      const granted = (await navigator.storage.persisted?.())
+        ? true
+        : await navigator.storage.persist();
+      console.info(
+        `[local-model] persistent storage ${granted ? "granted" : "denied"} — cached model ${
+          granted ? "is protected from eviction" : "may be evicted under disk pressure"
+        }`,
+      );
+      return granted;
+    } catch {
+      return false;
+    }
+  })();
+  return persistentStorageRequest;
+}
+
 async function openModelCache(): Promise<Cache | null> {
   if (!("caches" in window)) {
     return null;
   }
+
+  // We are about to read or write the (large) model cache — make it durable first.
+  void ensurePersistentStorage();
 
   try {
     return await caches.open(LOCAL_MODEL_CACHE_NAME);
