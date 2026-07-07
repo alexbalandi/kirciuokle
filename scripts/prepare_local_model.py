@@ -134,6 +134,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-full", action="store_true")
     parser.add_argument("--skip-parity", action="store_true")
     parser.add_argument("--force-full", action="store_true")
+    # Source overrides: ship a different int8 model + its matching tokenizer.
+    # Defaults reproduce the hf_release baseline (joint_v2_literary). To ship
+    # the pruned joint_v3 bundle:
+    #   --model-onnx local/accentuator/joint/pruned/onnx/joint.int8.partial.onnx
+    #   --model-name joint.int8.partial.onnx
+    #   --meta-json  local/accentuator/joint/pruned/onnx/joint.meta.json
+    #   --tokenizer-dir local/accentuator/joint/pruned/tokenizer
+    parser.add_argument("--model-onnx", type=Path, default=BASELINE_ONNX)
+    parser.add_argument("--model-name", type=str, default=BASELINE_NAME)
+    parser.add_argument("--meta-json", type=Path, default=META_JSON)
+    parser.add_argument("--tokenizer-dir", type=Path, default=RELEASE_DIR)
     return parser
 
 
@@ -226,14 +237,21 @@ def vendor_runtime(output_dir: Path) -> dict[str, object]:
     return manifest
 
 
-def copy_static_model_files(output_dir: Path) -> None:
-    copy_if_changed(BASELINE_ONNX, output_dir / BASELINE_NAME)
-    copy_if_changed(META_JSON, output_dir / "joint.meta.json")
+def copy_static_model_files(
+    output_dir: Path,
+    model_onnx: Path = BASELINE_ONNX,
+    model_name: str = BASELINE_NAME,
+    meta_json: Path = META_JSON,
+    tokenizer_dir: Path = RELEASE_DIR,
+) -> None:
+    copy_if_changed(model_onnx, output_dir / model_name)
+    copy_if_changed(meta_json, output_dir / "joint.meta.json")
+    # labels are prune-invariant (label ids unchanged) — always from hf_release
     labels = RELEASE_DIR / "labels.json"
     if labels.exists():
         copy_if_changed(labels, output_dir / "labels.json")
     for name in TOKENIZER_FILES:
-        source = RELEASE_DIR / name
+        source = tokenizer_dir / name
         if source.exists():
             copy_if_changed(source, output_dir / name)
 
@@ -820,8 +838,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     existing_models = existing_manifest.get("models", {})
 
-    print(f"copying baseline bundle files to {output_dir}")
-    copy_static_model_files(output_dir)
+    print(f"copying model bundle files to {output_dir}")
+    copy_static_model_files(
+        output_dir,
+        model_onnx=args.model_onnx,
+        model_name=args.model_name,
+        meta_json=args.meta_json,
+        tokenizer_dir=args.tokenizer_dir,
+    )
     write_label_bridge(output_dir)
     write_i18n_module()
     runtime_manifest = vendor_runtime(output_dir)
@@ -855,7 +879,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 args.batch_size,
             )
 
-    default_model = BASELINE_NAME
+    default_model = args.model_name
     full_ships = bool(
         full_path
         and full_parity
@@ -864,21 +888,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     if full_ships:
         default_model = FULL_INT8_NAME
-    elif args.skip_parity and existing_manifest.get("default_model") in {
-        BASELINE_NAME,
-        FULL_INT8_NAME,
-    }:
-        default_model = str(existing_manifest["default_model"])
 
     rows = [
         make_row(
-            "partial dynamic int8 baseline",
-            output_dir / BASELINE_NAME,
+            "shipped int8 model",
+            output_dir / args.model_name,
             baseline_parity,
-            default_model == BASELINE_NAME,
-            "existing hf_release scope kept for parity"
-            if default_model == BASELINE_NAME
-            else "available fallback",
+            default_model == args.model_name,
+            f"source: {args.model_onnx.name}",
             existing_models,
         )
     ]
