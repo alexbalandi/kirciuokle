@@ -20,6 +20,7 @@ context.
 | doc | contents |
 |---|---|
 | [GLOSSARY.md](GLOSSARY.md) | Every term of art, plain-language — read alongside everything else |
+| [WEB-APP.md](WEB-APP.md) | Web app runtime: Web vs Local mode, VDU-vs-UDPipe request handling, client-side spellcheck |
 | [ARCHITECTURES.md](ARCHITECTURES.md) | Exact model architectures: taggers, stress heads v1–v3, the joint model — dims, masks, losses, warm starts |
 | [DATASETS.md](DATASETS.md) | Every dataset: source, license, how obtained, what it may and may not be used for |
 | [EVALUATION.md](EVALUATION.md) | The evaluation methodology ladder: parity → silver → audited silver → gold; metric definitions used everywhere |

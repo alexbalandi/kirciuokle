@@ -5,7 +5,10 @@ export type SpellcheckSuggestion = {
   candidates: string[];
 };
 
+export type SpellcheckContext = { prev?: string; next?: string };
+
 const WORDLIST_URL = "/spellcheck-lt.txt";
+const BIGRAMS_URL = "/spellcheck-bigrams.txt";
 const MAX_CANDIDATES = 8;
 const LT_DIACRITIC_RE = /[ąčęėįšųūž]/iu;
 const ASCII_RE = /^[\x00-\x7F]+$/;
@@ -31,6 +34,7 @@ const FOLD_MAP: Record<string, string> = {
 };
 
 let sharedEnginePromise: Promise<SpellcheckEngine> | null = null;
+let sharedBigramsPromise: Promise<void> | null = null;
 
 export function foldAscii(word: string): string {
   return Array.from(word.normalize("NFC"), (char) => FOLD_MAP[char] ?? char)
@@ -38,13 +42,22 @@ export function foldAscii(word: string): string {
     .toLowerCase();
 }
 
-export function createSpellcheckEngine(forms: Iterable<string>): SpellcheckEngine {
-  return new SpellcheckEngine(forms);
+export function createSpellcheckEngine(
+  forms: Iterable<string>,
+  bigrams?: Iterable<string> | ReadonlyMap<string, number>,
+): SpellcheckEngine {
+  return new SpellcheckEngine(forms, bigrams);
 }
 
-export async function suggest(word: string): Promise<SpellcheckSuggestion> {
+export async function suggest(
+  word: string,
+  context?: SpellcheckContext,
+): Promise<SpellcheckSuggestion> {
   const engine = await loadSpellcheckEngine();
-  return engine.suggest(word);
+  if (hasContext(context)) {
+    await ensureBigrams();
+  }
+  return engine.suggest(word, context);
 }
 
 export async function loadSpellcheckEngine(): Promise<SpellcheckEngine> {
@@ -62,19 +75,26 @@ export async function loadSpellcheckEngine(): Promise<SpellcheckEngine> {
 
 export function resetSpellcheckForTests(): void {
   sharedEnginePromise = null;
+  sharedBigramsPromise = null;
 }
 
 export class SpellcheckEngine {
   readonly valid = new Set<string>();
+  readonly freq = new Map<string, number>();
+  readonly bigrams = new Map<string, number>();
   readonly foldIndex = new Map<string, string[]>();
   readonly deleteIndex = new Map<string, string[]>();
 
   private readonly forms: string[] = [];
 
-  constructor(forms: Iterable<string>) {
+  constructor(
+    forms: Iterable<string>,
+    bigrams?: Iterable<string> | ReadonlyMap<string, number>,
+  ) {
     const seenForms = new Set<string>();
 
-    for (const form of forms) {
+    for (const line of forms) {
+      const { form, freq } = parseWordlistLine(line);
       const normalized = normalizeForm(form);
       if (!normalized || seenForms.has(normalized)) {
         continue;
@@ -83,6 +103,21 @@ export class SpellcheckEngine {
       seenForms.add(normalized);
       this.forms.push(normalized);
       this.valid.add(normalized);
+      this.freq.set(normalized, freq);
+    }
+
+    // Two-tier vocabulary (SPEC56 §1a-bis): every form is "accepted" (added to
+    // `valid`), but the correction indexes — restore (foldIndex) and typo
+    // (deleteIndex) — are built only over the common, frequency-bearing subset.
+    // Building deletes over the full ~580k production list would create millions
+    // of keys and hang the browser; rare inflected forms only need to be accepted,
+    // not suggested. A list with no frequencies at all (unit-test fixtures) indexes
+    // every form, so small hand-built engines keep full restore/typo behaviour.
+    const anyFreq = [...this.freq.values()].some((value) => value > 0);
+    for (const normalized of this.forms) {
+      if (anyFreq && (this.freq.get(normalized) ?? 0) <= 0) {
+        continue;
+      }
 
       if (LT_DIACRITIC_RE.test(normalized)) {
         pushUnique(this.foldIndex, foldAscii(normalized), normalized);
@@ -99,9 +134,13 @@ export class SpellcheckEngine {
     for (const candidates of this.deleteIndex.values()) {
       candidates.sort(compareForms);
     }
+
+    if (bigrams) {
+      this.setBigrams(bigrams);
+    }
   }
 
-  suggest(word: string): SpellcheckSuggestion {
+  suggest(word: string, context?: SpellcheckContext): SpellcheckSuggestion {
     const normalized = normalizeForm(word);
     if (!normalized) {
       return { status: "unknown", candidates: [] };
@@ -116,9 +155,13 @@ export class SpellcheckEngine {
     if (restoreCandidates.length > 0 && isPureAscii(word)) {
       return {
         status: "restore",
-        candidates: rankCandidates(normalized, restoreCandidates).map((candidate) =>
-          reapplyCase(candidate, word),
-        ),
+        candidates: rankCandidates(
+          normalized,
+          restoreCandidates,
+          this,
+          context,
+          restoreDistanceBand,
+        ).map((candidate) => reapplyCase(candidate, word)),
       };
     }
 
@@ -126,22 +169,52 @@ export class SpellcheckEngine {
     if (typoCandidates.length > 0) {
       return {
         status: "typo",
-        candidates: rankCandidates(normalized, typoCandidates).map((candidate) =>
-          reapplyCase(candidate, word),
-        ),
+        candidates: rankCandidates(
+          normalized,
+          typoCandidates,
+          this,
+          context,
+          boundedDamerauLevenshteinCap2,
+        ).map((candidate) => reapplyCase(candidate, word)),
       };
     }
 
     return { status: "unknown", candidates: [] };
   }
 
+  setBigrams(lines: Iterable<string> | ReadonlyMap<string, number>): void {
+    this.bigrams.clear();
+
+    if (isReadonlyBigramMap(lines)) {
+      for (const [key, count] of lines) {
+        const parsed = parseBigramKey(key, count);
+        if (parsed) {
+          this.bigrams.set(parsed.key, parsed.count);
+        }
+      }
+      return;
+    }
+
+    for (const line of lines) {
+      const parsed = parseBigramLine(line);
+      if (parsed) {
+        this.bigrams.set(parsed.key, parsed.count);
+      }
+    }
+  }
+
   private typoCandidates(query: string): string[] {
     const candidates = new Set<string>();
     collectEditCandidates(this.deleteIndex.get(query), query, candidates);
 
-    for (const deletion of deletes1(query)) {
+    const queryDeletes = new Set([...deletes1(query), ...deletes2(query)]);
+    for (const deletion of queryDeletes) {
       collectEditCandidates(this.deleteIndex.get(deletion), query, candidates);
-      if (this.valid.has(deletion) && editDistanceAtMostOne(query, deletion)) {
+
+      if (
+        this.valid.has(deletion) &&
+        boundedDamerauLevenshteinCap2(query, deletion) <= 2
+      ) {
         candidates.add(deletion);
       }
     }
@@ -160,8 +233,87 @@ async function fetchWordlist(): Promise<string> {
   return response.text();
 }
 
+async function fetchBigrams(): Promise<string> {
+  const response = await fetch(BIGRAMS_URL);
+  if (!response.ok) {
+    throw new Error(`Could not load ${BIGRAMS_URL}: ${response.status}`);
+  }
+
+  return response.text();
+}
+
+async function ensureBigrams(): Promise<void> {
+  sharedBigramsPromise ??= Promise.all([loadSpellcheckEngine(), fetchBigrams()])
+    .then(([engine, text]) => {
+      engine.setBigrams(
+        text
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean),
+      );
+    })
+    .catch(() => {
+      // Context ranking is opportunistic; spelling suggestions still work
+      // without the small bigram table.
+    });
+
+  return sharedBigramsPromise;
+}
+
+function parseWordlistLine(line: string): { form: string; freq: number } {
+  const [form = "", freqRaw = ""] = line.split("\t", 2);
+  const freq = Number.parseInt(freqRaw, 10);
+  return {
+    form,
+    freq: Number.isFinite(freq) && freq > 0 ? freq : 0,
+  };
+}
+
+function parseBigramLine(line: string): { key: string; count: number } | null {
+  const [prev = "", next = "", countRaw = ""] = line.split("\t", 3);
+  return parseBigramParts(prev, next, countRaw);
+}
+
+function parseBigramKey(
+  key: string,
+  count: number,
+): { key: string; count: number } | null {
+  const [prev = "", next = ""] = key.split("\t", 2);
+  return parseBigramParts(prev, next, String(count));
+}
+
+function parseBigramParts(
+  prevRaw: string,
+  nextRaw: string,
+  countRaw: string,
+): { key: string; count: number } | null {
+  const prev = normalizeForm(prevRaw);
+  const next = normalizeForm(nextRaw);
+  const count = Number.parseInt(countRaw, 10);
+  if (!prev || !next || !Number.isFinite(count) || count <= 0) {
+    return null;
+  }
+
+  return { key: `${prev}\t${next}`, count };
+}
+
+function isReadonlyBigramMap(
+  lines: Iterable<string> | ReadonlyMap<string, number>,
+): lines is ReadonlyMap<string, number> {
+  return typeof (lines as ReadonlyMap<string, number>).get === "function";
+}
+
 function normalizeForm(word: string): string {
   return word.normalize("NFC").toLowerCase().trim();
+}
+
+function normalizeContextWord(word: string | undefined): string | undefined {
+  const normalized = normalizeForm(word ?? "");
+  return normalized || undefined;
+}
+
+function hasContext(context: SpellcheckContext | undefined): boolean {
+  return Boolean(normalizeContextWord(context?.prev) || normalizeContextWord(context?.next));
 }
 
 function isPureAscii(word: string): boolean {
@@ -179,6 +331,17 @@ function deletes1(word: string): string[] {
   return [...deletions];
 }
 
+function deletes2(word: string): string[] {
+  const deletions = new Set<string>();
+  for (const deletion of deletes1(word)) {
+    for (const nested of deletes1(deletion)) {
+      deletions.add(nested);
+    }
+  }
+
+  return [...deletions];
+}
+
 function collectEditCandidates(
   candidates: readonly string[] | undefined,
   query: string,
@@ -189,18 +352,41 @@ function collectEditCandidates(
   }
 
   for (const candidate of candidates) {
-    if (editDistanceAtMostOne(query, candidate)) {
+    if (boundedDamerauLevenshteinCap2(query, candidate) <= 2) {
       out.add(candidate);
     }
   }
 }
 
-function rankCandidates(query: string, candidates: readonly string[]): string[] {
+function rankCandidates(
+  query: string,
+  candidates: readonly string[],
+  engine: SpellcheckEngine,
+  context: SpellcheckContext | undefined,
+  distance: (query: string, candidate: string) => number,
+): string[] {
+  const normalizedContext = {
+    prev: normalizeContextWord(context?.prev),
+    next: normalizeContextWord(context?.next),
+  };
+
   return [...new Set(candidates)]
     .sort((left, right) => {
-      const edit = editDistance(query, left) - editDistance(query, right);
+      const edit = distance(query, left) - distance(query, right);
       if (edit !== 0) {
         return edit;
+      }
+
+      const contextScore =
+        contextScoreFor(engine, normalizedContext, right) -
+        contextScoreFor(engine, normalizedContext, left);
+      if (contextScore !== 0) {
+        return contextScore;
+      }
+
+      const freq = (engine.freq.get(right) ?? 0) - (engine.freq.get(left) ?? 0);
+      if (freq !== 0) {
+        return freq;
       }
 
       const diacritics = countLtDiacritics(left) - countLtDiacritics(right);
@@ -214,55 +400,88 @@ function rankCandidates(query: string, candidates: readonly string[]): string[] 
     .slice(0, MAX_CANDIDATES);
 }
 
+function restoreDistanceBand(query: string, candidate: string): number {
+  const queryChars = Array.from(query);
+  const candidateChars = Array.from(candidate);
+  if (queryChars.length !== candidateChars.length) {
+    return boundedDamerauLevenshteinCap2(query, candidate);
+  }
+
+  let substitutions = 0;
+  for (let index = 0; index < queryChars.length; index += 1) {
+    if (queryChars[index] !== candidateChars[index]) {
+      substitutions += 1;
+    }
+  }
+
+  return Math.min(substitutions, 3);
+}
+
+function contextScoreFor(
+  engine: SpellcheckEngine,
+  context: { prev?: string; next?: string },
+  candidate: string,
+): number {
+  if (engine.bigrams.size === 0) {
+    return 0;
+  }
+
+  const prevScore = context.prev
+    ? (engine.bigrams.get(`${context.prev}\t${candidate}`) ?? 0)
+    : 0;
+  const nextScore = context.next
+    ? (engine.bigrams.get(`${candidate}\t${context.next}`) ?? 0)
+    : 0;
+  return prevScore + nextScore;
+}
+
 function countLtDiacritics(word: string): number {
   return Array.from(word).filter((char) => LT_DIACRITIC_RE.test(char)).length;
 }
 
-function editDistanceAtMostOne(left: string, right: string): boolean {
-  return editDistance(left, right) <= 1;
-}
-
-function editDistance(left: string, right: string): number {
+function boundedDamerauLevenshteinCap2(left: string, right: string): number {
   const a = Array.from(left);
   const b = Array.from(right);
-  if (Math.abs(a.length - b.length) > 1) {
-    return 2;
+  if (Math.abs(a.length - b.length) > 2) {
+    return 3;
   }
 
-  if (a.length === b.length) {
-    let edits = 0;
-    for (let index = 0; index < a.length; index += 1) {
-      if (a[index] !== b[index]) {
-        edits += 1;
-        if (edits > 1) {
-          return edits;
-        }
+  const rows = a.length + 1;
+  const columns = b.length + 1;
+  const dp: number[][] = Array.from({ length: rows }, () =>
+    Array.from({ length: columns }, () => 3),
+  );
+
+  for (let row = 0; row < rows; row += 1) {
+    dp[row]![0] = Math.min(row, 3);
+  }
+  for (let column = 0; column < columns; column += 1) {
+    dp[0]![column] = Math.min(column, 3);
+  }
+
+  for (let row = 1; row < rows; row += 1) {
+    for (let column = 1; column < columns; column += 1) {
+      const substitutionCost = a[row - 1] === b[column - 1] ? 0 : 1;
+      let best = Math.min(
+        dp[row - 1]![column]! + 1,
+        dp[row]![column - 1]! + 1,
+        dp[row - 1]![column - 1]! + substitutionCost,
+      );
+
+      if (
+        row > 1 &&
+        column > 1 &&
+        a[row - 1] === b[column - 2] &&
+        a[row - 2] === b[column - 1]
+      ) {
+        best = Math.min(best, dp[row - 2]![column - 2]! + 1);
       }
+
+      dp[row]![column] = Math.min(best, 3);
     }
-    return edits;
   }
 
-  const shorter = a.length < b.length ? a : b;
-  const longer = a.length < b.length ? b : a;
-  let edits = 0;
-  let shortIndex = 0;
-  let longIndex = 0;
-
-  while (shortIndex < shorter.length && longIndex < longer.length) {
-    if (shorter[shortIndex] === longer[longIndex]) {
-      shortIndex += 1;
-      longIndex += 1;
-      continue;
-    }
-
-    edits += 1;
-    if (edits > 1) {
-      return edits;
-    }
-    longIndex += 1;
-  }
-
-  return edits + (longer.length - longIndex);
+  return Math.min(dp[a.length]![b.length]!, 3);
 }
 
 function reapplyCase(candidate: string, query: string): string {

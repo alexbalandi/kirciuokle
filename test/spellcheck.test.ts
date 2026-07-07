@@ -45,4 +45,47 @@ describe("SpellcheckEngine.suggest", () => {
     expect(engine.suggest("Zmogus").candidates).toContain("Žmogus");
     expect(engine.suggest("ZMOGUS").candidates).toContain("ŽMOGUS");
   });
+
+  it("ranks restorations by frequency within the same edit band", () => {
+    const frequencyEngine = createSpellcheckEngine(["aš\t100", "ąs\t1"]);
+
+    expect(frequencyEngine.suggest("as")).toMatchObject({
+      status: "restore",
+      candidates: ["aš", "ąs"],
+    });
+  });
+
+  it("suggests edit-distance-2 typo corrections and caps longer misses", () => {
+    const typoEngine = createSpellcheckEngine(["žmogus"]);
+
+    expect(typoEngine.suggest("žmogusxx")).toMatchObject({
+      status: "typo",
+      candidates: ["žmogus"],
+    });
+    expect(typoEngine.suggest("žmogusxxx")).toEqual({
+      status: "unknown",
+      candidates: [],
+    });
+  });
+
+  it("counts a neighbouring transposition as edit distance 1", () => {
+    const typoEngine = createSpellcheckEngine(["diena"]);
+
+    expect(typoEngine.suggest("deina")).toMatchObject({
+      status: "typo",
+      candidates: ["diena"],
+    });
+  });
+
+  it("uses loaded bigrams as a context tie-break before frequency", () => {
+    const contextEngine = createSpellcheckEngine(
+      ["aš\t100", "ąs\t1"],
+      ["ir\tąs\t10"],
+    );
+
+    expect(contextEngine.suggest("as", { prev: "ir" }).candidates).toEqual([
+      "ąs",
+      "aš",
+    ]);
+  });
 });

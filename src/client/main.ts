@@ -8,9 +8,18 @@ import type {
 import { parseMi, scoreTags } from "../shared/tags";
 import { formatProbability } from "./format";
 import {
-  suggest as suggestSpelling,
+  type SpellcheckContext,
   type SpellcheckSuggestion,
 } from "./spellcheck";
+import { suggestBatch } from "./spellcheckClient";
+import {
+  buildEditedSentenceSpans,
+  rebuildRenderedPartsWithFragments,
+  retileRenderedParts,
+  tokenizeForPreview,
+  type RenderedPartCore,
+  type TextEdit,
+} from "./preview";
 import {
   formatBytes,
   hasCachedLocalModel,
@@ -51,6 +60,7 @@ const DISPLAY_STORAGE_KEY = "accent-display";
 const LOCAL_TIER_STORAGE_KEY = "accent-local-tier";
 const LOCAL_READY_TIERS_STORAGE_KEY = "accent-local-ready-tiers-v1";
 const DETAILS_COLLAPSED_STORAGE_KEY = "accent-details-collapsed";
+const PREVIEW_SPELLCHECK_DEBOUNCE_MS = 600;
 const VLKK_PRIMER_URL =
   "https://www.vlkk.lt/aktualiausios-temos/tartis-ir-kirciavimas";
 const FOCUSABLE_SELECTOR =
@@ -63,10 +73,7 @@ type MessageKey = Extract<
   "errEmpty" | "errTooLong" | "errUpstream" | "errUnexpected"
 >;
 
-type RenderedPart = Part & {
-  current?: string;
-  sourceEnd?: number;
-  sourceStart?: number;
+type RenderedPart = RenderedPartCore & {
   spelling?: SpellcheckSuggestion;
   userChosen?: boolean;
 };
@@ -161,6 +168,7 @@ let activePopover: HTMLDivElement | null = null;
 let activeStatsPopover: HTMLDivElement | null = null;
 let isLoading = false;
 let spellcheckRequestId = 0;
+let previewSpellcheckTimer: number | undefined;
 let messageKey: MessageKey | null = null;
 let copyResetTimer: number | undefined;
 let copied = false;
@@ -228,6 +236,15 @@ textarea.addEventListener("input", () => {
   syncBoxHeights();
   updateCounter();
   updateFixAllButtonState();
+  schedulePreviewSpellcheck();
+});
+
+textarea.addEventListener("paste", () => {
+  requestAnimationFrame(() => {
+    window.clearTimeout(previewSpellcheckTimer);
+    previewSpellcheckTimer = undefined;
+    void runPreviewSpellcheck();
+  });
 });
 
 // Keep the two boxes the same height when the viewport (and thus wrapping)
@@ -370,7 +387,55 @@ if (accentMode === "local") {
   void enterLocalMode();
 }
 
+function schedulePreviewSpellcheck(): void {
+  window.clearTimeout(previewSpellcheckTimer);
+  previewSpellcheckTimer = window.setTimeout(() => {
+    previewSpellcheckTimer = undefined;
+    void runPreviewSpellcheck();
+  }, PREVIEW_SPELLCHECK_DEBOUNCE_MS);
+}
+
+async function runPreviewSpellcheck(): Promise<void> {
+  window.clearTimeout(previewSpellcheckTimer);
+  previewSpellcheckTimer = undefined;
+
+  if (isLoading) {
+    return;
+  }
+
+  const requestId = ++spellcheckRequestId;
+  const text = textarea.value;
+  closePopover();
+  closeStatsPopover();
+
+  if (text.trim().length === 0) {
+    renderedParts = [];
+    renderedSourceText = "";
+    showTaggerNotice(false);
+    renderResult();
+    updateCopyButtonState();
+    return;
+  }
+
+  if (canRewriteRenderedSource() && !isPreviewResult()) {
+    return;
+  }
+
+  renderedParts = tokenizeForPreview(text) as RenderedPart[];
+  renderedSourceText = text;
+  showTaggerNotice(false);
+  updateCopyButtonState();
+
+  await annotateUnknownWordsWithSpellcheck();
+  if (requestId === spellcheckRequestId) {
+    renderResult();
+  }
+}
+
 async function submitText(): Promise<void> {
+  window.clearTimeout(previewSpellcheckTimer);
+  previewSpellcheckTimer = undefined;
+  spellcheckRequestId += 1;
   const text = textarea.value;
   closePopover();
   closeStatsPopover();
@@ -450,32 +515,14 @@ async function accentTextLocal(text: string): Promise<AccentResponse> {
 }
 
 function applyAccentResponse(payload: AccentResponse): void {
-  let cursor = 0;
   renderedSourceText = textarea.value;
   spellcheckRequestId += 1;
-  renderedParts = payload.parts.map((part) => {
-    const sourceStart = cursor;
-    cursor += part.text.length;
-    const sourceEnd = cursor;
-
-    return {
-      ...part,
-      text: part.text.normalize("NFC"),
-      accented: part.accented?.normalize("NFC"),
-      variants: part.variants?.map((variant) => ({
-        ...variant,
-        form: variant.form.normalize("NFC"),
-      })),
-      current: (part.accented ?? part.text).normalize("NFC"),
-      sourceEnd,
-      sourceStart,
-    };
-  });
+  renderedParts = retileRenderedParts(payload.parts) as RenderedPart[];
 
   showTaggerNotice(payload.tagger === "unavailable");
   renderResult();
   void annotateUnknownWordsWithSpellcheck();
-  copyButton.disabled = renderedParts.length === 0;
+  updateCopyButtonState();
 }
 
 async function setAccentMode(nextMode: AccentMode): Promise<void> {
@@ -691,6 +738,7 @@ function renderResult(): void {
     resultOutput.classList.add("is-empty");
     resultOutput.textContent = UI[lang].resultEmpty;
     updateFixAllButtonState();
+    updateCopyButtonState();
     syncBoxHeights();
     return;
   }
@@ -784,6 +832,7 @@ function renderResult(): void {
   });
 
   updateFixAllButtonState();
+  updateCopyButtonState();
   syncBoxHeights();
 }
 
@@ -797,30 +846,35 @@ async function annotateUnknownWordsWithSpellcheck(): Promise<void> {
 
   if (targets.length === 0) {
     updateFixAllButtonState();
+    renderResult();
     return;
   }
 
-  const results = await Promise.all(
-    targets.map(async ({ index, part }) => {
-      try {
-        return {
-          index,
-          spelling: await suggestSpelling(part.text),
-          text: part.text,
-        };
-      } catch {
-        return {
-          index,
-          spelling: { status: "unknown", candidates: [] } satisfies SpellcheckSuggestion,
-          text: part.text,
-        };
-      }
-    }),
-  );
+  // One batched round-trip to the spellcheck Web Worker: all words are checked
+  // off the main thread, so the ~580k engine's first build never freezes the UI.
+  const words = targets.map(({ index, part }) => {
+    const context = spellingContextForIndex(index);
+    return { word: part.text, prev: context?.prev, next: context?.next };
+  });
+
+  let suggestions: SpellcheckSuggestion[];
+  try {
+    suggestions = await suggestBatch(words);
+  } catch {
+    suggestions = [];
+  }
 
   if (requestId !== spellcheckRequestId) {
     return;
   }
+
+  const results = targets.map(({ index, part }, position) => ({
+    index,
+    spelling:
+      suggestions[position] ??
+      ({ status: "unknown", candidates: [] } satisfies SpellcheckSuggestion),
+    text: part.text,
+  }));
 
   let changed = false;
   results.forEach(({ index, spelling, text }) => {
@@ -838,6 +892,27 @@ async function annotateUnknownWordsWithSpellcheck(): Promise<void> {
   } else {
     updateFixAllButtonState();
   }
+}
+
+function spellingContextForIndex(index: number): SpellcheckContext | undefined {
+  const prev = nearestWordText(index, -1);
+  const next = nearestWordText(index, 1);
+  return prev || next ? { prev, next } : undefined;
+}
+
+function nearestWordText(index: number, direction: -1 | 1): string | undefined {
+  for (
+    let cursor = index + direction;
+    cursor >= 0 && cursor < renderedParts.length;
+    cursor += direction
+  ) {
+    const part = renderedParts[cursor];
+    if (part?.type === "word") {
+      return part.text;
+    }
+  }
+
+  return undefined;
 }
 
 function isCorrectableSpelling(
@@ -863,7 +938,10 @@ function shouldShowCorrection(part: RenderedPart): boolean {
   if (spelling.status === "restore") {
     return true;
   }
-  return spelling.status === "typo" && Boolean(part.unknown);
+  if (spelling.status === "typo") {
+    return part.preview === true || Boolean(part.unknown);
+  }
+  return false;
 }
 
 function openCorrectionPopover(anchor: HTMLElement, index: number): void {
@@ -936,15 +1014,16 @@ async function applySpellingCorrection(index: number, candidate: string): Promis
     return;
   }
 
-  replaceTextareaRanges([
+  const edits = [
     {
       start: part.sourceStart,
       end: part.sourceEnd,
       text: candidate.normalize("NFC"),
     },
-  ]);
+  ];
+  replaceTextareaRanges(edits);
   closePopover();
-  await submitText();
+  await reaccentuateEdits(edits);
 }
 
 async function fixAllRestores(): Promise<void> {
@@ -956,7 +1035,7 @@ async function fixAllRestores(): Promise<void> {
 
   closePopover();
   replaceTextareaRanges(replacements);
-  await submitText();
+  await reaccentuateEdits(replacements);
 }
 
 function singleCandidateRestores(): Array<{ start: number; end: number; text: string }> {
@@ -995,13 +1074,97 @@ function replaceTextareaRanges(
   });
 
   textarea.value = nextText;
-  renderedSourceText = "";
   updateCounter();
   syncBoxHeights();
 }
 
 function canRewriteRenderedSource(): boolean {
   return Boolean(renderedSourceText) && textarea.value === renderedSourceText;
+}
+
+function isPreviewResult(): boolean {
+  return renderedParts.length > 0 && renderedParts.every((part) => part.preview === true);
+}
+
+async function reaccentuateEdits(edits: TextEdit[]): Promise<void> {
+  const oldText = renderedSourceText;
+  const oldParts = renderedParts;
+
+  if (
+    accentMode === "web" ||
+    isPreviewResult() ||
+    !oldText ||
+    oldParts.length === 0
+  ) {
+    await submitText();
+    return;
+  }
+
+  let scopedLoading = false;
+  const fallbackToSubmit = async (): Promise<void> => {
+    if (scopedLoading) {
+      scopedLoading = false;
+      setLoading(false);
+    }
+    await submitText();
+  };
+
+  try {
+    const spans = buildEditedSentenceSpans(oldText, oldParts, edits, textarea.value);
+    if (!spans || spans.length === 0) {
+      await fallbackToSubmit();
+      return;
+    }
+
+    setLoading(true);
+    scopedLoading = true;
+    const fragments: Part[][] = [];
+    for (const span of spans) {
+      fragments.push(
+        await accentFragment(textarea.value.slice(span.newStart, span.newEnd)),
+      );
+    }
+
+    const rebuilt = rebuildRenderedPartsWithFragments(
+      oldParts,
+      spans,
+      fragments,
+      textarea.value,
+    );
+    if (!rebuilt) {
+      await fallbackToSubmit();
+      return;
+    }
+
+    renderedParts = rebuilt as RenderedPart[];
+    renderedSourceText = textarea.value;
+    spellcheckRequestId += 1;
+    showTaggerNotice(false);
+    renderResult();
+    await annotateUnknownWordsWithSpellcheck();
+    updateCopyButtonState();
+  } catch {
+    await fallbackToSubmit();
+    return;
+  } finally {
+    if (scopedLoading) {
+      setLoading(false);
+    }
+  }
+}
+
+async function accentFragment(text: string): Promise<Part[]> {
+  if (!text) {
+    return [];
+  }
+
+  const engine = await ensureLocalEngine();
+  const result = await engine.accent(text, (status) => {
+    localRunStatus = status;
+    renderLocalStatus();
+  });
+  localStats = result.stats;
+  return result.parts;
 }
 
 function openVariantPopover(anchor: HTMLElement, index: number): void {
@@ -1533,6 +1696,10 @@ function positionPopover(popover: HTMLElement, anchor: HTMLElement): void {
 }
 
 async function copyResult(): Promise<void> {
+  if (isPreviewResult()) {
+    return;
+  }
+
   const text = renderedParts.map(getVisibleText).join("").normalize("NFC");
   if (!text) {
     return;
@@ -1562,6 +1729,7 @@ function setLoading(nextLoading: boolean): void {
   copied = false;
   updateAccentButtonState();
   updateFixAllButtonState();
+  updateCopyButtonState();
   renderIconButtonLabel(
     accentButton,
     nextLoading ? UI[lang].accentButtonLoading : UI[lang].stressAllLabel,
@@ -1579,6 +1747,10 @@ function updateFixAllButtonState(): void {
     isLoading ||
     (accentMode === "local" && isLocalModelUnavailableBeforeReady()) ||
     singleCandidateRestores().length === 0;
+}
+
+function updateCopyButtonState(): void {
+  copyButton.disabled = isLoading || renderedParts.length === 0 || isPreviewResult();
 }
 
 function renderIconButtonLabel(
@@ -1675,6 +1847,7 @@ function renderUi(): void {
   renderIconButtonLabel(fixAllButton, strings.fixAllLabel, strings.fixAllLabel);
   updateAccentButtonState();
   updateFixAllButtonState();
+  updateCopyButtonState();
   copyButton.textContent = copied ? strings.copied : strings.copyButton;
   resultHeading.textContent = strings.resultHeading;
   renderDisplayControl(strings);

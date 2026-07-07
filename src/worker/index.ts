@@ -41,7 +41,7 @@ export default {
         return json<ErrorResponse>({ error: "API maršrutas nerastas." }, 404);
       }
 
-      return withHtmlIsolationHeaders(await env.ASSETS.fetch(request));
+      return withAssetIsolationHeaders(await env.ASSETS.fetch(request));
     } catch (error) {
       if (error instanceof UpstreamError) {
         return json<ErrorResponse>({ error: error.message }, 502);
@@ -135,15 +135,21 @@ function resolveRange(range: R2Range, size: number): { start: number; end: numbe
   return { start, end: Math.min(size - 1, start + length - 1) };
 }
 
-function withHtmlIsolationHeaders(response: Response): Response {
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.toLowerCase().includes("text/html")) {
-    return response;
+function withAssetIsolationHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  const contentType = (headers.get("content-type") ?? "").toLowerCase();
+
+  // The site is cross-origin isolated (needed for the ONNX model). A dedicated
+  // Web Worker created from a require-corp document — the spellcheck worker —
+  // only starts if its *script* response carries COEP; same-origin JS/CSS the
+  // page loads directly are exempt (CORP), but workers are not. So stamp COEP +
+  // CORP on every asset, and COOP additionally on the HTML document.
+  headers.set("Cross-Origin-Embedder-Policy", "require-corp");
+  headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  if (contentType.includes("text/html")) {
+    headers.set("Cross-Origin-Opener-Policy", "same-origin");
   }
 
-  const headers = new Headers(response.headers);
-  headers.set("Cross-Origin-Embedder-Policy", "require-corp");
-  headers.set("Cross-Origin-Opener-Policy", "same-origin");
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

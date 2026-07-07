@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
+    "prebuild": "node scripts/check_spellcheck_assets.mjs",
     "build": "vite build",
     "build:client": "vite build",
     "check": "tsc --build && vitest run --config vitest.config.ts",
-    "deploy:dev": "vite build && wrangler deploy --config wrangler.jsonc --env dev",
-    "deploy:prod": "vite build && wrangler deploy --config wrangler.jsonc",
+    "deploy:dev": "npm run build && wrangler deploy --config wrangler.jsonc --env dev",
+    "deploy:prod": "npm run build && wrangler deploy --config wrangler.jsonc",
     "deploy": "echo 'Use deploy:dev (dev, auto) or deploy:prod (prod, requires explicit owner approval). See AGENTS.md.' && exit 1",
     "cf-typegen": "wrangler types"
   },

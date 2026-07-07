@@ -53,10 +53,24 @@ If a prod deploy ever goes wrong, roll back to the prior version:
   470 MB heavy tier needs R2 multipart. Full runbook + tier details in
   [`local/README.md`](local/README.md). The canonical copies are also on
   Hugging Face (`alexbalandi/litlat-bert-lithuanian-accentuator`, `pruned/`).
+- **Cross-origin isolation must cover Web Worker scripts, not just HTML.** The
+  site is `COEP: require-corp` (for the ONNX model), and a dedicated Web Worker
+  (the spellcheck worker) only starts if its *script* response also carries
+  `Cross-Origin-Embedder-Policy`. `withAssetIsolationHeaders` stamps COEP+CORP on
+  every asset for this reason. It bites **only on the deployed Worker** — Vite
+  dev serves every asset with COEP so localhost always works; verify worker-backed
+  features on the dev URL, not just `npm run dev`. (`run_worker_first: true` is
+  what lets the Worker add these headers to static assets at all.)
 
 ## Repo conventions
 
 - Never commit generated model weights or the `local-model/` bundle (gitignored)
   — see [`local/README.md`](local/README.md).
+- The spellcheck dictionaries (`public/spellcheck-lt.txt`, `spellcheck-bigrams.txt`)
+  are the same kind of thing: generated build artifacts, gitignored, produced by
+  `uv run scripts/regenerate_spellcheck_dicts.py` from the local sqlite DBs + the
+  hermitdave frequency list. They must exist in `public/` before a build; `npm run
+  build` fails fast if they're missing (`scripts/check_spellcheck_assets.mjs`), and
+  `deploy:dev`/`deploy:prod` go through `npm run build` so the guard always runs.
 - Keep prod's behavior unchanged unless explicitly asked; the human-written
   README section reflects the owner's own words — edit only its formatting.
