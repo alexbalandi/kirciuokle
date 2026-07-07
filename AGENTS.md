@@ -62,6 +62,14 @@ If a prod deploy ever goes wrong, roll back to the prior version:
   dev serves every asset with COEP so localhost always works; verify worker-backed
   features on the dev URL, not just `npm run dev`. (`run_worker_first: true` is
   what lets the Worker add these headers to static assets at all.)
+- **The PWA service worker is sticky and must preserve isolation.**
+  [`public/sw.js`](public/sw.js) caches the app shell **in production only** (dev
+  unregisters it). It must return responses *verbatim* — a SW that builds its own
+  `Response` for a navigation drops COOP/COEP and silently kills cross-origin
+  isolation → the threaded ONNX runtime (Local mode) fails. After any SW change,
+  verify `crossOriginIsolated` is still `true` **with the SW controlling the page**
+  on the dev URL (reload once so the SW serves the navigation). Since it's sticky,
+  bump the `app-shell-v*` cache name to force returning visitors onto a fresh shell.
 
 ## Repo conventions
 
@@ -73,5 +81,10 @@ If a prod deploy ever goes wrong, roll back to the prior version:
   hermitdave frequency list. They must exist in `public/` before a build; `npm run
   build` fails fast if they're missing (`scripts/check_spellcheck_assets.mjs`), and
   `deploy:dev`/`deploy:prod` go through `npm run build` so the guard always runs.
+- **PWA icons are committed** (unlike the model/dicts): small, stable brand assets
+  under `public/` (`icon-*.png`, `apple-touch-icon.png`, `favicon-*`) plus
+  `design/icon-master.png`, with explicit `!` exceptions to the blanket `*.png`
+  gitignore rule. Regenerate from the master with `uv run
+  scripts/generate_pwa_icons.py` if the art changes.
 - Keep prod's behavior unchanged unless explicitly asked; the human-written
   README section reflects the owner's own words — edit only its formatting.

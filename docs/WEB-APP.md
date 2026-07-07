@@ -14,7 +14,6 @@ Web mode is dictionary-first (`src/worker/localAccent.ts`), not a raw VDU passth
 
 ## Web mode: VDU vs UDPipe
 
-Both external services are called **server-side from the Worker**
 **VDU** is called server-side from the Worker ([vdu.ts](../src/worker/vdu.ts)) — from
 Cloudflare's shared egress IP. **UDPipe** is now called from the browser (from each
 user's own IP), with a server-side fallback ([udpipe.ts](../src/worker/udpipe.ts)).
@@ -74,9 +73,14 @@ two static files. Full design + rationale: [SPEC56.md](SPEC56.md).
   `kalbeti`→`kalbėti` even when `kalbėti` isn't indexed). Then every candidate is run
   back through Hunspell and **dropped if it isn't itself a valid word**: the corpus
   wordlist carries diacritic-less noise like `pakalbeti`, and we must never offer a
-  "fix" that is itself misspelled. (Double errors — `pokalbeti` = wrong vowel *and*
-  dropped diacritic — still can't always be reached; Hunspell offers its nearest valid
-  word instead.)
+  "fix" that is itself misspelled.
+- **Fold-neighbour probe for double errors.** A real letter typo *plus* dropped
+  diacritics — `pokalbeti` → `pakalbėti` (`o→a` **and** the ė) — is invisible to a
+  plain fold lookup (`fold(pokalbeti)` ≠ `fold(pakalbėti)`), and Hunspell's own
+  suggester won't cross two edits. So for rejected words we also look the fold index
+  up over the **edit-1 neighbours of the query's fold** (`pokalbeti` → `pakalbeti` =
+  `fold(pakalbėti)` → the real word). Pure Map lookups, still validity-filtered. The
+  only correct form now out of reach is one that isn't in the ~162k wordlist at all.
 - **Ranking**: edit-distance band → context bigram (`spellcheck-bigrams.txt`) →
   frequency → deterministic tie-breaks. Statuses: `restore` (ASCII→diacritics,
   `as`→`aš`, fired even for Hunspell-accepted ASCII words when the diacritic form
@@ -102,3 +106,42 @@ two static files. Full design + rationale: [SPEC56.md](SPEC56.md).
   accentuation). **Fixes re-accentuate only the edited sentence** — an offset re-tile
   + reconstruction check guarantees left/right character alignment, with a full-text
   re-accentuation fallback if it can't.
+- **Fixes are undoable.** A single fix and **fix-all** are each applied through
+  `document.execCommand("insertText")` over the minimal changed span, so each is one
+  native **Ctrl+Z** step (and redo re-applies). Assigning `textarea.value` directly —
+  the obvious approach — would wipe the undo stack, so don't
+  ([`applyUndoableTextareaEdit`](../src/client/main.ts)).
+
+## Installable app (PWA)
+
+The site is an installable Progressive Web App — "Add to Home Screen" / the desktop
+install icon. Beyond the app window, **installing is what makes the local model
+durable**: Chrome only grants `navigator.storage.persist()` to engaged/installed
+origins, and until it does, the Cache-API-stored model (~130–450 MB) sits in the
+best-effort eviction pool and can vanish under disk pressure. We request persistence
+whenever the model cache opens ([`ensurePersistentStorage`](../src/client/local/assets.ts));
+installed users get it granted and stop re-downloading the model.
+
+- **Manifest + icons** — `public/manifest.webmanifest` (standalone, teal `#09706c`
+  theme, `any` + `maskable` icons) linked from `index.html` with the apple-touch and
+  favicon tags. Icons are **committed** (small, stable) and regenerated from a single
+  master by `uv run scripts/generate_pwa_icons.py`
+  ([`design/icon-master.png`](../design/icon-master.png) → `public/icon-*.png`,
+  `apple-touch-icon.png`, `favicon-*`). The `*.png` gitignore rule has explicit
+  exceptions for these. Re-run the script if the master changes.
+- **Service worker** ([public/sw.js](../public/sw.js)) — a *browser* service worker
+  (not a Cloudflare Worker) that caches the app shell for offline use.
+  **Registered in production only** ([main.ts](../src/client/main.ts)); dev unregisters
+  any stale one so it can't fight Vite HMR.
+  - It **returns responses verbatim** — never rebuilds them — so the COOP/COEP headers
+    that give the page cross-origin isolation (required for the threaded ONNX runtime /
+    `SharedArrayBuffer`) survive being served from the SW. This is the one invariant to
+    preserve: a SW that constructs its own `Response` for a navigation would silently
+    break Local mode. Verified on deploy that `crossOriginIsolated` stays `true` while
+    the SW controls the page.
+  - It **bypasses the large self-managed assets** (`/local-model/`, `.onnx`, `.wasm`,
+    the spellcheck dictionaries, `/api/`) — those have their own Cache API storage;
+    double-caching them in the shell cache would waste quota and cause eviction.
+  - Navigations are **network-first** (updates land on the next load), assets are
+    cache-first. To force every returning visitor onto a fresh shell, bump the
+    `app-shell-v*` cache name in `sw.js`.
