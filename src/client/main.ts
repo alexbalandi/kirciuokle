@@ -238,7 +238,15 @@ displayButtons.forEach((button) => {
   });
 });
 
+// Set while we apply a spelling fix through execCommand (which fires `input`).
+// The fix path drives its own updates + spellcheck, so let it own them rather than
+// double-running here.
+let applyingUndoableEdit = false;
+
 textarea.addEventListener("input", () => {
+  if (applyingUndoableEdit) {
+    return;
+  }
   syncBoxHeights();
   updateCounter();
   updateFixAllButtonState();
@@ -1244,6 +1252,51 @@ function autofixableRestores(): Array<{ start: number; end: number; text: string
   });
 }
 
+// Replace the textarea's whole value while preserving the browser's native undo
+// history, so a single Ctrl+Z reverts the entire fix. `textarea.value = ...` clears
+// the undo stack; `execCommand("insertText")` records one undo entry and is the only
+// portable way to do an undoable programmatic edit in a textarea. We collapse the
+// change to its minimal differing span (common prefix/suffix stripped) and replace
+// exactly that in one insert — so both a single-word fix and a fix-all become one
+// undo step. Falls back to a plain assignment if execCommand is unavailable/fails.
+function applyUndoableTextareaEdit(oldText: string, nextText: string): void {
+  if (oldText === nextText) {
+    return;
+  }
+
+  const maxPrefix = Math.min(oldText.length, nextText.length);
+  let prefix = 0;
+  while (prefix < maxPrefix && oldText[prefix] === nextText[prefix]) {
+    prefix += 1;
+  }
+  let suffix = 0;
+  const maxSuffix = Math.min(oldText.length - prefix, nextText.length - prefix);
+  while (
+    suffix < maxSuffix &&
+    oldText[oldText.length - 1 - suffix] === nextText[nextText.length - 1 - suffix]
+  ) {
+    suffix += 1;
+  }
+
+  const inserted = nextText.slice(prefix, nextText.length - suffix);
+
+  applyingUndoableEdit = true;
+  let applied = false;
+  try {
+    textarea.focus({ preventScroll: true });
+    textarea.setSelectionRange(prefix, oldText.length - suffix);
+    applied = document.execCommand("insertText", false, inserted);
+  } catch {
+    applied = false;
+  } finally {
+    applyingUndoableEdit = false;
+  }
+
+  if (!applied || textarea.value !== nextText) {
+    textarea.value = nextText; // correctness over undo if the platform refuses
+  }
+}
+
 function replaceTextareaRanges(
   replacements: Array<{ start: number; end: number; text: string }>,
 ): void {
@@ -1253,14 +1306,17 @@ function replaceTextareaRanges(
   const { scrollTop, scrollLeft } = textarea;
   const { scrollX, scrollY } = window;
 
-  let nextText = textarea.value;
+  const oldText = textarea.value;
+  let nextText = oldText;
   const sorted = [...replacements].sort((left, right) => right.start - left.start);
 
   sorted.forEach(({ start, end, text }) => {
     nextText = `${nextText.slice(0, start)}${text}${nextText.slice(end)}`;
   });
 
-  textarea.value = nextText;
+  // Apply as a single undoable edit so the whole fix (one word or fix-all) reverts
+  // with one Ctrl+Z. Assigning `.value` directly would wipe the native undo stack.
+  applyUndoableTextareaEdit(oldText, nextText);
   textarea.scrollTop = scrollTop;
   textarea.scrollLeft = scrollLeft;
   updateCounter();
