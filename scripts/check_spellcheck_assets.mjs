@@ -3,7 +3,12 @@
 // 404s. Fail the build fast with a pointer to the regenerate script instead.
 import { existsSync } from "node:fs";
 
-const required = ["public/spellcheck-lt.txt", "public/spellcheck-bigrams.txt"];
+const required = [
+  "public/spellcheck-lt.txt",
+  "public/spellcheck-bigrams.txt",
+  "public/lt.dic",
+  "public/lt.aff",
+];
 const missing = required.filter((path) => !existsSync(path));
 
 if (missing.length > 0) {

@@ -159,4 +159,16 @@ describe("SpellcheckEngine — real-text robustness", () => {
     expect(suggestion.status).toBe("restore");
     expect(suggestion.candidates).toContain("Ačiū");
   });
+
+  it("uses an injected accept predicate (hunspell) over the wordlist", () => {
+    // "sąjungininkių" isn't in the wordlist, but hunspell accepts it → not flagged.
+    const engine = createSpellcheckEngine(["namas\t50"]);
+    const accepted = new Set(["sąjungininkių", "namas"]);
+    engine.setAcceptPredicate((w) => accepted.has(w));
+
+    expect(engine.suggest("sąjungininkių").status).toBe("ok");
+    // the predicate is case-aware: it receives the stress-stripped, cased word
+    engine.setAcceptPredicate((w) => w === "Lietuvoje");
+    expect(engine.suggest("Lietuvojè").status).toBe("ok"); // grave stripped, case kept
+  });
 });

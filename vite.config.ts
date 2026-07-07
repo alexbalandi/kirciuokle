@@ -13,7 +13,18 @@ const localModelDir = path.resolve(rootDir, "local-model");
 const localModelPrefix = "/local-model/";
 
 export default defineConfig({
-  plugins: [localModelDevServer(), cloudflare()],
+  plugins: [forceHunspellCjs(), localModelDevServer(), cloudflare()],
+  // Bundle hunspell-asm's CJS subtree, not its ESM one — see forceHunspellCjs().
+  // Pre-bundle the CJS entry so dev serves it as browser ESM.
+  optimizeDeps: {
+    include: ["hunspell-asm/dist/cjs/index.js"],
+  },
+  // The spellcheck web worker is bundled as its own rollup sub-build in `vite
+  // build`, which does NOT inherit root resolver plugins — register the CJS
+  // forcer here too or the prod worker silently ships the broken ESM build.
+  worker: {
+    plugins: () => [forceHunspellCjs()],
+  },
   server: {
     fs: {
       allow: [rootDir, localModelDir],
@@ -24,6 +35,27 @@ export default defineConfig({
     },
   },
 });
+
+// hunspell-asm and its dep emscripten-wasm-loader ship broken ESM builds: they
+// use the `import * as X; X()` anti-pattern for CJS deps (nanoid, its emscripten
+// runtime), which becomes "calling a namespace object" at runtime under a
+// bundler. Their CJS builds use require() and work. Rollup prefers the `module`
+// (ESM) field, so force these specific packages to their CJS `main` instead.
+// getroot has no `module` field, so it already resolves to CJS.
+function forceHunspellCjs() {
+  const cjsEntry: Record<string, string> = {
+    "hunspell-asm": "node_modules/hunspell-asm/dist/cjs/index.js",
+    "emscripten-wasm-loader": "node_modules/emscripten-wasm-loader/dist/cjs/index.js",
+  };
+  return {
+    name: "force-hunspell-cjs",
+    enforce: "pre" as const,
+    resolveId(source: string) {
+      const entry = cjsEntry[source];
+      return entry ? path.resolve(rootDir, entry) : null;
+    },
+  };
+}
 
 function localModelDevServer() {
   return {

@@ -112,6 +112,11 @@ export class SpellcheckEngine {
   readonly deleteIndex = new Map<string, string[]>();
 
   private readonly forms: string[] = [];
+  // Comprehensive accept check (the hunspell dictionary via nspell in the worker).
+  // When unset (tests, or if hunspell fails to load) the wordlist `valid` set is
+  // used as a fallback. Receives the stress-stripped word WITH case (hunspell is
+  // case-aware for proper nouns).
+  private acceptPredicate?: (casedWord: string) => boolean;
 
   constructor(
     forms: Iterable<string>,
@@ -166,13 +171,26 @@ export class SpellcheckEngine {
     }
   }
 
+  /** Provide the comprehensive accept check (hunspell). Word is stress-stripped,
+      case preserved. */
+  setAcceptPredicate(fn: (casedWord: string) => boolean): void {
+    this.acceptPredicate = fn;
+  }
+
+  private isAccepted(casedWord: string, normalized: string): boolean {
+    return this.acceptPredicate
+      ? this.acceptPredicate(casedWord)
+      : this.valid.has(normalized);
+  }
+
   suggest(word: string, context?: SpellcheckContext): SpellcheckSuggestion {
-    const normalized = normalizeForm(word);
+    const cased = stripStress(word);
+    const normalized = cased.toLowerCase();
     if (!normalized || Array.from(normalized).length < MIN_CHECK_LENGTH) {
       return { status: "ok", candidates: [] };
     }
 
-    const inValid = this.valid.has(normalized);
+    const inValid = this.isAccepted(cased, normalized);
 
     // Restore (ASCII → diacritics), ranked frequency-first so the most common real
     // word wins (aciu → ačiū 14413, not ačiu 83). Fires when the word isn't
@@ -359,13 +377,14 @@ function isReadonlyBigramMap(
   return typeof (lines as ReadonlyMap<string, number>).get === "function";
 }
 
+// Strip combining stress marks but KEEP case — for the hunspell accept check, which
+// is case-aware (proper nouns are capitalised in the dictionary).
+function stripStress(word: string): string {
+  return word.normalize("NFD").replace(STRESS_MARKS_RE, "").normalize("NFC").trim();
+}
+
 function normalizeForm(word: string): string {
-  return word
-    .normalize("NFD")
-    .replace(STRESS_MARKS_RE, "")
-    .normalize("NFC")
-    .toLowerCase()
-    .trim();
+  return stripStress(word).toLowerCase();
 }
 
 function startsWithUppercase(word: string): boolean {

@@ -300,6 +300,40 @@ and a citation when one is standard.
 }
 ```
 
+## Lithuanian hunspell dictionary (ispell-lt)
+
+- What it is: the Lithuanian hunspell/myspell affix and dictionary files (`.aff`
+  + `.dic`) originating from the ispell-lt project, obtained through the
+  `wooorm/dictionaries` distribution.
+- License: BSD-3-Clause, Copyright (c) 2000-2020 Albertas Agejevas and
+  contributors.
+- How this project uses it: shipped as `public/lt.aff` and `public/lt.dic`
+  (gitignored build artifacts fetched by
+  `scripts/regenerate_spellcheck_dicts.py`) and loaded by the client-side
+  spellcheck web worker as the authoritative "is this a valid Lithuanian word"
+  morphology check, so real inflected text is not false-flagged. It is not used
+  for accentuation.
+- Attribution line: Lithuanian spellcheck dictionary from ispell-lt (Albertas
+  Agejevas and contributors) via wooorm/dictionaries, BSD-3-Clause.
+- Citation: dictionaries/lt, https://github.com/wooorm/dictionaries.
+
+## hunspell-asm and Hunspell
+
+- What it is: `hunspell-asm` (the Hunspell spell checker compiled to
+  WebAssembly with a JavaScript wrapper) and the underlying Hunspell engine.
+- License: hunspell-asm is MIT; Hunspell is tri-licensed GPL-2.0 / LGPL-2.1 /
+  MPL-1.1 and is used here as a dynamically-loaded library under its
+  LGPL/MPL terms.
+- How this project uses it: bundled into the spellcheck web worker to run the
+  Lithuanian hunspell dictionary entirely in the browser, so nothing leaves the
+  user's device. The published ESM build calls CJS deps as if callable, which
+  breaks under bundlers, so the CJS build is bundled instead (see
+  `vite.config.ts`).
+- Attribution line: In-browser spell checking by hunspell-asm (MIT) wrapping
+  Hunspell (GPL/LGPL/MPL), https://github.com/kwonoj/hunspell-asm.
+- Citation: hunspell-asm, https://github.com/kwonoj/hunspell-asm; Hunspell,
+  https://hunspell.github.io/.
+
 ## Scope Note
 
 Repository code is public domain under The Unlicense. Data, services, corpora,

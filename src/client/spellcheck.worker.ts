@@ -1,16 +1,27 @@
 // Pure client-side spellcheck worker — a standard browser Web Worker (NOT a
-// Cloudflare Worker). It builds the ~580k-form engine and answers lookups off
-// the main thread, so downloading + parsing + indexing never freezes the UI.
-// The wordlist/bigram files are stored with the Cache API, so they download once
-// and are reused every session (works offline thereafter), just like the model.
+// Cloudflare Worker). It builds the correction engine + a real hunspell instance
+// and answers lookups off the main thread, so downloading + parsing + indexing
+// never freezes the UI. The wordlist/bigram/dictionary files are stored with the
+// Cache API, so they download once and are reused every session (works offline
+// thereafter), just like the model.
+// Import the CJS build explicitly (see vite.config.ts): the ESM build is broken
+// under bundlers. Types come from the package's declaration via the ambient shim
+// in hunspell-asm-cjs.d.ts.
+import { loadModule } from "hunspell-asm/dist/cjs/index.js";
 import { SpellcheckEngine } from "./spellcheck";
 import type { SpellcheckContext, SpellcheckSuggestion } from "./spellcheck";
 
 const WORDLIST_URL = "/spellcheck-lt.txt";
 const BIGRAMS_URL = "/spellcheck-bigrams.txt";
-// Bump this suffix whenever the shipped wordlist/bigrams change so cached copies
-// are refreshed (stale caches from older suffixes are pruned on startup).
-const CACHE_NAME = "spellcheck-assets-v4";
+// Comprehensive accept dictionary (BSD-3 Lithuanian hunspell, ispell-lt): lemmas +
+// affix rules, applied by real hunspell (compiled to wasm). This is authoritative
+// morphology — every valid inflected form is recognised, so real text isn't
+// false-flagged the way a finite corpus wordlist would be.
+const HUNSPELL_AFF_URL = "/lt.aff";
+const HUNSPELL_DIC_URL = "/lt.dic";
+// Bump this suffix whenever the shipped assets change so cached copies are refreshed
+// (stale caches from older suffixes are pruned on startup).
+const CACHE_NAME = "spellcheck-assets-v6";
 
 type WorkerRequest = {
   id: number;
@@ -30,6 +41,10 @@ type WorkerScope = {
 };
 
 const scope = self as unknown as WorkerScope;
+
+function postDiag(diag: unknown): void {
+  (scope.postMessage as (m: unknown) => void)({ diag });
+}
 
 let enginePromise: Promise<SpellcheckEngine> | null = null;
 let bigramsPromise: Promise<void> | null = null;
@@ -70,10 +85,45 @@ function toLines(text: string): string[] {
     .filter(Boolean);
 }
 
+async function buildHunspell(
+  aff: string,
+  dic: string,
+): Promise<(word: string) => boolean> {
+  const factory = await loadModule();
+  const encoder = new TextEncoder();
+  const affPath = factory.mountBuffer(encoder.encode(aff), "lt.aff");
+  const dicPath = factory.mountBuffer(encoder.encode(dic), "lt.dic");
+  const hunspell = factory.create(affPath, dicPath);
+  return (word) => hunspell.spell(word);
+}
+
 function loadEngine(): Promise<SpellcheckEngine> {
-  enginePromise ??= cachedText(WORDLIST_URL).then(
-    (text) => new SpellcheckEngine(toLines(text)),
-  );
+  enginePromise ??= (async () => {
+    const [wordlist, aff, dic] = await Promise.all([
+      cachedText(WORDLIST_URL),
+      cachedText(HUNSPELL_AFF_URL).catch(() => ""),
+      cachedText(HUNSPELL_DIC_URL).catch(() => ""),
+    ]);
+    const engine = new SpellcheckEngine(toLines(wordlist));
+    // The hunspell dictionary is the authoritative accept check; if it fails to
+    // load/build, the engine falls back to the wordlist's own `valid` set.
+    if (aff && dic) {
+      try {
+        const spell = await buildHunspell(aff, dic);
+        engine.setAcceptPredicate(spell);
+        postDiag({ hunspell: "active", affLen: aff.length, dicLen: dic.length });
+      } catch (e) {
+        postDiag({
+          hunspell: "failed",
+          error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+          stack: e instanceof Error ? (e.stack || "").split("\n").slice(0, 5) : [],
+        });
+      }
+    } else {
+      postDiag({ hunspell: "no-dict", affLen: aff.length, dicLen: dic.length });
+    }
+    return engine;
+  })();
   return enginePromise;
 }
 

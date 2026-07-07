@@ -4,23 +4,29 @@
 # ///
 """Regenerate the client-side spellcheck dictionaries (BUILD ARTIFACTS).
 
-The two files this produces are generated data, NOT source — like the ONNX model,
+The files this produces are generated data, NOT source — like the ONNX model,
 they are gitignored and must be regenerated locally before a build/deploy:
 
     uv run scripts/regenerate_spellcheck_dicts.py
 
-Outputs (both under public/, copied into the site by `vite build`):
-  * spellcheck-lt.txt      one line per surface form  "<form>\t<freq>"; the union
-                           of lexicon.sqlite + generated.sqlite (~580k forms), with
-                           corpus frequency from the hermitdave 2018 LT list.
+Outputs (all under public/, copied into the site by `vite build`):
+  * lt.aff, lt.dic         the BSD-3 Lithuanian hunspell dictionary (fetched from
+                           wooorm/dictionaries). This is the ACCEPT vocabulary —
+                           real hunspell applies its affix rules in the browser, so
+                           every valid inflected form is recognised.
+  * spellcheck-lt.txt      one line per surface form "<form>\t<freq>"; the
+                           freq-bearing subset (freq >= ACCEPT_MIN_FREQ, ~162k) of
+                           lexicon.sqlite + generated.sqlite. This drives suggestion
+                           generation + ranking only (NOT acceptance — hunspell does
+                           that), so it can stay small.
   * spellcheck-bigrams.txt one line per adjacent word pair "<w1>\t<w2>\t<count>"
                            from the local corpora — used to break ties between
                            spelling candidates.
 
 Requires the (gitignored) source data:
   local/accentuator/data/{lexicon.sqlite, generated.sqlite, eval/*.txt}
-and network access (fetches the frequency list). `npm run build` fails fast if the
-outputs are missing, pointing back here.
+and network access (fetches the frequency list + hunspell dictionary). `npm run
+build` fails fast if any output is missing, pointing back here.
 """
 
 from __future__ import annotations
@@ -46,10 +52,16 @@ CORPUS_FILES = [
 ]
 WORDLIST_OUT = REPO_ROOT / "public" / "spellcheck-lt.txt"
 BIGRAMS_OUT = REPO_ROOT / "public" / "spellcheck-bigrams.txt"
+DIC_OUT = REPO_ROOT / "public" / "lt.dic"
+AFF_OUT = REPO_ROOT / "public" / "lt.aff"
 FREQ_URL = (
     "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/"
     "content/2018/lt/lt_full.txt"
 )
+# BSD-3-Clause Lithuanian hunspell dictionary (ispell-lt, via wooorm/dictionaries) —
+# the comprehensive ACCEPT vocabulary. Lemmas + affix rules; real hunspell
+# (hunspell-asm, compiled to wasm) applies them in the browser. See ATTRIBUTIONS.
+HUNSPELL_BASE = "https://raw.githubusercontent.com/wooorm/dictionaries/main/dictionaries/lt"
 ACCEPT_MIN_FREQ = 2  # freq-list words seen ≥ this become accept-only vocabulary
 MIN_BIGRAM_COUNT = 2  # drop pairs seen once — noise, no ranking value
 MAX_BIGRAMS = 220_000  # cap the shipped table
@@ -57,11 +69,6 @@ TOKEN = re.compile(r"[a-ząčęėįšųūž]+", re.IGNORECASE)
 
 LT_LETTERS = set("aąbcčdeęėfghiįyjklmnoprsštuųūvzž")
 LT_LETTERS |= {c.upper() for c in LT_LETTERS}
-
-
-FOLD = {"ą": "a", "č": "c", "ę": "e", "ė": "e", "į": "i", "š": "s", "ų": "u", "ū": "u", "ž": "z"}
-LT_DIACRITICS = set(FOLD)
-ASCII_WORD = set("abcdefghijklmnopqrstuvwxyz-'")
 
 
 def is_clean_form(form: str) -> bool:
@@ -72,19 +79,6 @@ def is_clean_form(form: str) -> bool:
     if form[0] == "-" or form[-1] == "-":
         return False
     return all(ch == "-" or ch in LT_LETTERS for ch in form)
-
-
-def fold(word: str) -> str:
-    """ASCII-fold LT diacritics (matches the browser engine's foldAscii)."""
-    return "".join(FOLD.get(c, c) for c in word.lower())
-
-
-def has_lt_diacritic(word: str) -> bool:
-    return any(c in LT_DIACRITICS for c in word.lower())
-
-
-def is_pure_ascii_word(word: str) -> bool:
-    return all(c in ASCII_WORD for c in word.lower())
 
 
 def load_frequencies() -> dict[str, int]:
@@ -123,27 +117,24 @@ def build_wordlist() -> set[str]:
     own_count = len(raw)
 
     freq = load_frequencies()
-    # The lexicon + generated sets are corpus-derived, not a full Lithuanian
-    # vocabulary, so they miss loads of common words (skelbti, pramonės, pažanga…)
-    # → false positives on real text. Fold in every frequency-list word type (seen
-    # at least ACCEPT_MIN_FREQ times) as accept vocabulary; each keeps its frequency.
-    # Diacritic-dropped spellings (as, aciu) are accepted too — the BROWSER decides
-    # to restore them instead, using the frequency ratio to its diacritic form
-    # (a drop's diacritic form is dramatically more common; a valid ASCII word's is
-    # not), so no words need to be withheld here.
-    before = len(raw)
     raw.update(w for w, f in freq.items() if f >= ACCEPT_MIN_FREQ and is_clean_form(w))
-    print(f"  freq-list words added to accept: {len(raw) - before}")
 
-    forms = sorted(f for f in raw if is_clean_form(f))
+    # ACCEPT is handled by the hunspell dictionary (comprehensive morphology); this
+    # wordlist only powers the browser's restore/typo SUGGESTIONS + frequency
+    # ranking, so keep just the frequency-bearing forms (common words and their
+    # diacritic spellings — the useful restore targets). Diacritic-dropped spellings
+    # like "as" are here too (they have frequency), and the browser restores them.
+    forms = sorted(
+        f
+        for f in raw
+        if is_clean_form(f) and freq.get(f.lower(), 0) >= ACCEPT_MIN_FREQ
+    )
     blob = "".join(f"{f}\t{freq.get(f.lower(), 0)}\n" for f in forms)
     WORDLIST_OUT.parent.mkdir(parents=True, exist_ok=True)
     WORDLIST_OUT.write_text(blob, encoding="utf-8")
 
-    with_freq = sum(1 for f in forms if freq.get(f.lower(), 0) > 0)
     gz = len(gzip.compress(blob.encode("utf-8"), 9))
-    print(f"lexicon: {lexicon_count} | +generated: {own_count} | +freqlist(≥{ACCEPT_MIN_FREQ}): {len(raw)}")
-    print(f"  kept: {len(forms)} | with frequency: {with_freq}")
+    print(f"suggestion wordlist (freq ≥ {ACCEPT_MIN_FREQ}, from {lexicon_count} lexicon / {own_count} own / freqlist): {len(forms)} forms")
     print(f"  wrote {WORDLIST_OUT.relative_to(REPO_ROOT)}: ~{gz} bytes gzipped")
     return {f.lower() for f in forms}
 
@@ -177,7 +168,19 @@ def build_bigrams(vocab: set[str]) -> None:
     print(f"  wrote {BIGRAMS_OUT.relative_to(REPO_ROOT)}: ~{gz} bytes gzipped")
 
 
+def fetch_hunspell() -> None:
+    """Fetch the BSD-3 Lithuanian hunspell dictionary (lemmas + affix rules) that is
+    the browser's ACCEPT vocabulary (applied by real hunspell). Gitignored artifacts."""
+    with httpx.Client(timeout=120, follow_redirects=True) as client:
+        DIC_OUT.write_bytes(client.get(f"{HUNSPELL_BASE}/index.dic").content)
+        AFF_OUT.write_bytes(client.get(f"{HUNSPELL_BASE}/index.aff").content)
+    dic_kb = DIC_OUT.stat().st_size / 1024
+    aff_kb = AFF_OUT.stat().st_size / 1024
+    print(f"hunspell: {DIC_OUT.name} {dic_kb:.0f} KB + {AFF_OUT.name} {aff_kb:.0f} KB (BSD-3, ispell-lt)")
+
+
 def main() -> int:
+    fetch_hunspell()
     vocab = build_wordlist()
     build_bigrams(vocab)
     return 0

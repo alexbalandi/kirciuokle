@@ -36,6 +36,11 @@ function getWorker(): Worker | null {
     });
     instance.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const message = event.data;
+      if (message && "diag" in message) {
+        (globalThis as unknown as { __spellcheckDiag?: unknown }).__spellcheckDiag =
+          (message as { diag: unknown }).diag;
+        return;
+      }
       const entry = pending.get(message.id);
       if (!entry) {
         return;

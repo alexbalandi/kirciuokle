@@ -22,5 +22,8 @@
     "vite": "^8.1.3",
     "vitest": "^4.1.9",
     "wrangler": "^4.107.0"
+  },
+  "dependencies": {
+    "hunspell-asm": "4.0.2"
   }
 }

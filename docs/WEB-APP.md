@@ -49,29 +49,43 @@ model, no server round-trip** — it runs in a browser **Web Worker** (a standar
 on-device worker, *not* a Cloudflare Worker). The only server involvement is serving
 two static files. Full design + rationale: [SPEC56.md](SPEC56.md).
 
-- **Data are generated build artifacts, not source.** `public/spellcheck-lt.txt`
-  and `public/spellcheck-bigrams.txt` are gitignored (like the model) and produced
-  by `uv run scripts/regenerate_spellcheck_dicts.py` from the local
-  `lexicon.sqlite` + `generated.sqlite` + the hermitdave frequency list + the local
-  corpora. They must exist in `public/` before a build — `npm run build` fails fast
-  (via `scripts/check_spellcheck_assets.mjs`) if they're missing.
-- **Two-tier dictionary** — `spellcheck-lt.txt` (`form\tfreq`, ~580k forms = the
-  union of `lexicon.sqlite` ∪ `generated.sqlite`):
-  - *Accept* tier = **all** ~580k forms → "is this a real word?" (this is what stops
-    rare-but-valid inflected forms from being false-flagged).
-  - *Correct* tier = the **`freq>0` subset** (~77k) → the fold/delete indexes that
-    generate suggestions (keeps browser memory bounded).
+- **Data are generated build artifacts, not source.** `public/spellcheck-lt.txt`,
+  `public/spellcheck-bigrams.txt`, `public/lt.dic` and `public/lt.aff` are gitignored
+  (like the model) and produced by `uv run scripts/regenerate_spellcheck_dicts.py`
+  (the wordlist/bigrams from the local `lexicon.sqlite` + `generated.sqlite` + the
+  hermitdave frequency list + the local corpora; the `.dic`/`.aff` fetched from the
+  BSD-3 Lithuanian hunspell). All four must exist in `public/` before a build —
+  `npm run build` fails fast (via `scripts/check_spellcheck_assets.mjs`) if any is
+  missing.
+- **Accept = real Hunspell, not a wordlist.** "Is this a valid Lithuanian word?" is
+  answered by the actual Hunspell engine (compiled to WebAssembly via `hunspell-asm`)
+  running the BSD-3 ispell-lt `.dic`/`.aff` in the worker. Hunspell applies the full
+  affix morphology, so *every* valid inflected form is recognised — this is what
+  stopped the rare-inflection false positives (`sąjungininkių`, `priteisė`,
+  `įslaptintame`, …) a finite corpus wordlist produced. If the dictionary fails to
+  load, the engine falls back to the wordlist's own `valid` set.
+- **Correction wordlist** — `spellcheck-lt.txt` (`form\tfreq`, ~162k freq-bearing
+  forms) drives *suggestion generation and ranking* only: the fold/delete indexes for
+  candidates, plus the frequencies that rank them. It does **not** decide acceptance
+  (Hunspell does), so it can stay small and browser-memory-bounded.
 - **Ranking**: edit-distance band → context bigram (`spellcheck-bigrams.txt`) →
   frequency → deterministic tie-breaks. Statuses: `restore` (ASCII→diacritics,
-  `as`→`aš`), `typo` (edit distance ≤2, Damerau, transposition = 1 edit), `ok`,
-  `unknown`.
+  `as`→`aš`, fired even for Hunspell-accepted ASCII words when the diacritic form
+  dominates by frequency), `typo` (edit distance ≤2, Damerau, transposition = 1 edit),
+  `ok`, `unknown`.
 - **Web Worker + Cache API** ([spellcheck.worker.ts](../src/client/spellcheck.worker.ts),
-  [spellcheckClient.ts](../src/client/spellcheckClient.ts)): builds the engine off the
-  main thread (verified 0 main-thread long-tasks during the first ~5 s build), batches
-  a text's words into one message, and falls back to in-thread if a worker can't
-  spawn. The two asset files are stored via the Cache API (`spellcheck-assets-v*`) —
-  downloaded once, reused every session, offline-capable (same idea as the model
-  cache; bump the cache-name suffix when the assets change).
+  [spellcheckClient.ts](../src/client/spellcheckClient.ts)): builds the engine + the
+  Hunspell instance off the main thread (Hunspell builds the ~85k-lemma dict in tens of
+  ms; 0 main-thread long-tasks), batches a text's words into one message, and falls
+  back to in-thread if a worker can't spawn. All four asset files are stored via the
+  Cache API (`spellcheck-assets-v*`) — downloaded once, reused every session,
+  offline-capable (same idea as the model cache; bump the cache-name suffix when the
+  assets change).
+- **Bundler note.** `hunspell-asm`'s published ESM build is broken under bundlers (it
+  calls namespace imports as functions). `vite.config.ts` forces its CJS build (and
+  `emscripten-wasm-loader`'s) for both dev and the worker sub-bundle — do not "simplify"
+  back to the bare `import ... from "hunspell-asm"` or the prod worker silently ships
+  the broken ESM path and every rare inflection gets false-flagged again.
 - **Live check** fires on paste + typing-pause (preview underlines *before*
   accentuation). **Fixes re-accentuate only the edited sentence** — an offset re-tile
   + reconstruction check guarantees left/right character alignment, with a full-text
