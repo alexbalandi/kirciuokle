@@ -82,7 +82,7 @@ async function handleLocalModel(
 
   const headers = new Headers(modelIsolationHeaders());
   headers.set("content-type", modelContentType(key));
-  headers.set("cache-control", "public, max-age=31536000, immutable");
+  headers.set("cache-control", modelCacheControl(key));
   headers.set("etag", object.httpEtag);
   headers.set("accept-ranges", "bytes");
 
@@ -175,6 +175,14 @@ function modelContentType(key: string): string {
     return "application/octet-stream";
   }
   return "application/octet-stream";
+}
+
+function modelCacheControl(key: string): string {
+  const normalized = key.toLowerCase();
+  if (normalized.endsWith(".json")) {
+    return "no-cache, must-revalidate";
+  }
+  return "public, max-age=31536000, immutable";
 }
 
 async function handleAccent(

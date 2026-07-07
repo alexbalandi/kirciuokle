@@ -6,6 +6,12 @@ export type ExecutionMode = "worker" | "main";
 export type CacheStatus = "hit" | "miss" | "stored" | "failed" | "unavailable";
 export type LocalModelTier = "light" | "heavy";
 
+export type LocalModelUpdateInfo = {
+  file: string;
+  bytes: number | null;
+  version: string | null;
+};
+
 export type LocalModelStatus =
   | { type: "idle" }
   | { type: "metadata" }
@@ -24,10 +30,13 @@ export type LocalModelStatus =
       type: "ready";
       tier: LocalModelTier;
       modelFile: string;
+      modelVersion: string | null;
       bytes: number;
       cacheStatus: CacheStatus;
       threads: number;
       executionMode: ExecutionMode;
+      updateAvailable: boolean;
+      update: LocalModelUpdateInfo | null;
     }
   | { type: "failed"; message: string };
 
@@ -67,10 +76,17 @@ export type ModelManifest = {
   created_utc?: string;
   default_model?: string;
   model_bytes?: number;
+  version?: string;
   tiers?: Partial<Record<LocalModelTier, string>>;
   models?: Record<
     string,
-    { bytes?: number; default?: boolean; sha256?: string; tier?: LocalModelTier | string }
+    {
+      bytes?: number;
+      default?: boolean;
+      sha256?: string;
+      tier?: LocalModelTier | string;
+      version?: string;
+    }
   >;
   runtime?: {
     path?: string;
@@ -166,6 +182,8 @@ export type LocalStats = {
   modelFile: string | null;
   modelVersion: string | null;
   modelTier: LocalModelTier | null;
+  updateAvailable: boolean;
+  update: LocalModelUpdateInfo | null;
   cacheStatus: CacheStatus | null;
   threads: number | null;
 };

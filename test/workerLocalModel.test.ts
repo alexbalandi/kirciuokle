@@ -72,6 +72,25 @@ describe("worker local model serving", () => {
     expect(response.headers.get("accept-ranges")).toBe("bytes");
   });
 
+  it("serves manifest JSON with revalidation cache headers", async () => {
+    const get = vi.fn(async (key: string) => r2Object('{"version":"v2"}', key));
+    const env = makeEnv({
+      MODEL_BUCKET: { get } as unknown as R2Bucket,
+    });
+
+    const response = await worker.fetch(
+      new Request("https://example.test/local-model/manifest.json"),
+      env,
+      { waitUntil: vi.fn() } as unknown as ExecutionContext,
+    );
+
+    expect(get).toHaveBeenCalledWith("manifest.json");
+    expect(response.headers.get("content-type")).toBe(
+      "application/json; charset=utf-8",
+    );
+    expect(response.headers.get("cache-control")).toBe("no-cache, must-revalidate");
+  });
+
   it("serves a 206 partial response for a Range request", async () => {
     // Full object is 10 bytes; request bytes=2-5 → R2 returns the 4-byte slice.
     const get = vi.fn(async (key: string, opts?: R2GetOptions) => {

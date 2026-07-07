@@ -151,6 +151,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--light-name", type=str, default=None)
     parser.add_argument("--meta-json", type=Path, default=META_JSON)
     parser.add_argument("--tokenizer-dir", type=Path, default=RELEASE_DIR)
+    parser.add_argument(
+        "--version",
+        type=str,
+        default=None,
+        help="Release id for manifest.json; defaults to first 10 hex of heavy sha256.",
+    )
+    parser.add_argument(
+        "--versioned-filenames",
+        action="store_true",
+        help="Copy ONNX files as <stem>-<version>.onnx for future R2 releases.",
+    )
     return parser
 
 
@@ -169,6 +180,13 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def versioned_onnx_name(name: str, version: str) -> str:
+    path = Path(name)
+    if path.suffix != ".onnx":
+        raise ValueError(f"versioned model filename must end with .onnx: {name}")
+    return f"{path.stem}-{version}{path.suffix}"
 
 
 def safe_extract_member(tar: tarfile.TarFile, member_name: str, target: Path) -> None:
@@ -804,6 +822,7 @@ def write_manifest(
     rows: list[TableRow],
     default_model: str,
     runtime: dict[str, object],
+    version: str,
 ) -> None:
     tiers = {
         row.tier: row.file_name for row in rows if row.tier and row.file_name
@@ -811,6 +830,7 @@ def write_manifest(
     manifest = {
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "default_model": default_model,
+        "version": version,
         "parity_gate": PARITY_GATE,
         "models": {
             row.file_name: {
@@ -859,14 +879,26 @@ def main(argv: Iterable[str] | None = None) -> int:
         else {}
     )
     existing_models = existing_manifest.get("models", {})
+    heavy_sha256 = sha256_file(args.model_onnx)
+    version = args.version or heavy_sha256[:10]
+    model_name = (
+        versioned_onnx_name(args.model_name, version)
+        if args.versioned_filenames
+        else args.model_name
+    )
+    light_name = (
+        versioned_onnx_name(args.light_name, version)
+        if args.versioned_filenames and args.light_name
+        else args.light_name
+    )
 
     print(f"copying model bundle files to {output_dir}")
     copy_static_model_files(
         output_dir,
         model_onnx=args.model_onnx,
-        model_name=args.model_name,
+        model_name=model_name,
         light_onnx=args.light_onnx,
-        light_name=args.light_name,
+        light_name=light_name,
         meta_json=args.meta_json,
         tokenizer_dir=args.tokenizer_dir,
     )
@@ -883,7 +915,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         print("measuring partial-int8 baseline parity")
         baseline_parity = run_parity(
             loaded,
-            output_dir / BASELINE_NAME,
+            output_dir / model_name,
             args.parity_sentences,
             args.batch_size,
         )
@@ -903,7 +935,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 args.batch_size,
             )
 
-    default_model = args.model_name
+    default_model = model_name
     full_ships = bool(
         full_path
         and full_parity
@@ -914,19 +946,19 @@ def main(argv: Iterable[str] | None = None) -> int:
     rows = [
         make_row(
             "heavy pruned int8 model",
-            output_dir / args.model_name,
+            output_dir / model_name,
             baseline_parity,
-            default_model == args.model_name,
+            default_model == model_name,
             f"source: {args.model_onnx.name}",
             existing_models,
             tier="heavy",
         )
     ]
-    if args.light_onnx and args.light_name:
+    if args.light_onnx and light_name:
         rows.append(
             make_row(
                 "light pruned int8 model",
-                output_dir / args.light_name,
+                output_dir / light_name,
                 None,
                 False,
                 f"source: {args.light_onnx.name}",
@@ -948,9 +980,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     elif not args.skip_full:
         rows.append(make_row("full dynamic int8", None, None, False, full_note, existing_models))
 
-    write_manifest(output_dir, rows, default_model, runtime_manifest)
+    write_manifest(output_dir, rows, default_model, runtime_manifest, version)
     print_table(rows)
     print(f"default model: {default_model}")
+    print(f"version: {version}")
     print(f"manifest: {output_dir / 'manifest.json'}")
     return 0
 

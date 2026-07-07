@@ -14,6 +14,7 @@ import {
   LOCAL_DEFAULT_MODEL_TIER,
   LOCAL_MODEL_SIZE_FALLBACK,
   purgeCachedLocalModel,
+  updateToCurrentModel,
   type LocalModelTierInfo,
 } from "./local/assets";
 import {
@@ -27,6 +28,7 @@ import type {
   LocalModelTier,
   LocalModelStatus,
   LocalRunStatus,
+  LocalModelUpdateInfo,
   LocalStats,
 } from "./local/types";
 import {
@@ -93,6 +95,7 @@ const localTierButtons = Array.from(
   localTierSwitch.querySelectorAll<HTMLButtonElement>("button[data-tier]"),
 );
 const localStatusLine = getElement<HTMLDivElement>("local-status");
+const localUpdateControl = getElement<HTMLDivElement>("local-update");
 const panelExtras = getElement<HTMLDivElement>("panel-extras");
 const detailsToggle = getElement<HTMLButtonElement>("details-toggle");
 const inputActions = form.querySelector<HTMLDivElement>(".input-actions")!;
@@ -160,6 +163,7 @@ let localRunStatus: LocalRunStatus = { type: "ready" };
 let localStats: LocalStats | null = null;
 let localExpectedBytes: number = LOCAL_MODEL_SIZE_FALLBACK;
 let localDownloadGateState: LocalDownloadGateState = "inactive";
+let isLocalModelUpdating = false;
 let detailsCollapsed = localStorage.getItem(DETAILS_COLLAPSED_STORAGE_KEY) === "true";
 
 const localDownloadGate = createLocalDownloadGate({
@@ -279,22 +283,24 @@ primerDialog.addEventListener("keydown", (event) => {
   }
 });
 
-// Keep the input and the result scrolled to the same relative position —
-// the texts are identical, so proportional sync keeps the same passage
-// visible on both sides. The induced scroll event on the synced element is
-// swallowed via the ignore set (no timers — they stall in background tabs).
+// Keep the input and the result scrolled together. The two boxes hold
+// character-parallel text at identical line positions and are locked to the
+// same height, so mirror the scroll offset 1:1 — that glues line N to line N
+// the whole way down. (Proportional mapping drifts a few px mid-scroll whenever
+// the two scroll heights differ even slightly.) The induced scroll event on the
+// synced element is swallowed via the ignore set (no timers — they stall in
+// background tabs).
 const scrollIgnore = new Set<HTMLElement>();
 
 function syncScroll(source: HTMLElement, target: HTMLElement): void {
   if (scrollIgnore.delete(source)) {
     return;
   }
-  const sourceMax = source.scrollHeight - source.clientHeight;
   const targetMax = target.scrollHeight - target.clientHeight;
-  if (sourceMax <= 0 || targetMax <= 0) {
+  if (targetMax <= 0) {
     return;
   }
-  const next = (source.scrollTop / sourceMax) * targetMax;
+  const next = Math.min(source.scrollTop, targetMax);
   if (Math.abs(target.scrollTop - next) < 1) {
     return;
   }
@@ -511,6 +517,51 @@ async function forceRedownloadLocalModel(): Promise<void> {
     await localDownloadGate.consentToDownload();
   } catch {
     setMessage("errUnexpected");
+  }
+}
+
+async function updateCurrentLocalModel(): Promise<void> {
+  if (
+    accentMode !== "local" ||
+    isLocalModelUpdating ||
+    !currentLocalUpdateInfo()
+  ) {
+    return;
+  }
+
+  closeStatsPopover();
+  setMessage(null);
+  isLocalModelUpdating = true;
+  localRunStatus = { type: "ready" };
+  renderUi();
+
+  const requestedTier = localTier;
+  try {
+    const info = await updateToCurrentModel(requestedTier, (status) => {
+      localModelStatus = status;
+      if ("expectedBytes" in status && status.expectedBytes) {
+        localExpectedBytes = status.expectedBytes;
+      }
+      renderUi();
+    });
+    localTierInfo = {
+      ...localTierInfo,
+      [requestedTier]: info,
+    };
+
+    if (requestedTier !== localTier) {
+      return;
+    }
+
+    await disposeLocalEngine();
+    markLocalTierReady(requestedTier);
+    await localDownloadGate.consentToDownload();
+  } catch (error) {
+    localModelStatus = { type: "failed", message: errorMessage(error) };
+    setMessage("errUnexpected");
+  } finally {
+    isLocalModelUpdating = false;
+    renderUi();
   }
 }
 
@@ -1025,15 +1076,7 @@ function renderStatsPopover(popover: HTMLDivElement): void {
     strings.statsInferenceMode,
     stats ? executionModeLabel(stats.executionMode) : strings.statsModeUnknown,
   );
-  appendStatsRow(
-    popover,
-    strings.statsMemory,
-    stats
-      ? `WASM ${formatMemory(stats.memory.wasmBytes)} / JS ${formatMemory(
-          stats.memory.jsHeapBytes,
-        )}`
-      : strings.statsModeUnknown,
-  );
+  appendStatsRow(popover, strings.statsMemory, formatMemoryUsage(stats));
   appendStatsRow(
     popover,
     strings.statsLastRun,
@@ -1046,9 +1089,12 @@ function renderStatsPopover(popover: HTMLDivElement): void {
   appendStatsRow(
     popover,
     strings.statsModel,
-    stats?.modelFile
-      ? `${stats.modelFile}${stats.modelVersion ? ` · ${stats.modelVersion}` : ""}`
-      : strings.statsModeUnknown,
+    stats?.modelFile ? stats.modelFile : strings.statsModeUnknown,
+  );
+  appendStatsRow(
+    popover,
+    strings.statsModelVersion,
+    stats?.modelVersion || strings.statsModeUnknown,
   );
   appendStatsRow(popover, strings.statsCache, cacheLabel(stats?.cacheStatus ?? null));
 
@@ -1094,6 +1140,23 @@ function formatMemory(bytes: number | null): string {
     return UI[lang].unknownSize;
   }
   return `${(Number(bytes) / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// When the model runs in ORT's proxy worker (the fast path), the WASM heap
+// lives in that worker and is invisible to the main thread — so wasmBytes is 0.
+// Show the WASM figure only when it's actually tracked (main-thread fallback),
+// otherwise fall back to the JS heap so the row isn't a bare "unknown".
+function formatMemoryUsage(stats: LocalStats | null): string {
+  if (!stats) {
+    return UI[lang].statsModeUnknown;
+  }
+  const memory = stats.memory;
+  const js = memory.jsHeapBytes ? `JS ${formatMemory(memory.jsHeapBytes)}` : null;
+  if (memory.wasmMemoryCount > 0 && memory.wasmBytes) {
+    const wasm = `WASM ${formatMemory(memory.wasmBytes)}`;
+    return js ? `${wasm} / ${js}` : wasm;
+  }
+  return js ?? UI[lang].statsModeUnknown;
 }
 
 function openPrimer(): void {
@@ -1317,6 +1380,7 @@ function renderUi(): void {
   resultHeading.textContent = strings.resultHeading;
   renderDisplayControl(strings);
   renderLocalStatus();
+  renderLocalUpdateControl(strings);
   localStatsButton.hidden = accentMode !== "local" || !localEngine;
   localStatsButton.setAttribute("aria-label", strings.statsButtonLabel);
   localStatsButton.title = strings.statsButtonLabel;
@@ -1426,6 +1490,38 @@ function renderLocalStatus(): void {
       ? UI[lang].localCheckingCache
       : localRunStatusText() || localModelStatusText();
   localStatusLine.textContent = text;
+}
+
+function renderLocalUpdateControl(strings: UiStrings): void {
+  localUpdateControl.replaceChildren();
+  const update = currentLocalUpdateInfo();
+  const canShow =
+    accentMode === "local" &&
+    localDownloadGateState === "ready" &&
+    Boolean(localEngine) &&
+    Boolean(update);
+  localUpdateControl.hidden = !canShow;
+  if (!canShow || !update) {
+    return;
+  }
+
+  const label = document.createElement("span");
+  label.textContent = template(strings.localUpdateAvailable, {
+    size: formatBytes(update.bytes),
+  });
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary-button local-update-button";
+  button.textContent = isLocalModelUpdating
+    ? strings.localUpdating
+    : template(strings.localUpdateButton, { size: formatBytes(update.bytes) });
+  button.disabled = isLocalModelUpdating;
+  button.addEventListener("click", () => {
+    void updateCurrentLocalModel();
+  });
+
+  localUpdateControl.append(label, button);
 }
 
 function renderLocalConsentCard(strings: UiStrings): HTMLElement {
@@ -1561,8 +1657,22 @@ function effectiveDisplayMode(): DisplayMode {
   return accentMode === "local" ? "top" : displayMode;
 }
 
+function currentLocalUpdateInfo(): LocalModelUpdateInfo | null {
+  const stats = localStats ?? localEngine?.getStats() ?? null;
+  if (stats?.updateAvailable && stats.update) {
+    return stats.update;
+  }
+
+  if (localModelStatus.type === "ready" && localModelStatus.updateAvailable) {
+    return localModelStatus.update;
+  }
+
+  return null;
+}
+
 function isLocalModelUnavailableBeforeReady(): boolean {
   return (
+    isLocalModelUpdating ||
     !localEngine &&
     (localDownloadGateState === "checking-cache" ||
       localDownloadGateState === "needs-consent" ||

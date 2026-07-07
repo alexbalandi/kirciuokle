@@ -4,6 +4,7 @@ import type {
   LabelBridge,
   LocalModelTier,
   LocalModelStatus,
+  LocalModelUpdateInfo,
   ManifestRuntimeFile,
   ModelManifest,
 } from "./types";
@@ -13,6 +14,7 @@ export const LOCAL_MODEL_CACHE_NAME = "main-local-accent-model-v1";
 export const LOCAL_DEFAULT_MODEL_FILE = "joint.int8.partial.onnx";
 export const LOCAL_DEFAULT_MODEL_TIER: LocalModelTier = "heavy";
 export const LOCAL_MODEL_SIZE_FALLBACK = 470_223_894;
+const LOCAL_ACTIVE_STORAGE_PREFIX = "accent-local-active-v1-";
 
 const CACHE_CHUNK_BYTES = 16 * 1024 * 1024;
 const CACHE_HEADROOM_MULTIPLIER = 1.2;
@@ -46,18 +48,38 @@ export type LoadedModelAssets = {
   tier: LocalModelTier;
   modelBytes: Uint8Array;
   modelFile: string;
+  loadVersion: string | null;
   expectedBytes: number | null;
   cacheStatus: CacheStatus;
   cacheWriteState: CacheWriteState | null;
+  updateAvailable: boolean;
+  update: LocalModelUpdateInfo | null;
 };
 
 export type LocalModelTierInfo = {
   tier: LocalModelTier;
   modelFile: string;
   bytes: number | null;
+  version: string | null;
+};
+
+export type ActiveModelLoad = {
+  loadFile: string;
+  loadBytes: number | null;
+  loadVersion: string | null;
+  updateAvailable: boolean;
+  updateFile: string;
+  updateBytes: number | null;
+  updateVersion: string | null;
 };
 
 export type ModelStatusSink = (status: LocalModelStatus) => void;
+
+type ActiveLocalModelRecord = {
+  file: string;
+  bytes: number;
+  version: string;
+};
 
 export function modelBaseUrl(): string {
   return new URL(LOCAL_MODEL_BASE, window.location.href).href;
@@ -70,6 +92,12 @@ export function runtimeBaseUrl(): string {
 export async function hasCachedLocalModel(
   tier: LocalModelTier = LOCAL_DEFAULT_MODEL_TIER,
 ): Promise<boolean> {
+  const active = readActiveLocalModel(tier);
+  if (active) {
+    const activeUrl = new URL(active.file, modelBaseUrl()).href;
+    return cacheHit(activeUrl, active.bytes);
+  }
+
   const info = await loadModelTierInfo(tier);
   const modelUrl = new URL(info.modelFile, modelBaseUrl()).href;
   return cacheHit(modelUrl, info.bytes);
@@ -78,8 +106,9 @@ export async function hasCachedLocalModel(
 export async function purgeCachedLocalModel(
   tier: LocalModelTier = LOCAL_DEFAULT_MODEL_TIER,
 ): Promise<void> {
-  const info = await loadModelTierInfo(tier);
-  const modelUrl = new URL(info.modelFile, modelBaseUrl()).href;
+  const active = readActiveLocalModel(tier);
+  const modelFile = active?.file ?? (await loadModelTierInfo(tier)).modelFile;
+  const modelUrl = new URL(modelFile, modelBaseUrl()).href;
   await deleteCachedModel(modelUrl);
 }
 
@@ -88,6 +117,7 @@ export async function loadModelTierInfo(
 ): Promise<LocalModelTierInfo> {
   const manifest = await fetchJson<ModelManifest>(
     new URL("manifest.json", modelBaseUrl()).href,
+    { cache: "no-store" },
   );
   return resolveModelTierInfo(manifest, tier);
 }
@@ -105,8 +135,42 @@ export function resolveModelTierInfo(
     manifest.models?.[modelFile]?.bytes ??
     (modelFile === manifest.default_model ? manifest.model_bytes : undefined) ??
     null;
+  const version = manifest.version ?? null;
 
-  return { tier, modelFile, bytes };
+  return { tier, modelFile, bytes, version };
+}
+
+export async function resolveActiveLoad(
+  manifest: ModelManifest,
+  tier: LocalModelTier,
+): Promise<ActiveModelLoad> {
+  const current = resolveModelTierInfo(manifest, tier);
+  const active = readActiveLocalModel(tier);
+
+  if (active) {
+    const activeUrl = new URL(active.file, modelBaseUrl()).href;
+    if (await cacheHit(activeUrl, active.bytes)) {
+      return {
+        loadFile: active.file,
+        loadBytes: active.bytes,
+        loadVersion: active.version || null,
+        updateAvailable: current.modelFile !== active.file,
+        updateFile: current.modelFile,
+        updateBytes: current.bytes,
+        updateVersion: current.version,
+      };
+    }
+  }
+
+  return {
+    loadFile: current.modelFile,
+    loadBytes: current.bytes,
+    loadVersion: current.version,
+    updateAvailable: false,
+    updateFile: current.modelFile,
+    updateBytes: current.bytes,
+    updateVersion: current.version,
+  };
 }
 
 export async function loadModelAssets(
@@ -117,18 +181,21 @@ export async function loadModelAssets(
 
   const base = modelBaseUrl();
   const [manifest, meta, bridge] = await Promise.all([
-    fetchJson<ModelManifest>(new URL("manifest.json", base).href),
+    fetchJson<ModelManifest>(new URL("manifest.json", base).href, {
+      cache: "no-store",
+    }),
     fetchJson<JointMeta>(new URL("joint.meta.json", base).href),
     fetchJson<LabelBridge>(new URL("label_bridge.json", base).href),
   ]);
 
   await verifyRuntimeManifestFiles(manifest, onStatus);
 
-  const tierInfo = resolveModelTierInfo(manifest, tier);
-  const modelFile = tierInfo.modelFile || meta.int8_onnx || LOCAL_DEFAULT_MODEL_FILE;
+  const current = resolveModelTierInfo(manifest, tier);
+  const activeLoad = await resolveActiveLoad(manifest, tier);
+  const modelFile = activeLoad.loadFile || meta.int8_onnx || LOCAL_DEFAULT_MODEL_FILE;
   const modelUrl = new URL(modelFile, base).href;
   const expectedBytes =
-    tierInfo.bytes ??
+    activeLoad.loadBytes ??
     manifest.model_bytes ??
     (await headContentLength(modelUrl));
   const cacheState = await cacheHit(modelUrl, expectedBytes);
@@ -149,6 +216,14 @@ export async function loadModelAssets(
     await assertSha256(modelLoad.bytes, modelSha, modelFile);
   }
 
+  if (modelFile === current.modelFile) {
+    writeActiveLocalModel(tier, {
+      file: current.modelFile,
+      bytes: current.bytes ?? modelLoad.bytes.byteLength,
+      version: current.version ?? "",
+    });
+  }
+
   return {
     manifest,
     meta,
@@ -156,10 +231,69 @@ export async function loadModelAssets(
     tier,
     modelBytes: modelLoad.bytes,
     modelFile,
+    loadVersion: activeLoad.loadVersion,
     expectedBytes,
     cacheStatus: modelLoad.cacheWriteState?.status ?? modelLoad.cacheStatus,
     cacheWriteState: modelLoad.cacheWriteState,
+    updateAvailable: activeLoad.updateAvailable,
+    update: activeLoad.updateAvailable
+      ? {
+          file: activeLoad.updateFile,
+          bytes: activeLoad.updateBytes,
+          version: activeLoad.updateVersion,
+        }
+      : null,
   };
+}
+
+export async function updateToCurrentModel(
+  tier: LocalModelTier,
+  onStatus: ModelStatusSink = () => {},
+): Promise<LocalModelTierInfo> {
+  onStatus({ type: "metadata" });
+  const manifest = await fetchJson<ModelManifest>(
+    new URL("manifest.json", modelBaseUrl()).href,
+    { cache: "no-store" },
+  );
+  const current = resolveModelTierInfo(manifest, tier);
+  const currentUrl = new URL(current.modelFile, modelBaseUrl()).href;
+  const expectedBytes = current.bytes ?? (await headContentLength(currentUrl));
+  const oldActive = readActiveLocalModel(tier);
+
+  onStatus({
+    type: "modelInfo",
+    tier,
+    modelFile: current.modelFile,
+    expectedBytes,
+    cacheState: await cacheHit(currentUrl, expectedBytes),
+    threads: preferredWasmThreads(),
+  });
+
+  const modelLoad = await fetchWithCache(currentUrl, expectedBytes, onStatus);
+  const modelSha = manifest.models?.[current.modelFile]?.sha256;
+  if (modelSha) {
+    await assertSha256(modelLoad.bytes, modelSha, current.modelFile);
+  }
+
+  const writeStatus = modelLoad.cacheWriteState?.start
+    ? await modelLoad.cacheWriteState.start()
+    : modelLoad.cacheStatus;
+  if (writeStatus !== "hit" && writeStatus !== "stored") {
+    throw new Error("Could not save the updated model in the browser cache.");
+  }
+
+  if (oldActive?.file && oldActive.file !== current.modelFile) {
+    await deleteCachedModel(new URL(oldActive.file, modelBaseUrl()).href);
+  }
+
+  const bytes = current.bytes ?? modelLoad.bytes.byteLength;
+  writeActiveLocalModel(tier, {
+    file: current.modelFile,
+    bytes,
+    version: current.version ?? "",
+  });
+
+  return { ...current, bytes };
 }
 
 export function preferredWasmThreads(): number {
@@ -187,6 +321,60 @@ function modelFileForTier(
   }
 
   return null;
+}
+
+function activeStorageKey(tier: LocalModelTier): string {
+  return `${LOCAL_ACTIVE_STORAGE_PREFIX}${tier}`;
+}
+
+function readActiveLocalModel(tier: LocalModelTier): ActiveLocalModelRecord | null {
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(activeStorageKey(tier));
+  } catch {
+    return null;
+  }
+
+  if (!raw) {
+    return null;
+  }
+
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const file = typeof record.file === "string" ? record.file : "";
+  const bytes = Number(record.bytes);
+  const version = typeof record.version === "string" ? record.version : "";
+
+  if (!file || !Number.isInteger(bytes) || bytes <= 0) {
+    return null;
+  }
+
+  return { file, bytes, version };
+}
+
+function writeActiveLocalModel(
+  tier: LocalModelTier,
+  record: ActiveLocalModelRecord,
+): void {
+  if (!record.file || !Number.isInteger(record.bytes) || record.bytes <= 0) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(activeStorageKey(tier), JSON.stringify(record));
+  } catch {
+    // If storage is unavailable, the model still works for this session.
+  }
 }
 
 async function deleteCachedModel(url: string): Promise<void> {
@@ -228,8 +416,8 @@ async function verifyRuntimeManifestFiles(
   }
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
   if (!response.ok) {
     throw new Error(`${url}: ${response.status}`);
   }

@@ -32,6 +32,9 @@ export type UiStrings = {
   localConsentButton: string;
   localRedownloadText: string;
   localRedownloadButton: string;
+  localUpdateAvailable: string;
+  localUpdateButton: string;
+  localUpdating: string;
   localMetadata: string;
   localVerifyingRuntime: string;
   localModelInfo: string;
@@ -57,6 +60,7 @@ export type UiStrings = {
   statsLastRun: string;
   statsLastRunEmpty: string;
   statsModel: string;
+  statsModelVersion: string;
   statsCache: string;
   statsRedownload: string;
   cacheHit: string;
@@ -133,6 +137,9 @@ export const UI: Record<Lang, UiStrings> = {
     localRedownloadText:
       "Mòdelis nebėrà išsáugotas jū́sų naršỹklėje — atsisių̃skite dár kartą.",
     localRedownloadButton: "Atsisių̃sti dár kartą ({size})",
+    localUpdateAvailable: "Yrà naũjas mòdelis ({size}).",
+    localUpdateButton: "Atnaũjinti mòdelį ({size})",
+    localUpdating: "Atnaũjinama...",
     localMetadata: "Skaĩtomi mòdelio metadúomenys...",
     localVerifyingRuntime: "Tìkrinamas WASM runtime: {file} {done}/{total}.",
     localModelInfo: "Mòdelis {size}; talpyklà: {cache}; WASM gìjos: {threads}.",
@@ -160,6 +167,7 @@ export const UI: Record<Lang, UiStrings> = {
     statsLastRun: "Paskutìnis výkdymas",
     statsLastRunEmpty: "dár nevýkdyta",
     statsModel: "Mòdelis",
+    statsModelVersion: "Mòdelio ver̃sija",
     statsCache: "Talpyklà",
     statsRedownload: "Atsisių̃sti iš naujõ",
     cacheHit: "rãsta",
@@ -240,6 +248,9 @@ export const UI: Record<Lang, UiStrings> = {
     localRedownloadText:
       "The model is no longer saved in your browser — download it again.",
     localRedownloadButton: "Download again ({size})",
+    localUpdateAvailable: "Update available — new model ({size}).",
+    localUpdateButton: "Update to new model ({size})",
+    localUpdating: "Updating...",
     localMetadata: "Reading model metadata...",
     localVerifyingRuntime: "Verifying WASM runtime: {file} {done}/{total}.",
     localModelInfo: "Model {size}; cache: {cache}; WASM threads: {threads}.",
@@ -266,6 +277,7 @@ export const UI: Record<Lang, UiStrings> = {
     statsLastRun: "Last run",
     statsLastRunEmpty: "not run yet",
     statsModel: "Model",
+    statsModelVersion: "Model version",
     statsCache: "Cache",
     statsRedownload: "Re-download",
     cacheHit: "present",
@@ -346,6 +358,9 @@ export const UI: Record<Lang, UiStrings> = {
     localRedownloadText:
       "Модель больше не сохранена в браузере — скачайте её снова.",
     localRedownloadButton: "Скачать снова ({size})",
+    localUpdateAvailable: "Доступно обновление — новая модель ({size}).",
+    localUpdateButton: "Обновить модель ({size})",
+    localUpdating: "Обновление...",
     localMetadata: "Чтение метаданных модели...",
     localVerifyingRuntime: "Проверка WASM runtime: {file} {done}/{total}.",
     localModelInfo: "Модель {size}; кеш: {cache}; потоки WASM: {threads}.",
@@ -373,6 +388,7 @@ export const UI: Record<Lang, UiStrings> = {
     statsLastRun: "Последний запуск",
     statsLastRunEmpty: "ещё не запускалось",
     statsModel: "Модель",
+    statsModelVersion: "Версия модели",
     statsCache: "Кеш",
     statsRedownload: "Скачать заново",
     cacheHit: "найден",

@@ -21,6 +21,7 @@ import type {
   LocalAccentResult,
   LocalModelStatus,
   LocalModelTier,
+  LocalModelUpdateInfo,
   LocalRunStats,
   LocalRunStatus,
   LocalStats,
@@ -74,6 +75,8 @@ export class LocalAccentEngine {
     private readonly modelTier: LocalModelTier,
     private readonly modelFile: string,
     private readonly modelVersion: string | null,
+    private readonly updateAvailable: boolean,
+    private readonly update: LocalModelUpdateInfo | null,
     private readonly executionMode: ExecutionMode,
     private readonly threads: number,
   ) {}
@@ -125,7 +128,9 @@ export class LocalAccentEngine {
       assets.cacheWriteState?.status ?? assets.cacheStatus,
       assets.tier,
       assets.modelFile,
-      assets.manifest.created_utc ?? null,
+      assets.loadVersion,
+      assets.updateAvailable,
+      assets.update,
       sessionInfo.mode,
       sessionInfo.threads,
     );
@@ -136,10 +141,13 @@ export class LocalAccentEngine {
       type: "ready",
       tier: assets.tier,
       modelFile: assets.modelFile,
+      modelVersion: assets.loadVersion,
       bytes: modelByteLength,
       cacheStatus: engine.cacheStatus,
       threads: sessionInfo.threads,
       executionMode: sessionInfo.mode,
+      updateAvailable: assets.updateAvailable,
+      update: assets.update,
     });
     window.__localAccentReady = true;
     window.__localAccentStats = engine.getStats();
@@ -269,6 +277,8 @@ export class LocalAccentEngine {
       modelFile: this.modelFile,
       modelVersion: this.modelVersion,
       modelTier: this.modelTier,
+      updateAvailable: this.updateAvailable,
+      update: this.update,
       cacheStatus: this.cacheStatus,
       threads: this.threads,
     };
