@@ -188,6 +188,30 @@ export class SpellcheckEngine {
     this.suggestProvider = fn;
   }
 
+  // Diacritic restorations that also fix one ordinary edit: probe the fold index
+  // over the edit-1 neighbours of the folded query. Reaches double-errors like
+  // "pokalbeti" (wrong vowel + dropped diacritic) → "pakalbėti" (fold "pakalbeti"
+  // is one substitution from "pokalbeti"), which neither the wordlist restore (exact
+  // fold only) nor hunspell.suggest (one edit only) find. Pure Map lookups over the
+  // existing index — no per-neighbour hunspell calls.
+  private foldNeighborCandidates(normalized: string): string[] {
+    const folded = foldAscii(normalized);
+    const keys = new Set<string>([folded, ...asciiEdits1(folded)]);
+    const out = new Set<string>();
+    for (const key of keys) {
+      const forms = this.foldIndex.get(key);
+      if (!forms) {
+        continue;
+      }
+      for (const form of forms) {
+        if (form !== normalized && boundedDamerauLevenshteinCap2(normalized, form) <= 2) {
+          out.add(form);
+        }
+      }
+    }
+    return [...out];
+  }
+
   // hunspell suggestions that are plausible corrections: a single token, close
   // enough to be the same word misspelled (≤2 edits), not the query itself.
   private providerCandidates(cased: string, normalized: string): string[] {
@@ -272,6 +296,7 @@ export class SpellcheckEngine {
           ...new Set([
             ...this.typoCandidates(normalized),
             ...this.providerCandidates(cased, normalized),
+            ...this.foldNeighborCandidates(normalized),
           ]),
         ].filter((candidate) => this.isAccepted(candidate, candidate));
     if (typoCandidates.length > 0) {
@@ -471,6 +496,39 @@ function deletes2(word: string): string[] {
   }
 
   return [...deletions];
+}
+
+// LT letters after ASCII-folding (č→c, š→s, ž→z, ė/ę→e, į→i/y, ų/ū→u); no q/w/x.
+const FOLD_ALPHABET = "abcdefghijklmnoprstuvyz";
+
+// Every string one edit (delete/transpose/substitute/insert) from `word`, over the
+// folded LT alphabet. Used only against the fold index, so it stays ASCII.
+function asciiEdits1(word: string): string[] {
+  const chars = Array.from(word);
+  const n = chars.length;
+  const edits = new Set<string>();
+  const splice = (i: number, replacement: string) =>
+    chars.slice(0, i).join("") + replacement + chars.slice(i + 1).join("");
+
+  for (let i = 0; i < n; i += 1) {
+    edits.add(splice(i, "")); // deletion
+    for (const ch of FOLD_ALPHABET) {
+      if (ch !== chars[i]) {
+        edits.add(splice(i, ch)); // substitution
+      }
+    }
+  }
+  for (let i = 0; i < n - 1; i += 1) {
+    edits.add(
+      chars.slice(0, i).join("") + chars[i + 1] + chars[i] + chars.slice(i + 2).join(""),
+    ); // transposition
+  }
+  for (let i = 0; i <= n; i += 1) {
+    for (const ch of FOLD_ALPHABET) {
+      edits.add(chars.slice(0, i).join("") + ch + chars.slice(i).join("")); // insertion
+    }
+  }
+  return [...edits];
 }
 
 function collectEditCandidates(

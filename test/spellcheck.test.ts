@@ -176,6 +176,18 @@ describe("SpellcheckEngine — real-text robustness", () => {
     expect(suggestion.candidates).not.toContain("labai negalima");
   });
 
+  it("reaches a double error (wrong vowel + dropped diacritic) via the fold index", () => {
+    // "pokalbeti" = "pakalbėti" with o→a AND the ė dropped. Its fold "pokalbeti" is
+    // one substitution from "pakalbeti" = fold("pakalbėti"), so a fold-neighbour probe
+    // finds it even though it's 2 edits away.
+    const engine = createSpellcheckEngine(["pakalbėti\t633", "pokalbis\t251"]);
+    engine.setAcceptPredicate((w) => w === "pakalbėti" || w === "pokalbis");
+
+    const suggestion = engine.suggest("pokalbeti");
+    expect(suggestion.status).toBe("typo");
+    expect(suggestion.candidates).toContain("pakalbėti");
+  });
+
   it("never offers a candidate that is itself invalid (drops wordlist noise)", () => {
     // "pakalbeti" (no ė) is diacritic-less corpus noise in the wordlist; the delete
     // index would surface it as a fix for "pakalbet", but it's not a real word.
