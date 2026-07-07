@@ -1,0 +1,20 @@
+{
+  "name": "Kirčiuoklė — lietuvių kalbos kirčiavimas",
+  "short_name": "Kirčiuoklė",
+  "description": "Lietuviško teksto kirčiavimas naršyklėje — vietinis režimas veikia visiškai jūsų įrenginyje.",
+  "lang": "lt",
+  "dir": "ltr",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#09706c",
+  "background_color": "#09706c",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

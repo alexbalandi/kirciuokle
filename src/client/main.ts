@@ -2610,3 +2610,21 @@ function getElement<T extends HTMLElement>(id: string): T {
 
   return element as T;
 }
+
+// Register the offline app-shell service worker in production. In dev it would
+// fight Vite's HMR, so we instead unregister any stale one that a prior prod visit
+// (on the same host) may have left behind.
+if ("serviceWorker" in navigator) {
+  if (import.meta.env.PROD) {
+    window.addEventListener("load", () => {
+      void navigator.serviceWorker.register("/sw.js").catch(() => {});
+    });
+  } else {
+    void navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) => {
+        registrations.forEach((registration) => void registration.unregister());
+      })
+      .catch(() => {});
+  }
+}

@@ -39,6 +39,16 @@ local/accentuator/joint/hf_release/
 *.png
 *.log
 docs-*.png
+
+# ...except the committed app/PWA brand icons (source assets, small + stable)
+!/design/icon-master.png
+!/public/icon-192.png
+!/public/icon-512.png
+!/public/icon-192-maskable.png
+!/public/icon-512-maskable.png
+!/public/apple-touch-icon.png
+!/public/favicon-16.png
+!/public/favicon-32.png
 test-results/
 playwright-report/
 test/playwright/
