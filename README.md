@@ -1,5 +1,31 @@
 # Kirčiuoklė — Lithuanian text accentuator
 
+## Human-written section
+
+This project was done with a guided agentic coding to achieve simple thing :
+have a service on the web that lets you fully accentuate reasonably long
+lithuanian text. What started as simple gluework for two services (VDU for
+dictionary and UDPipe for POS-tagging) now also has its own small transformer
+that can run locally on most consumer hardware.
+
+Lithuanian accentuation is a bit a rabbit hole - different stress marks,
+language structure slightly diverging from conventional POS-format, complex
+patterns (look at [Yuri Kushnir work](https://yuriykushnir.com/?page=work) to
+get a glimpse), certain friction in standards and that's BEFORE we get into
+there being several dialects, some of them enough to become their own language
+(looking at you, Samogitian).
+
+This project tries to build on the work of others and make strongest and
+cheapest possible, fully open-source solution for accentuating Lithuanian text
+that learners like me want to read properly.
+
+As you might guess, it doesn't achieve 100% accuracy, but we get close enough
+to that on "texts you meet in real life", while still being around 90%
+per-token accuracy on "put correct mark into correct place on a word,
+including those from literary texts and archaic forms".
+
+---
+
 A small Cloudflare Workers + TypeScript app that adds stress marks
 (kirčiavimas) to arbitrary Lithuanian text, with context-aware
 disambiguation of homographs and an LT/EN/RU interface.
