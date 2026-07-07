@@ -804,7 +804,10 @@ button:disabled {
   inset: 0;
   z-index: 40;
   display: grid;
-  place-items: center;
+  /* `safe center` falls back to top-alignment when the dialog is taller than the
+     viewport, and overflow-y lets it scroll — so nothing is ever cropped. */
+  place-items: safe center;
+  overflow-y: auto;
   padding: 24px;
   background: rgb(17 23 21 / 46%);
 }
@@ -816,7 +819,10 @@ button:disabled {
 .primer-dialog {
   position: relative;
   width: min(560px, 100%);
+  /* dvh = the *visible* viewport (accounts for mobile browser chrome). The vh line
+     is a fallback for browsers without dvh; the dvh line wins where supported. */
   max-height: min(88vh, 760px);
+  max-height: min(88dvh, 760px);
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1253,6 +1259,7 @@ button.variant-row.is-selected:focus-visible {
 
   .primer-dialog {
     max-height: calc(100vh - 28px);
+    max-height: calc(100dvh - 28px);
     padding: 20px;
   }
 
