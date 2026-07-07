@@ -4,16 +4,25 @@ import type { TagSlots } from "../../shared/tags";
 export type ExecutionMode = "worker" | "main";
 
 export type CacheStatus = "hit" | "miss" | "stored" | "failed" | "unavailable";
+export type LocalModelTier = "light" | "heavy";
 
 export type LocalModelStatus =
   | { type: "idle" }
   | { type: "metadata" }
   | { type: "verify-runtime"; file: string; received: number; total: number }
-  | { type: "modelInfo"; expectedBytes: number | null; cacheState: boolean; threads: number }
+  | {
+      type: "modelInfo";
+      tier: LocalModelTier;
+      modelFile: string;
+      expectedBytes: number | null;
+      cacheState: boolean;
+      threads: number;
+    }
   | { type: "transfer"; cached: boolean; received: number; total: number | null }
   | { type: "session"; bytes: number; mode: ExecutionMode | "fallback" }
   | {
       type: "ready";
+      tier: LocalModelTier;
       modelFile: string;
       bytes: number;
       cacheStatus: CacheStatus;
@@ -58,7 +67,11 @@ export type ModelManifest = {
   created_utc?: string;
   default_model?: string;
   model_bytes?: number;
-  models?: Record<string, { bytes?: number; default?: boolean; sha256?: string }>;
+  tiers?: Partial<Record<LocalModelTier, string>>;
+  models?: Record<
+    string,
+    { bytes?: number; default?: boolean; sha256?: string; tier?: LocalModelTier | string }
+  >;
   runtime?: {
     path?: string;
     files?: Record<string, ManifestRuntimeFile>;
@@ -152,6 +165,7 @@ export type LocalStats = {
   lastRun: LocalRunStats | null;
   modelFile: string | null;
   modelVersion: string | null;
+  modelTier: LocalModelTier | null;
   cacheStatus: CacheStatus | null;
   threads: number | null;
 };

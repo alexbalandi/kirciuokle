@@ -10,7 +10,11 @@ import { formatProbability } from "./format";
 import {
   formatBytes,
   hasCachedLocalModel,
+  loadModelTierInfo,
+  LOCAL_DEFAULT_MODEL_TIER,
   LOCAL_MODEL_SIZE_FALLBACK,
+  purgeCachedLocalModel,
+  type LocalModelTierInfo,
 } from "./local/assets";
 import {
   createLocalDownloadGate,
@@ -20,6 +24,7 @@ import type { LocalAccentEngine } from "./local/engine";
 import type {
   CacheStatus,
   ExecutionMode,
+  LocalModelTier,
   LocalModelStatus,
   LocalRunStatus,
   LocalStats,
@@ -37,6 +42,8 @@ import "./style.css";
 const MAX_TEXT_LENGTH = 20_000;
 const MODE_STORAGE_KEY = "accent-mode";
 const DISPLAY_STORAGE_KEY = "accent-display";
+const LOCAL_TIER_STORAGE_KEY = "accent-local-tier";
+const LOCAL_READY_TIERS_STORAGE_KEY = "accent-local-ready-tiers-v1";
 const VLKK_PRIMER_URL =
   "https://www.vlkk.lt/aktualiausios-temos/tartis-ir-kirciavimas";
 const FOCUSABLE_SELECTOR =
@@ -78,6 +85,12 @@ const modeButtons = Array.from(
   modeSwitch.querySelectorAll<HTMLButtonElement>("button[data-mode]"),
 );
 const modeExplainer = getElement<HTMLParagraphElement>("mode-explainer");
+const localTierControls = getElement<HTMLDivElement>("local-tier-controls");
+const localTierLabel = getElement<HTMLSpanElement>("local-tier-label");
+const localTierSwitch = getElement<HTMLSpanElement>("local-tier-switch");
+const localTierButtons = Array.from(
+  localTierSwitch.querySelectorAll<HTMLButtonElement>("button[data-tier]"),
+);
 const localStatusLine = getElement<HTMLDivElement>("local-status");
 const accentButton = getElement<HTMLButtonElement>("accent-button");
 const copyButton = getElement<HTMLButtonElement>("copy-button");
@@ -125,6 +138,8 @@ const metaDescription = document.querySelector<HTMLMetaElement>(
 let lang: Lang = detectLang();
 let accentMode: AccentMode = readStoredMode();
 let displayMode: DisplayMode = readStoredDisplayMode();
+let localTier: LocalModelTier = readStoredLocalTier();
+let localTierInfo: Partial<Record<LocalModelTier, LocalModelTierInfo>> = {};
 let renderedParts: RenderedPart[] = [];
 let activePopover: HTMLDivElement | null = null;
 let activeStatsPopover: HTMLDivElement | null = null;
@@ -134,6 +149,8 @@ let copyResetTimer: number | undefined;
 let copied = false;
 let localEngine: LocalAccentEngine | null = null;
 let localEnginePromise: Promise<LocalAccentEngine> | null = null;
+let localEngineTier: LocalModelTier | null = null;
+let localEngineRequestId = 0;
 let localModelStatus: LocalModelStatus = { type: "idle" };
 let localRunStatus: LocalRunStatus = { type: "ready" };
 let localStats: LocalStats | null = null;
@@ -141,9 +158,11 @@ let localExpectedBytes: number = LOCAL_MODEL_SIZE_FALLBACK;
 let localDownloadGateState: LocalDownloadGateState = "inactive";
 
 const localDownloadGate = createLocalDownloadGate({
-  hasCachedModel: hasCachedLocalModel,
+  hasCachedModel: () => hasCachedLocalModel(localTier),
   ensureEngine: ensureLocalEngine,
-  isEngineReady: () => Boolean(localEngine),
+  isEngineReady: () => Boolean(localEngine && localEngineTier === localTier),
+  wasPreviouslyReady: () => wasLocalTierPreviouslyReady(localTier),
+  markReady: () => markLocalTierReady(localTier),
   onState: (state) => {
     localDownloadGateState = state;
     renderUi();
@@ -164,6 +183,15 @@ modeButtons.forEach((button) => {
     const nextMode = parseMode(button.dataset.mode);
     if (nextMode) {
       void setAccentMode(nextMode);
+    }
+  });
+});
+
+localTierButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const nextTier = parseLocalTier(button.dataset.tier);
+    if (nextTier) {
+      void setLocalTier(nextTier);
     }
   });
 });
@@ -408,6 +436,7 @@ async function setAccentMode(nextMode: AccentMode): Promise<void> {
 
 async function enterLocalMode(): Promise<void> {
   try {
+    await refreshLocalTierInfo();
     await localDownloadGate.enterLocalMode();
   } catch {
     setMessage("errUnexpected");
@@ -416,6 +445,45 @@ async function enterLocalMode(): Promise<void> {
 
 async function consentToLocalDownload(): Promise<void> {
   try {
+    await refreshLocalTierInfo();
+    if (localDownloadGateState === "needs-redownload") {
+      await disposeLocalEngine();
+    }
+    await localDownloadGate.consentToDownload();
+  } catch {
+    setMessage("errUnexpected");
+  }
+}
+
+async function setLocalTier(nextTier: LocalModelTier): Promise<void> {
+  if (localTier === nextTier) {
+    return;
+  }
+
+  localTier = nextTier;
+  localStorage.setItem(LOCAL_TIER_STORAGE_KEY, localTier);
+  closeStatsPopover();
+  await disposeLocalEngine();
+  await refreshLocalTierInfo();
+  renderUi();
+
+  if (accentMode === "local") {
+    await enterLocalMode();
+  }
+}
+
+async function forceRedownloadLocalModel(): Promise<void> {
+  if (accentMode !== "local") {
+    return;
+  }
+
+  closeStatsPopover();
+  setMessage(null);
+  try {
+    await refreshLocalTierInfo();
+    await disposeLocalEngine();
+    await purgeCachedLocalModel(localTier);
+    markLocalTierReady(localTier);
     await localDownloadGate.consentToDownload();
   } catch {
     setMessage("errUnexpected");
@@ -429,19 +497,51 @@ function setDisplayMode(nextDisplay: DisplayMode): void {
   renderUi();
 }
 
+async function refreshLocalTierInfo(): Promise<void> {
+  const [light, heavy] = await Promise.all([
+    loadModelTierInfo("light"),
+    loadModelTierInfo("heavy"),
+  ]);
+  const info = localTier === "light" ? light : heavy;
+  localTierInfo = {
+    light,
+    heavy,
+  };
+  localExpectedBytes = info.bytes ?? LOCAL_MODEL_SIZE_FALLBACK;
+  renderUi();
+}
+
+async function disposeLocalEngine(): Promise<void> {
+  localEngineRequestId += 1;
+  const engine = localEngine;
+  localEngine = null;
+  localEnginePromise = null;
+  localEngineTier = null;
+  localStats = null;
+  localModelStatus = { type: "idle" };
+  localRunStatus = { type: "ready" };
+  window.__localAccentReady = false;
+  window.__localAccentStats = undefined;
+  await engine?.dispose();
+}
+
 async function ensureLocalEngine(): Promise<LocalAccentEngine> {
-  if (localEngine) {
+  if (localEngine && localEngineTier === localTier) {
     return localEngine;
   }
 
-  if (localEnginePromise) {
+  if (localEnginePromise && localEngineTier === localTier) {
     return localEnginePromise;
   }
 
+  await disposeLocalEngine();
+  const requestedTier = localTier;
+  const requestId = ++localEngineRequestId;
+  localEngineTier = requestedTier;
   localRunStatus = { type: "ready" };
   localEnginePromise = import("./local/engine")
     .then(({ LocalAccentEngine: Engine }) =>
-      Engine.create((status) => {
+      Engine.create(requestedTier, (status) => {
         localModelStatus = status;
         if ("expectedBytes" in status && status.expectedBytes) {
           localExpectedBytes = status.expectedBytes;
@@ -453,7 +553,12 @@ async function ensureLocalEngine(): Promise<LocalAccentEngine> {
       }),
     )
     .then((engine) => {
+      if (requestId !== localEngineRequestId || requestedTier !== localTier) {
+        void engine.dispose();
+        throw new Error("Local model tier changed while loading.");
+      }
       localEngine = engine;
+      localEngineTier = requestedTier;
       localStats = engine.getStats();
       localModelStatus =
         localModelStatus.type === "ready" ? localModelStatus : { type: "idle" };
@@ -462,6 +567,7 @@ async function ensureLocalEngine(): Promise<LocalAccentEngine> {
     })
     .catch((error: unknown) => {
       localEnginePromise = null;
+      localEngineTier = null;
       localModelStatus = { type: "failed", message: errorMessage(error) };
       renderUi();
       throw error;
@@ -918,6 +1024,16 @@ function renderStatsPopover(popover: HTMLDivElement): void {
       : strings.statsModeUnknown,
   );
   appendStatsRow(popover, strings.statsCache, cacheLabel(stats?.cacheStatus ?? null));
+
+  const redownload = document.createElement("button");
+  redownload.type = "button";
+  redownload.className = "stats-redownload";
+  redownload.textContent = strings.statsRedownload;
+  redownload.disabled = localDownloadGateState === "loading";
+  redownload.addEventListener("click", () => {
+    void forceRedownloadLocalModel();
+  });
+  popover.append(redownload);
 }
 
 function appendStatsRow(container: HTMLElement, label: string, value: string): void {
@@ -1143,6 +1259,7 @@ function renderUi(): void {
     accentMode === "local"
       ? strings.modeLocalExplainer.replace("{size}", formatBytes(localExpectedBytes))
       : strings.modeWebExplainer;
+  renderLocalTierControl(strings);
   accentButton.textContent = isLoading
     ? strings.accentButtonLoading
     : strings.accentButton;
@@ -1172,6 +1289,29 @@ function renderUi(): void {
   });
 
   renderFooter(strings);
+}
+
+function renderLocalTierControl(strings: UiStrings): void {
+  localTierControls.hidden = accentMode !== "local";
+  if (accentMode !== "local") {
+    return;
+  }
+
+  localTierLabel.textContent = strings.localTierLabel;
+  localTierButtons.forEach((button) => {
+    const buttonTier = parseLocalTier(button.dataset.tier);
+    if (!buttonTier) {
+      return;
+    }
+
+    const isCurrent = buttonTier === localTier;
+    const label =
+      buttonTier === "light" ? strings.localTierLight : strings.localTierHeavy;
+    const bytes = localTierInfo[buttonTier]?.bytes;
+    button.textContent = `${label} (${formatBytes(bytes)})`;
+    button.classList.toggle("is-active", isCurrent);
+    button.setAttribute("aria-pressed", String(isCurrent));
+  });
 }
 
 function renderDisplayControl(strings: UiStrings): void {
@@ -1204,7 +1344,10 @@ function renderLocalStatus(): void {
   localStatusLine.hidden = false;
   localStatusLine.replaceChildren();
 
-  if (!localEngine && localDownloadGateState === "needs-consent") {
+  if (
+    localDownloadGateState === "needs-consent" ||
+    localDownloadGateState === "needs-redownload"
+  ) {
     localStatusLine.append(renderLocalConsentCard(UI[lang]));
     return;
   }
@@ -1219,11 +1362,14 @@ function renderLocalStatus(): void {
 function renderLocalConsentCard(strings: UiStrings): HTMLElement {
   const card = document.createElement("div");
   card.className = "local-consent-card";
+  const isRedownload = localDownloadGateState === "needs-redownload";
 
   const copy = document.createElement("p");
-  copy.textContent = template(strings.localConsentText, {
-    size: formatBytes(localExpectedBytes),
-  });
+  copy.textContent = isRedownload
+    ? strings.localRedownloadText
+    : template(strings.localConsentText, {
+        size: formatBytes(localExpectedBytes),
+      });
 
   const button = document.createElement("button");
   button.type = "button";
@@ -1231,7 +1377,7 @@ function renderLocalConsentCard(strings: UiStrings): HTMLElement {
   button.append(createCloudArrowDownIcon());
   button.append(
     document.createTextNode(
-      template(strings.localConsentButton, {
+      template(isRedownload ? strings.localRedownloadButton : strings.localConsentButton, {
         size: formatBytes(localExpectedBytes),
       }),
     ),
@@ -1351,6 +1497,7 @@ function isLocalModelUnavailableBeforeReady(): boolean {
     !localEngine &&
     (localDownloadGateState === "checking-cache" ||
       localDownloadGateState === "needs-consent" ||
+      localDownloadGateState === "needs-redownload" ||
       localDownloadGateState === "loading")
   );
 }
@@ -1477,6 +1624,10 @@ function parseMode(value: string | undefined): AccentMode | null {
   return value === "web" || value === "local" ? value : null;
 }
 
+function parseLocalTier(value: string | undefined): LocalModelTier | null {
+  return value === "light" || value === "heavy" ? value : null;
+}
+
 function parseDisplayMode(value: string | undefined): DisplayMode | null {
   return value === "top" || value === "all" ? value : null;
 }
@@ -1485,8 +1636,37 @@ function readStoredMode(): AccentMode {
   return parseMode(localStorage.getItem(MODE_STORAGE_KEY) ?? undefined) ?? "web";
 }
 
+function readStoredLocalTier(): LocalModelTier {
+  return (
+    parseLocalTier(localStorage.getItem(LOCAL_TIER_STORAGE_KEY) ?? undefined) ??
+    LOCAL_DEFAULT_MODEL_TIER
+  );
+}
+
 function readStoredDisplayMode(): DisplayMode {
   return parseDisplayMode(localStorage.getItem(DISPLAY_STORAGE_KEY) ?? undefined) ?? "all";
+}
+
+function readReadyLocalTiers(): LocalModelTier[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(LOCAL_READY_TIERS_STORAGE_KEY) ?? "[]");
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.filter((item): item is LocalModelTier => parseLocalTier(String(item)) !== null);
+  } catch {
+    return [];
+  }
+}
+
+function wasLocalTierPreviouslyReady(tier: LocalModelTier): boolean {
+  return readReadyLocalTiers().includes(tier);
+}
+
+function markLocalTierReady(tier: LocalModelTier): void {
+  const ready = new Set(readReadyLocalTiers());
+  ready.add(tier);
+  localStorage.setItem(LOCAL_READY_TIERS_STORAGE_KEY, JSON.stringify([...ready]));
 }
 
 function getMessageKeyForStatus(status: number): MessageKey {

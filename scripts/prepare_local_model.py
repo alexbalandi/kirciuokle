@@ -247,10 +247,18 @@ def copy_static_model_files(
     output_dir: Path,
     model_onnx: Path = BASELINE_ONNX,
     model_name: str = BASELINE_NAME,
+    light_onnx: Path | None = None,
+    light_name: str | None = None,
     meta_json: Path = META_JSON,
     tokenizer_dir: Path = RELEASE_DIR,
 ) -> None:
     copy_if_changed(model_onnx, output_dir / model_name)
+    if light_onnx:
+        if not light_name:
+            raise ValueError("--light-name is required when --light-onnx is given")
+        if light_name == model_name:
+            raise ValueError("--light-name must differ from --model-name")
+        copy_if_changed(light_onnx, output_dir / light_name)
     copy_if_changed(meta_json, output_dir / "joint.meta.json")
     # labels are prune-invariant (label ids unchanged) — always from hf_release
     labels = RELEASE_DIR / "labels.json"
@@ -812,7 +820,7 @@ def write_manifest(
                 "stress_parity": row.stress_rate,
                 "default": row.shipped,
                 "note": row.note,
-                "tier": row.tier,
+                **({"tier": row.tier} if row.tier else {}),
             }
             for row in rows
             if row.file_name
@@ -857,6 +865,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         output_dir,
         model_onnx=args.model_onnx,
         model_name=args.model_name,
+        light_onnx=args.light_onnx,
+        light_name=args.light_name,
         meta_json=args.meta_json,
         tokenizer_dir=args.tokenizer_dir,
     )
@@ -900,29 +910,22 @@ def main(argv: Iterable[str] | None = None) -> int:
         and full_parity.pos_rate >= PARITY_GATE
         and full_parity.stress_rate >= PARITY_GATE
     )
-    if full_ships:
-        default_model = FULL_INT8_NAME
 
-    # optional lighter tier shipped alongside (same tokenizer/meta)
-    if args.light_onnx and args.light_name:
-        copy_if_changed(args.light_onnx, output_dir / args.light_name)
-
-    heavy_tier = "heavy" if (args.light_onnx and args.light_name) else None
     rows = [
         make_row(
-            "shipped int8 model",
+            "heavy pruned int8 model",
             output_dir / args.model_name,
             baseline_parity,
             default_model == args.model_name,
             f"source: {args.model_onnx.name}",
             existing_models,
-            tier=heavy_tier,
+            tier="heavy",
         )
     ]
     if args.light_onnx and args.light_name:
         rows.append(
             make_row(
-                "light int8 model",
+                "light pruned int8 model",
                 output_dir / args.light_name,
                 None,
                 False,

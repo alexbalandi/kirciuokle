@@ -10,11 +10,13 @@ import { accentText, UpstreamError, WORD_CACHE_SECONDS } from "./vdu";
 import { toPublicVariants } from "./disambiguation";
 
 const MAX_TEXT_LENGTH = 20_000;
+const LOCAL_MODEL_PREFIX = "/local-model/";
 type AccentSource = "local" | "vdu";
 
 export interface Env {
   ASSETS: Fetcher;
   DICT: D1Database;
+  MODEL_BUCKET?: R2Bucket;
   ACCENT_SOURCE?: AccentSource;
 }
 
@@ -31,11 +33,15 @@ export default {
         return handleWord(request, url, env, ctx);
       }
 
+      if (url.pathname.startsWith(LOCAL_MODEL_PREFIX) && env.MODEL_BUCKET) {
+        return handleLocalModel(request, url, env);
+      }
+
       if (url.pathname.startsWith("/api/")) {
         return json<ErrorResponse>({ error: "API maršrutas nerastas." }, 404);
       }
 
-      return env.ASSETS.fetch(request);
+      return withHtmlIsolationHeaders(await env.ASSETS.fetch(request));
     } catch (error) {
       if (error instanceof UpstreamError) {
         return json<ErrorResponse>({ error: error.message }, 502);
@@ -46,6 +52,83 @@ export default {
     }
   },
 } satisfies ExportedHandler<Env>;
+
+async function handleLocalModel(
+  request: Request,
+  url: URL,
+  env: Env,
+): Promise<Response> {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response("Method not allowed", {
+      status: 405,
+      headers: {
+        allow: "GET, HEAD",
+        ...modelIsolationHeaders(),
+      },
+    });
+  }
+
+  const key = url.pathname.slice(LOCAL_MODEL_PREFIX.length);
+  const object = await env.MODEL_BUCKET?.get(key);
+  if (!object) {
+    return new Response("Not found", {
+      status: 404,
+      headers: modelIsolationHeaders(),
+    });
+  }
+
+  const headers = new Headers(modelIsolationHeaders());
+  headers.set("content-type", modelContentType(key));
+  headers.set("content-length", String(object.size));
+  headers.set("cache-control", "public, max-age=31536000, immutable");
+  headers.set("etag", object.httpEtag);
+
+  return new Response(request.method === "HEAD" ? null : object.body, {
+    headers,
+  });
+}
+
+function withHtmlIsolationHeaders(response: Response): Response {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("text/html")) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  headers.set("Cross-Origin-Embedder-Policy", "require-corp");
+  headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function modelIsolationHeaders(): Record<string, string> {
+  return {
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Cross-Origin-Embedder-Policy": "require-corp",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "x-content-type-options": "nosniff",
+  };
+}
+
+function modelContentType(key: string): string {
+  const normalized = key.toLowerCase();
+  if (normalized.endsWith(".json")) {
+    return "application/json; charset=utf-8";
+  }
+  if (normalized.endsWith(".wasm")) {
+    return "application/wasm";
+  }
+  if (normalized.endsWith(".mjs") || normalized.endsWith(".js")) {
+    return "text/javascript; charset=utf-8";
+  }
+  if (normalized.endsWith(".onnx")) {
+    return "application/octet-stream";
+  }
+  return "application/octet-stream";
+}
 
 async function handleAccent(
   request: Request,

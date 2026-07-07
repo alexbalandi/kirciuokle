@@ -2,6 +2,7 @@ import type {
   CacheStatus,
   JointMeta,
   LabelBridge,
+  LocalModelTier,
   LocalModelStatus,
   ManifestRuntimeFile,
   ModelManifest,
@@ -10,6 +11,7 @@ import type {
 export const LOCAL_MODEL_BASE = "/local-model/";
 export const LOCAL_MODEL_CACHE_NAME = "main-local-accent-model-v1";
 export const LOCAL_DEFAULT_MODEL_FILE = "joint.int8.partial.onnx";
+export const LOCAL_DEFAULT_MODEL_TIER: LocalModelTier = "heavy";
 export const LOCAL_MODEL_SIZE_FALLBACK = 470_223_894;
 
 const CACHE_CHUNK_BYTES = 16 * 1024 * 1024;
@@ -41,11 +43,18 @@ export type LoadedModelAssets = {
   manifest: ModelManifest;
   meta: JointMeta;
   bridge: LabelBridge;
+  tier: LocalModelTier;
   modelBytes: Uint8Array;
   modelFile: string;
   expectedBytes: number | null;
   cacheStatus: CacheStatus;
   cacheWriteState: CacheWriteState | null;
+};
+
+export type LocalModelTierInfo = {
+  tier: LocalModelTier;
+  modelFile: string;
+  bytes: number | null;
 };
 
 export type ModelStatusSink = (status: LocalModelStatus) => void;
@@ -59,13 +68,49 @@ export function runtimeBaseUrl(): string {
 }
 
 export async function hasCachedLocalModel(
-  modelFile = LOCAL_DEFAULT_MODEL_FILE,
+  tier: LocalModelTier = LOCAL_DEFAULT_MODEL_TIER,
 ): Promise<boolean> {
-  const modelUrl = new URL(modelFile, modelBaseUrl()).href;
-  return cacheHit(modelUrl);
+  const info = await loadModelTierInfo(tier);
+  const modelUrl = new URL(info.modelFile, modelBaseUrl()).href;
+  return cacheHit(modelUrl, info.bytes);
+}
+
+export async function purgeCachedLocalModel(
+  tier: LocalModelTier = LOCAL_DEFAULT_MODEL_TIER,
+): Promise<void> {
+  const info = await loadModelTierInfo(tier);
+  const modelUrl = new URL(info.modelFile, modelBaseUrl()).href;
+  await deleteCachedModel(modelUrl);
+}
+
+export async function loadModelTierInfo(
+  tier: LocalModelTier,
+): Promise<LocalModelTierInfo> {
+  const manifest = await fetchJson<ModelManifest>(
+    new URL("manifest.json", modelBaseUrl()).href,
+  );
+  return resolveModelTierInfo(manifest, tier);
+}
+
+export function resolveModelTierInfo(
+  manifest: ModelManifest,
+  tier: LocalModelTier,
+): LocalModelTierInfo {
+  const modelFile =
+    manifest.tiers?.[tier] ??
+    modelFileForTier(manifest, tier) ??
+    manifest.default_model ??
+    LOCAL_DEFAULT_MODEL_FILE;
+  const bytes =
+    manifest.models?.[modelFile]?.bytes ??
+    (modelFile === manifest.default_model ? manifest.model_bytes : undefined) ??
+    null;
+
+  return { tier, modelFile, bytes };
 }
 
 export async function loadModelAssets(
+  tier: LocalModelTier = LOCAL_DEFAULT_MODEL_TIER,
   onStatus: ModelStatusSink = () => {},
 ): Promise<LoadedModelAssets> {
   onStatus({ type: "metadata" });
@@ -79,17 +124,20 @@ export async function loadModelAssets(
 
   await verifyRuntimeManifestFiles(manifest, onStatus);
 
-  const modelFile = manifest.default_model || meta.int8_onnx || LOCAL_DEFAULT_MODEL_FILE;
+  const tierInfo = resolveModelTierInfo(manifest, tier);
+  const modelFile = tierInfo.modelFile || meta.int8_onnx || LOCAL_DEFAULT_MODEL_FILE;
   const modelUrl = new URL(modelFile, base).href;
   const expectedBytes =
-    manifest.models?.[modelFile]?.bytes ??
+    tierInfo.bytes ??
     manifest.model_bytes ??
     (await headContentLength(modelUrl));
-  const cacheState = await cacheHit(modelUrl);
+  const cacheState = await cacheHit(modelUrl, expectedBytes);
   const threads = preferredWasmThreads();
 
   onStatus({
     type: "modelInfo",
+    tier,
+    modelFile,
     expectedBytes,
     cacheState,
     threads,
@@ -105,6 +153,7 @@ export async function loadModelAssets(
     manifest,
     meta,
     bridge,
+    tier,
     modelBytes: modelLoad.bytes,
     modelFile,
     expectedBytes,
@@ -125,6 +174,28 @@ export function formatBytes(bytes: number | null | undefined): string {
   }
 
   return `${Math.round(Number(bytes) / 1_000_000)} MB`;
+}
+
+function modelFileForTier(
+  manifest: ModelManifest,
+  tier: LocalModelTier,
+): string | null {
+  for (const [file, info] of Object.entries(manifest.models ?? {})) {
+    if (info?.tier === tier) {
+      return file;
+    }
+  }
+
+  return null;
+}
+
+async function deleteCachedModel(url: string): Promise<void> {
+  const cache = await openModelCache();
+  if (!cache) {
+    return;
+  }
+
+  await purgeCachedUrl(cache, url);
 }
 
 async function verifyRuntimeManifestFiles(
@@ -175,16 +246,16 @@ async function headContentLength(url: string): Promise<number | null> {
   }
 }
 
-async function cacheHit(url: string): Promise<boolean> {
+async function cacheHit(
+  url: string,
+  expectedBytes: number | null = null,
+): Promise<boolean> {
   const cache = await openModelCache();
   if (!cache) {
     return false;
   }
 
-  return Boolean(
-    (await cache.match(cacheRequest(url))) ||
-      (await cache.match(cacheChunkMetadataRequest(url))),
-  );
+  return isCachedModelComplete(cache, url, expectedBytes);
 }
 
 async function openModelCache(): Promise<Cache | null> {
@@ -229,14 +300,17 @@ async function readChunkedCacheBytes(
   try {
     metadata = await metadataResponse.json();
   } catch {
+    await purgeCachedUrl(cache, url);
     return null;
   }
 
   if (!isChunkMetadata(metadata)) {
+    await purgeCachedUrl(cache, url);
     return null;
   }
 
   if (expectedBytes && metadata.bytes !== expectedBytes) {
+    await purgeCachedUrl(cache, url);
     return null;
   }
 
@@ -245,6 +319,7 @@ async function readChunkedCacheBytes(
   for (let index = 0; index < metadata.chunks; index += 1) {
     const chunkResponse = await cache.match(cacheChunkRequest(url, index));
     if (!chunkResponse) {
+      await purgeCachedUrl(cache, url);
       return null;
     }
 
@@ -260,6 +335,7 @@ async function readChunkedCacheBytes(
   }
 
   if (received !== metadata.bytes) {
+    await purgeCachedUrl(cache, url);
     return null;
   }
 
@@ -285,6 +361,79 @@ function isChunkMetadata(value: unknown): value is {
   );
 }
 
+async function isCachedModelComplete(
+  cache: Cache,
+  url: string,
+  expectedBytes: number | null,
+): Promise<boolean> {
+  const metadataResponse = await cache.match(cacheChunkMetadataRequest(url));
+  if (metadataResponse) {
+    let metadata: unknown;
+    try {
+      metadata = await metadataResponse.json();
+    } catch {
+      await purgeCachedUrl(cache, url);
+      return false;
+    }
+
+    if (!isChunkMetadata(metadata)) {
+      await purgeCachedUrl(cache, url);
+      return false;
+    }
+
+    if (expectedBytes && metadata.bytes !== expectedBytes) {
+      await purgeCachedUrl(cache, url);
+      return false;
+    }
+
+    for (let index = 0; index < metadata.chunks; index += 1) {
+      if (!(await cache.match(cacheChunkRequest(url, index)))) {
+        await purgeCachedUrl(cache, url);
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  const response = await cache.match(cacheRequest(url));
+  if (!response) {
+    return false;
+  }
+
+  if (!cachedResponseHasValidLength(response, expectedBytes)) {
+    await purgeCachedUrl(cache, url);
+    return false;
+  }
+
+  return true;
+}
+
+function cachedResponseHasValidLength(
+  response: Response,
+  expectedBytes: number | null,
+): boolean {
+  if (!expectedBytes) {
+    return true;
+  }
+
+  const contentLength = Number(response.headers.get("content-length") || 0);
+  return !contentLength || contentLength === expectedBytes;
+}
+
+async function purgeCachedUrl(cache: Cache, url: string): Promise<void> {
+  const requests = await cache.keys();
+  await Promise.all(
+    requests
+      .filter((request) => isModelCacheRequest(request.url, url))
+      .map((request) => cache.delete(request)),
+  );
+}
+
+function isModelCacheRequest(requestUrl: string, modelUrl: string): boolean {
+  return requestUrl === modelUrl || requestUrl.startsWith(`${modelUrl}?local-cache=`);
+}
+
 async function fetchWithCache(
   url: string,
   expectedBytes: number | null,
@@ -296,6 +445,11 @@ async function fetchWithCache(
 }> {
   const cache = await openModelCache();
   let response = cache ? await cache.match(cacheRequest(url)) : null;
+  if (response && !cachedResponseHasValidLength(response, expectedBytes)) {
+    await purgeCachedUrl(cache!, url);
+    response = null;
+  }
+
   const cached = Boolean(response);
   let cacheStatus: CacheStatus = cache ? (cached ? "hit" : "miss") : "unavailable";
   let cacheWriteState: CacheWriteState | null = null;
@@ -326,6 +480,9 @@ async function fetchWithCache(
   });
 
   if (expectedBytes && bytes.byteLength !== expectedBytes) {
+    if (cached && cache) {
+      await purgeCachedUrl(cache, url);
+    }
     throw new Error(
       `${url}: received ${bytes.byteLength} bytes, expected ${expectedBytes}.`,
     );

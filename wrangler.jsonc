@@ -18,5 +18,32 @@
       "database_name": "kirciuokle-words",
       "database_id": "09f3ad62-f4b7-4869-bf69-b941f4316bd1"
     }
-  ]
+  ],
+  "env": {
+    "dev": {
+      "name": "kirciuokle-dev",
+      "assets": {
+        "binding": "ASSETS",
+        "directory": "./dist/client",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": true
+      },
+      "vars": {
+        "ACCENT_SOURCE": "local"
+      },
+      "d1_databases": [
+        {
+          "binding": "DICT",
+          "database_name": "kirciuokle-words",
+          "database_id": "09f3ad62-f4b7-4869-bf69-b941f4316bd1"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "MODEL_BUCKET",
+          "bucket_name": "kirciuokle-models"
+        }
+      ]
+    }
+  }
 }

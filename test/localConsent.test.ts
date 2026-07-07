@@ -35,4 +35,18 @@ describe("local download consent gate", () => {
     expect(ensureEngine).toHaveBeenCalledTimes(1);
     expect(gate.state).toBe("ready");
   });
+
+  it("asks to download again when a previously ready model is evicted", async () => {
+    const ensureEngine = vi.fn(async () => {});
+    const gate = createLocalDownloadGate({
+      hasCachedModel: vi.fn(async () => false),
+      ensureEngine,
+      wasPreviouslyReady: () => true,
+    });
+
+    await expect(gate.enterLocalMode()).resolves.toBe("needs-redownload");
+
+    expect(ensureEngine).not.toHaveBeenCalled();
+    expect(gate.state).toBe("needs-redownload");
+  });
 });

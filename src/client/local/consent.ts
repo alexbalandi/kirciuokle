@@ -2,6 +2,7 @@ export type LocalDownloadGateState =
   | "inactive"
   | "checking-cache"
   | "needs-consent"
+  | "needs-redownload"
   | "loading"
   | "ready"
   | "failed";
@@ -10,6 +11,8 @@ export type LocalDownloadGateDeps = {
   hasCachedModel: () => Promise<boolean>;
   ensureEngine: () => Promise<unknown>;
   isEngineReady?: () => boolean;
+  wasPreviouslyReady?: () => boolean;
+  markReady?: () => void;
   onState?: (state: LocalDownloadGateState) => void;
 };
 
@@ -39,6 +42,7 @@ export function createLocalDownloadGate(
     try {
       await deps.ensureEngine();
       if (currentRunId === runId) {
+        deps.markReady?.();
         setState("ready");
       }
     } catch (error) {
@@ -57,11 +61,6 @@ export function createLocalDownloadGate(
 
     async enterLocalMode() {
       const currentRunId = ++runId;
-      if (deps.isEngineReady?.()) {
-        setState("ready");
-        return state;
-      }
-
       setState("checking-cache");
       const cached = await deps.hasCachedModel();
       if (currentRunId !== runId) {
@@ -69,7 +68,13 @@ export function createLocalDownloadGate(
       }
 
       if (!cached) {
-        setState("needs-consent");
+        setState(deps.wasPreviouslyReady?.() ? "needs-redownload" : "needs-consent");
+        return state;
+      }
+
+      if (deps.isEngineReady?.()) {
+        deps.markReady?.();
+        setState("ready");
         return state;
       }
 
@@ -79,6 +84,7 @@ export function createLocalDownloadGate(
     async consentToDownload() {
       const currentRunId = ++runId;
       if (deps.isEngineReady?.()) {
+        deps.markReady?.();
         setState("ready");
         return state;
       }

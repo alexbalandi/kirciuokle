@@ -60,6 +60,20 @@ Three fine-tuned litlat-bert taggers, CC BY-SA 4.0, fully NC-free lineage
 | [litlat-bert-lithuanian-morphology-vdu](https://huggingface.co/alexbalandi/litlat-bert-lithuanian-morphology-vdu) | accentuation pipelines | traditional-grammar categories (DET→PRON, AUX→VERB) |
 | [litlat-bert-lithuanian-accentuator](https://huggingface.co/alexbalandi/litlat-bert-lithuanian-accentuator) | single-pass POS + accentuation (the project's best model) | combined UPOS|FEATS labels (804) + per-token stress placement incl. no-stress |
 
+## Deploy the in-browser (Local mode) dev site
+
+Do not run this until R2 is enabled for the account.
+
+```sh
+# One-time, after enabling R2 in the Cloudflare dashboard:
+wrangler r2 bucket create kirciuokle-models
+# Upload the generated bundle (uv run scripts/prepare_local_model.py ... first):
+#   for each file in local-model/ (recursively):
+#   wrangler r2 object put kirciuokle-models/<relpath> --file local-model/<relpath>
+npm run build
+wrangler deploy --env dev      # deploys https://kirciuokle-dev.<subdomain>.workers.dev
+```
+
 ## Benchmarks
 
 All numbers one-shot on the **full 684-sentence** UD_Lithuanian-ALKSNIS

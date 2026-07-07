@@ -2,6 +2,7 @@ import type { AccentResponse, Part, Variant } from "../../shared/types";
 import { parseMi } from "../../shared/tags";
 import { buildBatches } from "./batching";
 import {
+  LOCAL_DEFAULT_MODEL_TIER,
   LOCAL_MODEL_BASE,
   loadModelAssets,
   preferredWasmThreads,
@@ -19,6 +20,7 @@ import type {
   JointMeta,
   LocalAccentResult,
   LocalModelStatus,
+  LocalModelTier,
   LocalRunStats,
   LocalRunStatus,
   LocalStats,
@@ -69,14 +71,21 @@ export class LocalAccentEngine {
     private readonly meta: JointMeta,
     private readonly labelBridgeCache: ReadonlyMap<string, string>,
     private cacheStatus: CacheStatus,
+    private readonly modelTier: LocalModelTier,
     private readonly modelFile: string,
     private readonly modelVersion: string | null,
     private readonly executionMode: ExecutionMode,
     private readonly threads: number,
   ) {}
 
-  static async create(onStatus: ModelStatusSink = () => {}): Promise<LocalAccentEngine> {
-    const assets = await loadModelAssets(onStatus);
+  static async create(
+    tierOrStatus: LocalModelTier | ModelStatusSink = LOCAL_DEFAULT_MODEL_TIER,
+    onStatus: ModelStatusSink = () => {},
+  ): Promise<LocalAccentEngine> {
+    const tier =
+      typeof tierOrStatus === "function" ? LOCAL_DEFAULT_MODEL_TIER : tierOrStatus;
+    const statusSink = typeof tierOrStatus === "function" ? tierOrStatus : onStatus;
+    const assets = await loadModelAssets(tier, statusSink);
     const [ort, transformers] = await Promise.all([loadOrtRuntime(), loadTransformersRuntime()]);
     const threads = preferredWasmThreads();
     const runtimeUrl = runtimeBaseUrl();
@@ -102,7 +111,7 @@ export class LocalAccentEngine {
         assets.expectedBytes,
         modelByteLength,
         threads,
-        onStatus,
+        statusSink,
       ),
     ]);
 
@@ -114,6 +123,7 @@ export class LocalAccentEngine {
       assets.meta,
       labelBridgeCache,
       assets.cacheWriteState?.status ?? assets.cacheStatus,
+      assets.tier,
       assets.modelFile,
       assets.manifest.created_utc ?? null,
       sessionInfo.mode,
@@ -122,8 +132,9 @@ export class LocalAccentEngine {
 
     watchCacheStatus(engine, assets.cacheWriteState);
 
-    onStatus({
+    statusSink({
       type: "ready",
+      tier: assets.tier,
       modelFile: assets.modelFile,
       bytes: modelByteLength,
       cacheStatus: engine.cacheStatus,
@@ -257,9 +268,19 @@ export class LocalAccentEngine {
       lastRun: this.lastRun,
       modelFile: this.modelFile,
       modelVersion: this.modelVersion,
+      modelTier: this.modelTier,
       cacheStatus: this.cacheStatus,
       threads: this.threads,
     };
+  }
+
+  async dispose(): Promise<void> {
+    if (this.session.dispose) {
+      await this.session.dispose();
+      return;
+    }
+
+    this.session.release?.();
   }
 
   private async runBatch(batch: PreparedSentence[]): Promise<DecodedSentence[]> {

@@ -23,8 +23,13 @@ export type UiStrings = {
   displayLocalTooltip: string;
   localIdle: string;
   localCheckingCache: string;
+  localTierLabel: string;
+  localTierLight: string;
+  localTierHeavy: string;
   localConsentText: string;
   localConsentButton: string;
+  localRedownloadText: string;
+  localRedownloadButton: string;
   localMetadata: string;
   localVerifyingRuntime: string;
   localModelInfo: string;
@@ -51,6 +56,7 @@ export type UiStrings = {
   statsLastRunEmpty: string;
   statsModel: string;
   statsCache: string;
+  statsRedownload: string;
   cacheHit: string;
   cacheMiss: string;
   cacheStored: string;
@@ -114,9 +120,15 @@ export const UI: Record<Lang, UiStrings> = {
       "Mòdelis variántus rikiúoja pagal̃ tikimýbę; ródomi tìk >10% variántai.",
     localIdle: "Viẽtinis mòdelis bùs įkéltas pasiriñkus viẽtinį režìmą.",
     localCheckingCache: "Tìkrinama, ar̃ mòdelis jaũ išsáugotas naršỹklėje...",
+    localTierLabel: "Mòdelis",
+    localTierLight: "Lengvàs",
+    localTierHeavy: "Tikslùs",
     localConsentText:
       "Viẽtiniam kirčiãvimui svetaĩnė víeną kar̃tą atsisiuñčia mòdelį — apiẽ {size} duomenų̃. Vėlesníems apsilañkymams jìs liẽka išsáugotas naršỹklėje.",
     localConsentButton: "Atsisių̃sti mòdelį ({size})",
+    localRedownloadText:
+      "Mòdelis nebėrà išsáugotas jū́sų naršỹklėje — atsisių̃skite dár kartą.",
+    localRedownloadButton: "Atsisių̃sti dár kartą ({size})",
     localMetadata: "Skaĩtomi mòdelio metadúomenys...",
     localVerifyingRuntime: "Tìkrinamas WASM runtime: {file} {done}/{total}.",
     localModelInfo: "Mòdelis {size}; talpyklà: {cache}; WASM gìjos: {threads}.",
@@ -145,6 +157,7 @@ export const UI: Record<Lang, UiStrings> = {
     statsLastRunEmpty: "dár nevýkdyta",
     statsModel: "Mòdelis",
     statsCache: "Talpyklà",
+    statsRedownload: "Atsisių̃sti iš naujõ",
     cacheHit: "rãsta",
     cacheMiss: "nèrasta",
     cacheStored: "išsáugota",
@@ -212,9 +225,15 @@ export const UI: Record<Lang, UiStrings> = {
       "The model ranks labels by probability; only >10% readings are shown.",
     localIdle: "The local model will load when Local mode is selected.",
     localCheckingCache: "Checking whether the model is already saved in this browser...",
+    localTierLabel: "Model",
+    localTierLight: "Light",
+    localTierHeavy: "Accurate",
     localConsentText:
       "To accentuate locally, the site downloads the model once — about {size} of traffic. It stays saved in your browser for future visits.",
     localConsentButton: "Download model ({size})",
+    localRedownloadText:
+      "The model is no longer saved in your browser — download it again.",
+    localRedownloadButton: "Download again ({size})",
     localMetadata: "Reading model metadata...",
     localVerifyingRuntime: "Verifying WASM runtime: {file} {done}/{total}.",
     localModelInfo: "Model {size}; cache: {cache}; WASM threads: {threads}.",
@@ -242,6 +261,7 @@ export const UI: Record<Lang, UiStrings> = {
     statsLastRunEmpty: "not run yet",
     statsModel: "Model",
     statsCache: "Cache",
+    statsRedownload: "Re-download",
     cacheHit: "present",
     cacheMiss: "miss",
     cacheStored: "stored",
@@ -309,9 +329,15 @@ export const UI: Record<Lang, UiStrings> = {
       "Модель ранжирует варианты по вероятности; показаны только варианты >10%.",
     localIdle: "Локальная модель загрузится при выборе локального режима.",
     localCheckingCache: "Проверяем, сохранена ли модель в этом браузере...",
+    localTierLabel: "Модель",
+    localTierLight: "Лёгкая",
+    localTierHeavy: "Точная",
     localConsentText:
       "Для локальной расстановки ударений сайт один раз скачивает модель — около {size} трафика. Она останется сохранённой в браузере для следующих посещений.",
     localConsentButton: "Скачать модель ({size})",
+    localRedownloadText:
+      "Модель больше не сохранена в браузере — скачайте её снова.",
+    localRedownloadButton: "Скачать снова ({size})",
     localMetadata: "Чтение метаданных модели...",
     localVerifyingRuntime: "Проверка WASM runtime: {file} {done}/{total}.",
     localModelInfo: "Модель {size}; кеш: {cache}; потоки WASM: {threads}.",
@@ -340,6 +366,7 @@ export const UI: Record<Lang, UiStrings> = {
     statsLastRunEmpty: "ещё не запускалось",
     statsModel: "Модель",
     statsCache: "Кеш",
+    statsRedownload: "Скачать заново",
     cacheHit: "найден",
     cacheMiss: "нет",
     cacheStored: "сохранён",

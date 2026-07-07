@@ -200,7 +200,8 @@ textarea:focus {
 }
 
 .mode-controls,
-.display-controls {
+.display-controls,
+.local-tier-controls {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -255,12 +256,14 @@ textarea:focus {
 }
 
 .mode-explainer,
+.local-tier-controls,
 .local-status {
   margin: 8px 0 0;
   color: var(--text-muted);
   font-size: 0.88rem;
 }
 
+.local-tier-controls[hidden],
 .local-status[hidden] {
   display: none;
 }
@@ -943,6 +946,26 @@ button.variant-row.is-selected:focus-visible {
   text-align: right;
 }
 
+.stats-redownload {
+  width: 100%;
+  min-height: 32px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.stats-redownload:hover:not(:disabled),
+.stats-redownload:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  outline: none;
+}
+
 .site-footer {
   width: min(1100px, calc(100% - 32px));
   margin: 0 auto;
@@ -980,6 +1003,7 @@ button.variant-row.is-selected:focus-visible {
 
 @media (max-width: 520px) {
   .mode-controls,
+  .local-tier-controls,
   .display-controls {
     width: 100%;
     justify-content: space-between;
