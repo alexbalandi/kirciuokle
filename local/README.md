@@ -67,11 +67,22 @@ Do not run this until R2 is enabled for the account.
 ```sh
 # One-time, after enabling R2 in the Cloudflare dashboard:
 wrangler r2 bucket create kirciuokle-models
-# Upload the generated bundle (uv run scripts/prepare_local_model.py ... first):
-#   for each file in local-model/ (recursively):
-#   wrangler r2 object put kirciuokle-models/<relpath> --file local-model/<relpath>
+
+# Build the bundle, then upload local-model/ to the REMOTE bucket.
+uv run scripts/prepare_local_model.py ...   # produces local-model/
+bash scripts/upload_local_model_to_r2.sh    # puts every file with --remote
+#   NOTE: `wrangler r2 object put` without --remote writes to the LOCAL
+#   .wrangler sim bucket, which the deployed Worker never reads. The upload
+#   script passes --remote for you. Objects are stored WITHOUT the
+#   `local-model/` prefix (key = path under local-model/); the Worker strips
+#   `/local-model/` before the R2 lookup.
+
 npm run build
-wrangler deploy --env dev      # deploys https://kirciuokle-dev.<subdomain>.workers.dev
+# Deploy with the SOURCE config so env.dev (name + R2 binding) is honored.
+# A bare `wrangler deploy --env dev` uses the vite-plugin's redirected
+# dist/ config and would target prod instead.
+wrangler deploy --config wrangler.jsonc --env dev
+#   -> https://kirciuokle-dev.<subdomain>.workers.dev
 ```
 
 ## Benchmarks

@@ -21,6 +21,8 @@ find "$SRC" -type f | while read -r f; do
     *)              ct="application/octet-stream" ;;
   esac
   echo "put $key ($ct)"
-  npx wrangler r2 object put "$BUCKET/$key" --file "$f" --content-type "$ct" >/dev/null
+  # --remote is REQUIRED: without it wrangler writes to the local .wrangler
+  # simulated bucket, which the deployed Worker never reads.
+  npx wrangler r2 object put "$BUCKET/$key" --file "$f" --content-type "$ct" --remote >/dev/null
 done
 echo "uploaded $(find "$SRC" -type f | wc -l) files to r2://$BUCKET"
