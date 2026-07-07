@@ -24,6 +24,21 @@ to that on "texts you meet in real life", while still being around 90%
 per-token accuracy on "put correct mark into correct place on a word,
 including those from literary texts and archaic forms".
 
+### Where to start?
+
+This readme should be enough for you (or your agents) to quickly deploy
+locally or on your cloudflare. Just double-check that you get the model files
+(all loaded on huggingface) properly. If you want to understand more what work
+was done, why and how, check one of the following:
+
+* [Main overview readme](https://github.com/alexbalandi/kirciuokle/blob/main/docs/README.md)
+* [Attributions](https://github.com/alexbalandi/kirciuokle/blob/main/ATTRIBUTIONS/README.md)
+
+Unlike this section, they are human-validated not human-written, but they will
+give you the idea. If you have questions / suggestions, just file an issue,
+I'm also open to any prs. If you want to reach me personally - do it with
+email - [alexbalandi@gmail.com](mailto:alexbalandi@gmail.com)
+
 ---
 
 A small Cloudflare Workers + TypeScript app that adds stress marks
