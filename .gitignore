@@ -1,39 +1,45 @@
+# --- Node / build ---
 node_modules/
 dist/
 .wrangler/
 .cloudflare/
 *.tsbuildinfo
+
+# --- secrets & local config ---
 .env
 .env.*
 !.env.example
 .dev.vars
-
-# local tooling state
 .claude/settings.local.json
 
+# --- python envs & caches ---
 __pycache__/
+.venv-train/
 local/app/.venv/
-local/tagger-hf/data/
-local/tagger-hf/runs/
-
-# local replica dictionary data (not distributed - see README License section)
-local/data/
 .scratch/
 
-.venv-train/
+# --- generated data, models, corpora (never committed; see README License) ---
+local/data/
+local/tagger-hf/data/
+local/tagger-hf/runs/
 local/tagger-hf/artifacts/
 local/tagger-hf/release/hf-*/
 local/accentuator/data/
 local/accentuator/onnx/*.onnx
 local/accentuator/joint/checkpoints/
 local/accentuator/joint/data/
-local/accentuator/joint/hf_release/
 local/accentuator/joint/data-literary/
+local/accentuator/joint/data-round2/
+local/accentuator/joint/pruned/
+local/accentuator/joint/hf_release/
 
-# browser pilot local model bundle
+# --- browser pilot / local-model bundle ---
 bundled_weights_pilot/model/
+bundled_weights_pilot/model-pruned/
 bundled_weights_pilot/__pycache__/
 bundled_weights_pilot/memtest-*.log
-local/accentuator/joint/pruned/
-local/accentuator/joint/data-round2/
-bundled_weights_pilot/model-pruned/
+
+# --- transient artifacts (screenshots, logs) — never source ---
+*.png
+*.log
+docs-*.png
