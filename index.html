@@ -38,7 +38,21 @@
             autocapitalize="off"
           ></textarea>
           <div class="input-actions">
-            <span class="counter" id="char-counter">0 / 20000</span>
+            <span class="input-meta">
+              <span class="counter" id="char-counter">0 / 20000</span>
+              <button
+                class="details-toggle"
+                id="details-toggle"
+                type="button"
+                aria-expanded="true"
+                aria-controls="panel-extras"
+                hidden
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M6 15l6-6 6 6" />
+                </svg>
+              </button>
+            </span>
             <div class="mode-controls" aria-label="Režimas">
               <span class="segmented-label" id="mode-label"></span>
               <span class="segmented-control" id="mode-switch">
@@ -48,15 +62,19 @@
             </div>
             <button class="primary-button" id="accent-button" type="submit"></button>
           </div>
-          <p class="mode-explainer" id="mode-explainer"></p>
-          <div class="local-tier-controls" id="local-tier-controls" hidden>
-            <span class="segmented-label" id="local-tier-label"></span>
-            <span class="segmented-control" id="local-tier-switch">
-              <button type="button" data-tier="light"></button>
-              <button type="button" data-tier="heavy"></button>
-            </span>
+          <div class="panel-extras" id="panel-extras">
+            <div class="panel-extras-inner">
+              <p class="mode-explainer" id="mode-explainer"></p>
+              <div class="local-tier-controls" id="local-tier-controls" hidden>
+                <span class="segmented-label" id="local-tier-label"></span>
+                <span class="segmented-control" id="local-tier-switch">
+                  <button type="button" data-tier="light"></button>
+                  <button type="button" data-tier="heavy"></button>
+                </span>
+              </div>
+              <div class="local-status" id="local-status" role="status" aria-live="polite" hidden></div>
+            </div>
           </div>
-          <div class="local-status" id="local-status" role="status" aria-live="polite" hidden></div>
           <p class="message" id="form-message" role="status" aria-live="polite"></p>
         </form>
 

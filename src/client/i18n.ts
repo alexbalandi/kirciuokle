@@ -26,6 +26,8 @@ export type UiStrings = {
   localTierLabel: string;
   localTierLight: string;
   localTierHeavy: string;
+  detailsHide: string;
+  detailsShow: string;
   localConsentText: string;
   localConsentButton: string;
   localRedownloadText: string;
@@ -123,6 +125,8 @@ export const UI: Record<Lang, UiStrings> = {
     localTierLabel: "Mòdelis",
     localTierLight: "Lengvàs",
     localTierHeavy: "Tikslùs",
+    detailsHide: "Sutráukti",
+    detailsShow: "Išskleĩsti",
     localConsentText:
       "Viẽtiniam kirčiãvimui svetaĩnė víeną kar̃tą atsisiuñčia mòdelį — apiẽ {size} duomenų̃. Vėlesníems apsilañkymams jìs liẽka išsáugotas naršỹklėje.",
     localConsentButton: "Atsisių̃sti mòdelį ({size})",
@@ -228,6 +232,8 @@ export const UI: Record<Lang, UiStrings> = {
     localTierLabel: "Model",
     localTierLight: "Light",
     localTierHeavy: "Accurate",
+    detailsHide: "Hide details",
+    detailsShow: "Show details",
     localConsentText:
       "To accentuate locally, the site downloads the model once — about {size} of traffic. It stays saved in your browser for future visits.",
     localConsentButton: "Download model ({size})",
@@ -332,6 +338,8 @@ export const UI: Record<Lang, UiStrings> = {
     localTierLabel: "Модель",
     localTierLight: "Лёгкая",
     localTierHeavy: "Точная",
+    detailsHide: "Свернуть",
+    detailsShow: "Развернуть",
     localConsentText:
       "Для локальной расстановки ударений сайт один раз скачивает модель — около {size} трафика. Она останется сохранённой в браузере для следующих посещений.",
     localConsentButton: "Скачать модель ({size})",

@@ -44,6 +44,7 @@ const MODE_STORAGE_KEY = "accent-mode";
 const DISPLAY_STORAGE_KEY = "accent-display";
 const LOCAL_TIER_STORAGE_KEY = "accent-local-tier";
 const LOCAL_READY_TIERS_STORAGE_KEY = "accent-local-ready-tiers-v1";
+const DETAILS_COLLAPSED_STORAGE_KEY = "accent-details-collapsed";
 const VLKK_PRIMER_URL =
   "https://www.vlkk.lt/aktualiausios-temos/tartis-ir-kirciavimas";
 const FOCUSABLE_SELECTOR =
@@ -92,6 +93,9 @@ const localTierButtons = Array.from(
   localTierSwitch.querySelectorAll<HTMLButtonElement>("button[data-tier]"),
 );
 const localStatusLine = getElement<HTMLDivElement>("local-status");
+const panelExtras = getElement<HTMLDivElement>("panel-extras");
+const detailsToggle = getElement<HTMLButtonElement>("details-toggle");
+const inputActions = form.querySelector<HTMLDivElement>(".input-actions")!;
 const accentButton = getElement<HTMLButtonElement>("accent-button");
 const copyButton = getElement<HTMLButtonElement>("copy-button");
 const message = getElement<HTMLParagraphElement>("form-message");
@@ -156,6 +160,7 @@ let localRunStatus: LocalRunStatus = { type: "ready" };
 let localStats: LocalStats | null = null;
 let localExpectedBytes: number = LOCAL_MODEL_SIZE_FALLBACK;
 let localDownloadGateState: LocalDownloadGateState = "inactive";
+let detailsCollapsed = localStorage.getItem(DETAILS_COLLAPSED_STORAGE_KEY) === "true";
 
 const localDownloadGate = createLocalDownloadGate({
   hasCachedModel: () => hasCachedLocalModel(localTier),
@@ -228,6 +233,12 @@ textarea.addEventListener("keydown", (event) => {
     event.preventDefault();
     form.requestSubmit();
   }
+});
+
+detailsToggle.addEventListener("click", () => {
+  detailsCollapsed = !detailsCollapsed;
+  localStorage.setItem(DETAILS_COLLAPSED_STORAGE_KEY, String(detailsCollapsed));
+  renderDetailsToggle();
 });
 
 form.addEventListener("submit", (event) => {
@@ -1240,6 +1251,18 @@ function syncBoxHeights(): void {
   const height = Math.max(minPx, Math.min(content, maxPx));
   textarea.style.height = `${height}px`;
   resultOutput.style.height = `${height}px`;
+
+  // Lock the two panel footers (input actions / result legend) to one height so
+  // that with the extras collapsed the input card's border lines up exactly with
+  // the result card — the legend can wrap taller than the actions row. Only when
+  // the panels sit side by side; stacked (mobile) they don't need to match.
+  inputActions.style.minHeight = "";
+  legend.style.minHeight = "";
+  if (window.matchMedia("(min-width: 821px)").matches) {
+    const footerHeight = Math.max(inputActions.offsetHeight, legend.offsetHeight);
+    inputActions.style.minHeight = `${footerHeight}px`;
+    legend.style.minHeight = `${footerHeight}px`;
+  }
 }
 
 function setMessage(key: MessageKey | null): void {
@@ -1315,6 +1338,26 @@ function renderUi(): void {
   });
 
   renderFooter(strings);
+  renderDetailsToggle();
+}
+
+// The extras block (explainer + tier selector + local status) can be truncated
+// so the input card's outer border lines up with the result card. Collapsing is
+// only offered once nothing below needs the user's attention: in Web mode, or in
+// Local mode once the model is ready. While the model still needs a download the
+// block stays open and the toggle is hidden so the consent/progress card shows.
+function renderDetailsToggle(): void {
+  const strings = UI[lang];
+  const canCollapse =
+    accentMode === "web" ||
+    (accentMode === "local" && localDownloadGateState === "ready");
+  const collapsed = detailsCollapsed && canCollapse;
+  panelExtras.dataset.collapsed = collapsed ? "true" : "false";
+  detailsToggle.hidden = !canCollapse;
+  detailsToggle.setAttribute("aria-expanded", String(!collapsed));
+  const label = collapsed ? strings.detailsShow : strings.detailsHide;
+  detailsToggle.setAttribute("aria-label", label);
+  detailsToggle.title = label;
 }
 
 function renderLocalTierControl(strings: UiStrings): void {

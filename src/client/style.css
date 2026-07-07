@@ -293,6 +293,79 @@ textarea:focus {
   display: none;
 }
 
+/* Collapsible extras (mode explainer, tier selector, local status). Truncating
+   this block makes the input card's outer border line up exactly with the
+   result card, since the footers above it already match. grid-template-rows
+   animates a clean collapse to zero height. */
+.panel-extras {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.25s ease;
+}
+
+.panel-extras[data-collapsed="true"] {
+  grid-template-rows: 0fr;
+}
+
+.panel-extras-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.input-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.details-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.details-toggle[hidden] {
+  display: none;
+}
+
+.details-toggle:hover,
+.details-toggle:focus-visible {
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: none;
+}
+
+.details-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.2s ease;
+}
+
+.details-toggle[aria-expanded="false"] svg {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-extras,
+  .details-toggle svg {
+    transition: none;
+  }
+}
+
 .local-consent-card {
   display: grid;
   gap: 10px;
