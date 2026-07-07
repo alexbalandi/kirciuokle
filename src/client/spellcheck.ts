@@ -13,6 +13,24 @@ export type SpellcheckSuggestion = {
 // words by one insertion, so it produces noise, not corrections.
 const MIN_CHECK_LENGTH = 2;
 
+// The accept vocabulary (`valid`) is huge; suggestions come from a common subset.
+// On a large production list, only forms this frequent get restore/typo indexes
+// (bounds memory + noise). Small hand-built lists (tests) index everything.
+const CORRECTION_MIN_FREQ = 5;
+const CORRECTION_GATE_LIST_SIZE = 5_000;
+
+// A pure-ASCII word that is itself accepted is still treated as a diacritic-DROP
+// (offer restore) when its top diacritic form is both common and dramatically more
+// frequent than the word itself — e.g. "as"→"aš" (50×), "už" (104×). A genuine
+// ASCII word's diacritic sibling isn't (padaryta→padarytą is 0.1×). Big margin.
+const RESTORE_DOMINANCE = 8;
+const RESTORE_MIN_FREQ = 100;
+
+// Combining stress marks (grave/acute/tilde) — stripped before lookup so already
+// accented text (our own output, or a pasted accented article) still matches the
+// un-stressed wordlist. LT diacritics (ogonek/caron/macron/dot) are NOT stripped.
+const STRESS_MARKS_RE = /[̀́̃]/g;
+
 export type SpellcheckContext = { prev?: string; next?: string };
 
 const WORDLIST_URL = "/spellcheck-lt.txt";
@@ -116,14 +134,14 @@ export class SpellcheckEngine {
 
     // Two-tier vocabulary (SPEC56 §1a-bis): every form is "accepted" (added to
     // `valid`), but the correction indexes — restore (foldIndex) and typo
-    // (deleteIndex) — are built only over the common, frequency-bearing subset.
-    // Building deletes over the full ~580k production list would create millions
-    // of keys and hang the browser; rare inflected forms only need to be accepted,
-    // not suggested. A list with no frequencies at all (unit-test fixtures) indexes
-    // every form, so small hand-built engines keep full restore/typo behaviour.
-    const anyFreq = [...this.freq.values()].some((value) => value > 0);
+    // (deleteIndex) — are built only over the common, frequent subset. The accept
+    // set now also carries hundreds of thousands of freq-list words so real text
+    // isn't false-flagged; those must NOT all get delete keys (memory + noise), so
+    // the correction subset is gated by frequency. Small hand-built lists (tests)
+    // are below the gate size and index every form.
+    const gateByFrequency = this.forms.length > CORRECTION_GATE_LIST_SIZE;
     for (const normalized of this.forms) {
-      if (anyFreq && (this.freq.get(normalized) ?? 0) <= 0) {
+      if (gateByFrequency && (this.freq.get(normalized) ?? 0) < CORRECTION_MIN_FREQ) {
         continue;
       }
 
@@ -154,35 +172,44 @@ export class SpellcheckEngine {
       return { status: "ok", candidates: [] };
     }
 
-    if (this.valid.has(normalized)) {
+    const inValid = this.valid.has(normalized);
+
+    // Restore (ASCII → diacritics), ranked frequency-first so the most common real
+    // word wins (aciu → ačiū 14413, not ačiu 83). Fires when the word isn't
+    // accepted at all, OR when it IS accepted but is a dominant diacritic-drop
+    // (see RESTORE_DOMINANCE) — that's how "as"/"aciu" restore even though the
+    // frequency list also lists them, while "padaryta"/"kur" stay accepted.
+    if (isPureAscii(word)) {
+      const restoreCandidates = this.foldIndex.get(foldAscii(normalized)) ?? [];
+      if (restoreCandidates.length > 0) {
+        const ranked = rankCandidates(
+          normalized,
+          restoreCandidates,
+          this,
+          context,
+          restoreDistanceBand,
+          true,
+        );
+        const best = ranked[0];
+        if (best && (!inValid || this.isDominantDrop(normalized, best))) {
+          const autofix = dominantRestore(ranked, this.freq);
+          return {
+            status: "restore",
+            candidates: ranked.map((candidate) => reapplyCase(candidate, word)),
+            autofix: autofix ? reapplyCase(autofix, word) : undefined,
+          };
+        }
+      }
+    }
+
+    if (inValid) {
       return { status: "ok", candidates: [] };
     }
 
-    const folded = foldAscii(normalized);
-    const restoreCandidates = this.foldIndex.get(folded) ?? [];
-    if (restoreCandidates.length > 0 && isPureAscii(word)) {
-      // Restore ranks by frequency (and context) before the diacritic-distance
-      // band: the most common real word for an ASCII spelling is almost always
-      // the intended one, even if it needs more diacritics restored (e.g.
-      // "aciu" → "ačiū" (14413), not "ačiu" (83, one fewer diacritic)).
-      const ranked = rankCandidates(
-        normalized,
-        restoreCandidates,
-        this,
-        context,
-        restoreDistanceBand,
-        true,
-      );
-      return {
-        status: "restore",
-        candidates: ranked.map((candidate) => reapplyCase(candidate, word)),
-        autofix: dominantRestore(ranked, this.freq)
-          ? reapplyCase(dominantRestore(ranked, this.freq)!, word)
-          : undefined,
-      };
-    }
-
-    const typoCandidates = this.typoCandidates(normalized);
+    // Typo suggestions for a Capitalized / ALL-CAPS word are almost always wrong —
+    // it's a proper noun or acronym (Ankaroje, Erdogano, NATO), not a misspelling.
+    // Restore (handled above) still applies, e.g. sentence-initial "Aciu" → "Ačiū".
+    const typoCandidates = startsWithUppercase(word) ? [] : this.typoCandidates(normalized);
     if (typoCandidates.length > 0) {
       return {
         status: "typo",
@@ -218,6 +245,18 @@ export class SpellcheckEngine {
         this.bigrams.set(parsed.key, parsed.count);
       }
     }
+  }
+
+  // An accepted pure-ASCII word is nonetheless a diacritic-drop worth restoring
+  // when its top diacritic form is common (>= RESTORE_MIN_FREQ) AND far more
+  // frequent than the word itself (>= RESTORE_DOMINANCE×).
+  private isDominantDrop(word: string, candidate: string): boolean {
+    const candidateFreq = this.freq.get(candidate) ?? 0;
+    const wordFreq = this.freq.get(word) ?? 0;
+    return (
+      candidateFreq >= RESTORE_MIN_FREQ &&
+      candidateFreq >= RESTORE_DOMINANCE * Math.max(wordFreq, 1)
+    );
   }
 
   private typoCandidates(query: string): string[] {
@@ -321,7 +360,17 @@ function isReadonlyBigramMap(
 }
 
 function normalizeForm(word: string): string {
-  return word.normalize("NFC").toLowerCase().trim();
+  return word
+    .normalize("NFD")
+    .replace(STRESS_MARKS_RE, "")
+    .normalize("NFC")
+    .toLowerCase()
+    .trim();
+}
+
+function startsWithUppercase(word: string): boolean {
+  const first = Array.from(word.normalize("NFC"))[0] ?? "";
+  return first !== "" && first === first.toUpperCase() && first !== first.toLowerCase();
 }
 
 function normalizeContextWord(word: string | undefined): string | undefined {

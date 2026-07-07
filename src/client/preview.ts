@@ -20,7 +20,10 @@ export type EditedSpan = {
   newEnd: number;
 };
 
-const LT_LETTER_RE = /[a-zA-ZąčęėįšųūžĄČĘĖĮŠŲŪŽ]/u;
+// Any letter, plus combining marks (\p{M}) so an accented word — our own output or
+// a pasted accented article, e.g. "prasidė́jo" — stays ONE token (the stress mark
+// isn't a word boundary). Spellcheck strips the stress marks before lookup.
+const LT_LETTER_RE = /[\p{L}\p{M}]/u;
 const INTERNAL_WORD_MARKS = new Set(["-", "'", "’"]);
 const SENTENCE_TERMINATORS = new Set([".", "!", "?", "…", "\n"]);
 

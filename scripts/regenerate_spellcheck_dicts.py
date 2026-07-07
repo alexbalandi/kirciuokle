@@ -50,12 +50,18 @@ FREQ_URL = (
     "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/"
     "content/2018/lt/lt_full.txt"
 )
+ACCEPT_MIN_FREQ = 2  # freq-list words seen ≥ this become accept-only vocabulary
 MIN_BIGRAM_COUNT = 2  # drop pairs seen once — noise, no ranking value
 MAX_BIGRAMS = 220_000  # cap the shipped table
 TOKEN = re.compile(r"[a-ząčęėįšųūž]+", re.IGNORECASE)
 
 LT_LETTERS = set("aąbcčdeęėfghiįyjklmnoprsštuųūvzž")
 LT_LETTERS |= {c.upper() for c in LT_LETTERS}
+
+
+FOLD = {"ą": "a", "č": "c", "ę": "e", "ė": "e", "į": "i", "š": "s", "ų": "u", "ū": "u", "ž": "z"}
+LT_DIACRITICS = set(FOLD)
+ASCII_WORD = set("abcdefghijklmnopqrstuvwxyz-'")
 
 
 def is_clean_form(form: str) -> bool:
@@ -66,6 +72,19 @@ def is_clean_form(form: str) -> bool:
     if form[0] == "-" or form[-1] == "-":
         return False
     return all(ch == "-" or ch in LT_LETTERS for ch in form)
+
+
+def fold(word: str) -> str:
+    """ASCII-fold LT diacritics (matches the browser engine's foldAscii)."""
+    return "".join(FOLD.get(c, c) for c in word.lower())
+
+
+def has_lt_diacritic(word: str) -> bool:
+    return any(c in LT_DIACRITICS for c in word.lower())
+
+
+def is_pure_ascii_word(word: str) -> bool:
+    return all(c in ASCII_WORD for c in word.lower())
 
 
 def load_frequencies() -> dict[str, int]:
@@ -101,8 +120,21 @@ def build_wordlist() -> set[str]:
     generated = sqlite3.connect(GENERATED)
     raw.update(row[0] for row in generated.execute("select word from words"))
     generated.close()
+    own_count = len(raw)
 
     freq = load_frequencies()
+    # The lexicon + generated sets are corpus-derived, not a full Lithuanian
+    # vocabulary, so they miss loads of common words (skelbti, pramonės, pažanga…)
+    # → false positives on real text. Fold in every frequency-list word type (seen
+    # at least ACCEPT_MIN_FREQ times) as accept vocabulary; each keeps its frequency.
+    # Diacritic-dropped spellings (as, aciu) are accepted too — the BROWSER decides
+    # to restore them instead, using the frequency ratio to its diacritic form
+    # (a drop's diacritic form is dramatically more common; a valid ASCII word's is
+    # not), so no words need to be withheld here.
+    before = len(raw)
+    raw.update(w for w, f in freq.items() if f >= ACCEPT_MIN_FREQ and is_clean_form(w))
+    print(f"  freq-list words added to accept: {len(raw) - before}")
+
     forms = sorted(f for f in raw if is_clean_form(f))
     blob = "".join(f"{f}\t{freq.get(f.lower(), 0)}\n" for f in forms)
     WORDLIST_OUT.parent.mkdir(parents=True, exist_ok=True)
@@ -110,8 +142,8 @@ def build_wordlist() -> set[str]:
 
     with_freq = sum(1 for f in forms if freq.get(f.lower(), 0) > 0)
     gz = len(gzip.compress(blob.encode("utf-8"), 9))
-    print(f"lexicon forms: {lexicon_count} | union: {len(raw)} | kept: {len(forms)}")
-    print(f"  with frequency: {with_freq}")
+    print(f"lexicon: {lexicon_count} | +generated: {own_count} | +freqlist(≥{ACCEPT_MIN_FREQ}): {len(raw)}")
+    print(f"  kept: {len(forms)} | with frequency: {with_freq}")
     print(f"  wrote {WORDLIST_OUT.relative_to(REPO_ROOT)}: ~{gz} bytes gzipped")
     return {f.lower() for f in forms}
 

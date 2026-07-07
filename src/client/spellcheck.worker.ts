@@ -10,7 +10,7 @@ const WORDLIST_URL = "/spellcheck-lt.txt";
 const BIGRAMS_URL = "/spellcheck-bigrams.txt";
 // Bump this suffix whenever the shipped wordlist/bigrams change so cached copies
 // are refreshed (stale caches from older suffixes are pruned on startup).
-const CACHE_NAME = "spellcheck-assets-v1";
+const CACHE_NAME = "spellcheck-assets-v4";
 
 type WorkerRequest = {
   id: number;
