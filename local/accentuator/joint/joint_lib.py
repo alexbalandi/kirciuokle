@@ -839,14 +839,21 @@ def find_encoder_checkpoint() -> Path | None:
     return sorted(scored, key=lambda item: (item[0], str(item[1])))[0][1]
 
 
-def load_encoder_and_tokenizer(encoder_source: str | Path | None = None) -> tuple[Any, Any, str]:
-    from transformers import AutoModel, AutoTokenizer
+def load_encoder_and_tokenizer(
+    encoder_source: str | Path | None = None,
+    *,
+    initialize_from_config: bool = False,
+) -> tuple[Any, Any, str]:
+    from transformers import AutoConfig, AutoModel, AutoTokenizer
 
     source = str(encoder_source or ENCODER)
     tokenizer = AutoTokenizer.from_pretrained(source, use_fast=True)
     if not getattr(tokenizer, "is_fast", False):
         raise RuntimeError("joint subword alignment requires a fast tokenizer")
-    encoder = AutoModel.from_pretrained(source)
+    if initialize_from_config:
+        encoder = AutoModel.from_config(AutoConfig.from_pretrained(source))
+    else:
+        encoder = AutoModel.from_pretrained(source)
     return encoder, tokenizer, source
 
 
@@ -859,7 +866,26 @@ def instantiate_from_checkpoint(path: Path, device: torch.device | str = "cpu") 
     labels = [str(label) for label in checkpoint["labels"]]
     char_vocab = {str(k): int(v) for k, v in checkpoint["char_vocab"].items()}
     encoder_source = checkpoint.get("encoder_source") or checkpoint.get("base_model") or ENCODER
-    encoder, tokenizer, _source = load_encoder_and_tokenizer(encoder_source)
+    encoder_source_path = Path(str(encoder_source))
+    pruned_vocab = checkpoint.get("pruned_vocab")
+    config_only_encoder = bool(
+        pruned_vocab
+        and encoder_source_path.exists()
+        and not any(
+            (encoder_source_path / name).exists()
+            for name in (
+                "model.safetensors",
+                "pytorch_model.bin",
+                "tf_model.h5",
+                "model.ckpt.index",
+                "flax_model.msgpack",
+            )
+        )
+    )
+    encoder, tokenizer, _source = load_encoder_and_tokenizer(
+        encoder_source,
+        initialize_from_config=config_only_encoder,
+    )
     model = JointModel(
         encoder=encoder,
         labels=labels,

@@ -34,3 +34,6 @@ local/accentuator/joint/data-literary/
 bundled_weights_pilot/model/
 bundled_weights_pilot/__pycache__/
 bundled_weights_pilot/memtest-*.log
+local/accentuator/joint/pruned/
+local/accentuator/joint/data-round2/
+bundled_weights_pilot/model-pruned/
