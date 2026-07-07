@@ -69,7 +69,10 @@ async function handleLocalModel(
   }
 
   const key = url.pathname.slice(LOCAL_MODEL_PREFIX.length);
-  const object = await env.MODEL_BUCKET?.get(key);
+  const rangeSpec = request.method === "GET" ? parseRangeHeader(request.headers.get("range")) : undefined;
+  const object = rangeSpec
+    ? await env.MODEL_BUCKET?.get(key, { range: rangeSpec })
+    : await env.MODEL_BUCKET?.get(key);
   if (!object) {
     return new Response("Not found", {
       status: 404,
@@ -79,13 +82,57 @@ async function handleLocalModel(
 
   const headers = new Headers(modelIsolationHeaders());
   headers.set("content-type", modelContentType(key));
-  headers.set("content-length", String(object.size));
   headers.set("cache-control", "public, max-age=31536000, immutable");
   headers.set("etag", object.httpEtag);
+  headers.set("accept-ranges", "bytes");
 
-  return new Response(request.method === "HEAD" ? null : object.body, {
+  const body = "body" in object ? object.body : null;
+
+  // A satisfied range request streams only the requested slice as 206.
+  // Derive start/end from the parsed request spec + full object size — R2's
+  // returned object.range is only used as the "partial was served" signal.
+  if (rangeSpec && object.range && body) {
+    const { start, end } = resolveRange(rangeSpec, object.size);
+    headers.set("content-range", `bytes ${start}-${end}/${object.size}`);
+    headers.set("content-length", String(end - start + 1));
+    return new Response(body, { status: 206, headers });
+  }
+
+  headers.set("content-length", String(object.size));
+  return new Response(request.method === "HEAD" ? null : body, {
     headers,
   });
+}
+
+function parseRangeHeader(header: string | null): R2Range | undefined {
+  if (!header) {
+    return undefined;
+  }
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match) {
+    return undefined;
+  }
+  const [, startStr, endStr] = match;
+  if (startStr === "" && endStr === "") {
+    return undefined;
+  }
+  if (startStr === "") {
+    return { suffix: Number(endStr) };
+  }
+  const offset = Number(startStr);
+  if (endStr === "") {
+    return { offset };
+  }
+  return { offset, length: Number(endStr) - offset + 1 };
+}
+
+function resolveRange(range: R2Range, size: number): { start: number; end: number } {
+  if ("suffix" in range) {
+    return { start: Math.max(0, size - range.suffix), end: size - 1 };
+  }
+  const start = range.offset ?? 0;
+  const length = range.length ?? size - start;
+  return { start, end: Math.min(size - 1, start + length - 1) };
 }
 
 function withHtmlIsolationHeaders(response: Response): Response {

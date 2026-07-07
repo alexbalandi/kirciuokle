@@ -69,5 +69,33 @@ describe("worker local model serving", () => {
     expect(response.headers.get("Cross-Origin-Resource-Policy")).toBe("same-origin");
     expect(response.headers.get("Cross-Origin-Embedder-Policy")).toBe("require-corp");
     expect(response.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
+    expect(response.headers.get("accept-ranges")).toBe("bytes");
+  });
+
+  it("serves a 206 partial response for a Range request", async () => {
+    // Full object is 10 bytes; request bytes=2-5 → R2 returns the 4-byte slice.
+    const get = vi.fn(async (key: string, opts?: R2GetOptions) => {
+      const range = opts?.range as R2Range | undefined;
+      const slice = { body: new Response("cdef").body, size: 10, httpEtag: '"abc"', range };
+      return slice as unknown as R2ObjectBody;
+    });
+    const env = makeEnv({ MODEL_BUCKET: { get } as unknown as R2Bucket });
+
+    const response = await worker.fetch(
+      new Request("https://example.test/local-model/joint.int8.partial.onnx", {
+        headers: { range: "bytes=2-5" },
+      }),
+      env,
+      { waitUntil: vi.fn() } as unknown as ExecutionContext,
+    );
+
+    expect(get).toHaveBeenCalledWith("joint.int8.partial.onnx", {
+      range: { offset: 2, length: 4 },
+    });
+    expect(response.status).toBe(206);
+    expect(response.headers.get("content-range")).toBe("bytes 2-5/10");
+    expect(response.headers.get("content-length")).toBe("4");
+    expect(response.headers.get("accept-ranges")).toBe("bytes");
+    expect(await response.text()).toBe("cdef");
   });
 });
