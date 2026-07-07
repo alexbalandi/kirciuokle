@@ -206,8 +206,21 @@ displayButtons.forEach((button) => {
 });
 
 textarea.addEventListener("input", () => {
-  resizeTextarea();
+  syncBoxHeights();
   updateCounter();
+});
+
+// Keep the two boxes the same height when the viewport (and thus wrapping)
+// changes; rAF-coalesced so a resize drag doesn't thrash layout.
+let resizeRaf = 0;
+window.addEventListener("resize", () => {
+  if (resizeRaf) {
+    return;
+  }
+  resizeRaf = requestAnimationFrame(() => {
+    resizeRaf = 0;
+    syncBoxHeights();
+  });
 });
 
 textarea.addEventListener("keydown", (event) => {
@@ -316,7 +329,7 @@ document.addEventListener("click", (event) => {
 });
 
 setLanguage(lang, { persist: false });
-resizeTextarea();
+syncBoxHeights();
 updateCounter();
 if (accentMode === "local") {
   void enterLocalMode();
@@ -583,6 +596,7 @@ function renderResult(): void {
   if (renderedParts.length === 0) {
     resultOutput.classList.add("is-empty");
     resultOutput.textContent = UI[lang].resultEmpty;
+    syncBoxHeights();
     return;
   }
 
@@ -656,6 +670,8 @@ function renderResult(): void {
 
     resultOutput.append(document.createTextNode(visibleText));
   });
+
+  syncBoxHeights();
 }
 
 function openVariantPopover(anchor: HTMLElement, index: number): void {
@@ -1211,9 +1227,19 @@ function updateCounter(): void {
   charCounter.classList.toggle("is-over", count > MAX_TEXT_LENGTH);
 }
 
-function resizeTextarea(): void {
+// Lock the input and result boxes to one shared height so the two columns stay
+// identical and back-to-back regardless of how much text or surrounding chrome
+// each panel has. Measure each box's natural content height, take the larger,
+// clamp to the CSS min (240px) / max (62vh), and apply to both.
+function syncBoxHeights(): void {
+  const minPx = 240;
+  const maxPx = Math.round(window.innerHeight * 0.62);
   textarea.style.height = "auto";
-  textarea.style.height = `${textarea.scrollHeight}px`;
+  resultOutput.style.height = "auto";
+  const content = Math.max(textarea.scrollHeight, resultOutput.scrollHeight);
+  const height = Math.max(minPx, Math.min(content, maxPx));
+  textarea.style.height = `${height}px`;
+  resultOutput.style.height = `${height}px`;
 }
 
 function setMessage(key: MessageKey | null): void {

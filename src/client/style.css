@@ -122,7 +122,10 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
-  align-items: stretch;
+  /* Panels size to their own content; the two text boxes are locked to one
+     shared height in JS (syncBoxHeights) so they stay identical and
+     back-to-back regardless of surrounding controls. */
+  align-items: start;
 }
 
 .input-panel,
@@ -149,20 +152,38 @@ a {
   text-transform: uppercase;
 }
 
-/* Both panel headers share one height so the text boxes start on the same
-   line regardless of what each header contains. */
+/* Both panel headers share one FIXED height so the text boxes start on exactly
+   the same line regardless of what each header contains (the result toolbar's
+   buttons are taller than the input's bare label). */
 .panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 34px;
+  height: 38px;
   margin: 0 0 10px;
+}
+
+/* The input textarea (left) and the result output (right) must lay text out
+   IDENTICALLY so the accented text aligns character-for-character with the raw
+   input: same font metrics, padding, wrapping. Only accent glyphs differ, and
+   they share the base letter's advance width. Keep these two rule blocks in
+   lockstep — any divergence drifts the two columns apart. */
+textarea,
+.result-output {
+  padding: 14px;
+  font: inherit;
+  letter-spacing: 0;
+  word-spacing: normal;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  tab-size: 4;
 }
 
 textarea {
   display: block;
-  flex: 1 0 auto;
+  flex: 0 0 auto;
   width: 100%;
   min-height: 240px;
   max-height: 62vh;
@@ -171,7 +192,6 @@ textarea {
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 14px;
   color: inherit;
   background: color-mix(in srgb, var(--surface) 92%, var(--surface-muted));
   outline: none;
@@ -439,16 +459,13 @@ button:disabled {
 }
 
 .result-output {
-  flex: 1 0 auto;
+  flex: 0 0 auto;
   min-height: 240px;
   max-height: 62vh;
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 15px;
   background: color-mix(in srgb, var(--surface) 90%, var(--surface-muted));
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 .result-output.is-empty {
@@ -459,7 +476,10 @@ button:disabled {
   display: inline;
   margin: 0;
   border: 0;
-  padding: 0 1px;
+  /* No horizontal padding: inline padding widens each word's advance and
+     drifts the right column out of character-alignment with the left. Word
+     separation comes from the verbatim space separators between tokens. */
+  padding: 0;
   color: inherit;
   background: transparent;
   font: inherit;
@@ -981,6 +1001,13 @@ button.variant-row.is-selected:focus-visible {
 
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  /* Panels stack here, so the fixed head height is no longer needed for
+     cross-panel alignment; let it grow if the toolbar wraps. */
+  .panel-head {
+    height: auto;
+    min-height: 38px;
   }
 
   .hero-top {
