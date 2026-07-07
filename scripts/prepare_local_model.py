@@ -124,6 +124,7 @@ class TableRow:
     stress_rate: float | None
     shipped: bool
     note: str
+    tier: str | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -143,6 +144,11 @@ def build_parser() -> argparse.ArgumentParser:
     #   --tokenizer-dir local/accentuator/joint/pruned/tokenizer
     parser.add_argument("--model-onnx", type=Path, default=BASELINE_ONNX)
     parser.add_argument("--model-name", type=str, default=BASELINE_NAME)
+    # Optional second (lighter) int8 variant shipped alongside the primary.
+    # Same tokenizer/meta; only the quantization differs. The primary is the
+    # "heavy"/default tier, this is the "light" tier.
+    parser.add_argument("--light-onnx", type=Path, default=None)
+    parser.add_argument("--light-name", type=str, default=None)
     parser.add_argument("--meta-json", type=Path, default=META_JSON)
     parser.add_argument("--tokenizer-dir", type=Path, default=RELEASE_DIR)
     return parser
@@ -743,6 +749,7 @@ def make_row(
     shipped: bool,
     note: str,
     existing_models: dict[str, object] | None = None,
+    tier: str | None = None,
 ) -> TableRow:
     existing = (
         existing_models.get(path.name, {})
@@ -757,6 +764,7 @@ def make_row(
         stress_rate=parity.stress_rate if parity else existing.get("stress_parity"),
         shipped=shipped,
         note=note,
+        tier=tier,
     )
 
 
@@ -789,6 +797,9 @@ def write_manifest(
     default_model: str,
     runtime: dict[str, object],
 ) -> None:
+    tiers = {
+        row.tier: row.file_name for row in rows if row.tier and row.file_name
+    }
     manifest = {
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "default_model": default_model,
@@ -801,12 +812,15 @@ def write_manifest(
                 "stress_parity": row.stress_rate,
                 "default": row.shipped,
                 "note": row.note,
+                "tier": row.tier,
             }
             for row in rows
             if row.file_name
         },
         "runtime": runtime,
     }
+    if tiers:
+        manifest["tiers"] = tiers
     (output_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -889,6 +903,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     if full_ships:
         default_model = FULL_INT8_NAME
 
+    # optional lighter tier shipped alongside (same tokenizer/meta)
+    if args.light_onnx and args.light_name:
+        copy_if_changed(args.light_onnx, output_dir / args.light_name)
+
+    heavy_tier = "heavy" if (args.light_onnx and args.light_name) else None
     rows = [
         make_row(
             "shipped int8 model",
@@ -897,8 +916,21 @@ def main(argv: Iterable[str] | None = None) -> int:
             default_model == args.model_name,
             f"source: {args.model_onnx.name}",
             existing_models,
+            tier=heavy_tier,
         )
     ]
+    if args.light_onnx and args.light_name:
+        rows.append(
+            make_row(
+                "light int8 model",
+                output_dir / args.light_name,
+                None,
+                False,
+                f"source: {args.light_onnx.name}",
+                existing_models,
+                tier="light",
+            )
+        )
     if full_path:
         rows.append(
             make_row(
