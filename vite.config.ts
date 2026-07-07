@@ -6,9 +6,10 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
-const localModelDir = path.resolve(rootDir, "bundled_weights_pilot", "model-pruned");
-// Dev-only serving for src/client/local/assets.ts LOCAL_MODEL_BASE.
-// Production/R2 wiring intentionally stays out of this spec.
+// Dev-only serving of the gitignored local-model bundle for Local mode
+// (src/client/local/assets.ts LOCAL_MODEL_BASE). Generate the bundle with
+// `uv run scripts/prepare_local_model.py`. Production/R2 wiring is separate.
+const localModelDir = path.resolve(rootDir, "local-model");
 const localModelPrefix = "/local-model/";
 
 export default defineConfig({

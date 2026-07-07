@@ -14,6 +14,9 @@ export type Part = {
       readings that were fetched after the accent response. */
   tokenTags?: TagSlots;
   unknown?: true;
+  /** Local-mode only: a numeral+suffix fragment (e.g. "81-erių") whose
+      suffix is stressed but which has no meaningful POS reading. */
+  numeralFragment?: true;
 };
 
 export type AccentRequest = {
@@ -29,6 +32,8 @@ export type AccentResponse = {
 export type Variant = {
   form: string;
   info: string;
+  /** Local-mode only: softmax probability of this reading (0..1). */
+  p?: number;
 };
 
 export type WordResponse = {

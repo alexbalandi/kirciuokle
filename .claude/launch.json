@@ -6,12 +6,6 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
-    },
-    {
-      "name": "bundled-pilot",
-      "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "bundled_weights_pilot/serve.py"],
-      "port": 8788
     }
   ]
 }
