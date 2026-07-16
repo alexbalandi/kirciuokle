@@ -70,3 +70,29 @@ passes.
 
 Acceptance: prãšom/ãčiū correct in Local mode on the deployed site; ALKSNIS
 dev/test stress accuracy within noise of v3; parity/gauntlet gates pass.
+
+## Outcome (joint_v4, shipped 2026-07-16)
+
+Retrained with the exact v3 recipe (init `joint_v2_literary`, 2 epochs, constant
+schedule) on the corrected data with a 0.5 rehearsal ratio and lr_scale 0.2.
+INTJ supervision went from 11 to 806 tokens (`prašom` 216×, `ačiū` 135×, …).
+
+| metric | v3 | v4 |
+|---|---|---|
+| interjection panel | 6/11 | **11/11** |
+| literary dev stress | 96.67% | **97.31%** |
+| LRT token exact (raw / audited) | 90.8 / 92.2 | **91.7 / 93.0** |
+| stress type exact | 88.2% | **89.4%** |
+| chrestomatija (gauntlet) | 90.7% | **90.96%** |
+| POS (MATAS dev / ALKSNIS test) | 98.79 / 88.95 | 98.82 / 88.85 (noise) |
+| fp32 / int8-partial ONNX parity | 1.000 / 99.2% | 1.000 / 99.2% |
+
+Every stress metric improved; POS unchanged. Verified end-to-end in the real
+browser on the deployed site: `Prãšom užeĩti. Ãčiū labaĩ. Lãbas rýtas, dė̃kui ùž
+vìską.` Shipped to R2 (`c891ef9765`), dev + prod, and both HF sets (`pruned/` +
+root release).
+
+Found along the way: `await nextFrame()` (bare rAF) between inference batches
+hung the whole Local run in throttled/background tabs — fixed by racing a 250ms
+timeout. And `wrangler r2 object put` caps at 300 MiB; the heavy tier ships via
+`scripts/upload_local_model_r2_multipart.py` (S3 multipart, manifest last).

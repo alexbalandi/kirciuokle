@@ -51,9 +51,12 @@ If a prod deploy ever goes wrong, roll back to the prior version:
   `scripts/prepare_local_model.py` and uploaded to the `kirciuokle-models`
   bucket. `wrangler r2 object put` needs `--remote` (without it, it writes a
   local sim bucket the deployed Worker never reads) and caps at 300 MiB — the
-  470 MB heavy tier needs R2 multipart. Full runbook + tier details in
-  [`local/README.md`](local/README.md). The canonical copies are also on
-  Hugging Face (`alexbalandi/litlat-bert-lithuanian-accentuator`, `pruned/`).
+  470 MB heavy tier does NOT fit; upload the bundle with
+  `uv run scripts/upload_local_model_r2_multipart.py` (S3 multipart via the
+  CLOUDFLARE_API_TOKEN in .env; uploads manifest.json last so the bucket flips
+  atomically). Full runbook + tier details in [`local/README.md`](local/README.md).
+  The canonical copies are also on Hugging Face
+  (`alexbalandi/litlat-bert-lithuanian-accentuator`, `pruned/`).
 - **Cross-origin isolation must cover Web Worker scripts, not just HTML.** The
   site is `COEP: require-corp` (for the ONNX model), and a dedicated Web Worker
   (the spellcheck worker) only starts if its *script* response also carries
