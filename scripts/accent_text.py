@@ -145,6 +145,8 @@ MI_TAGS = {
     "jng.": ("pos", "CCONJ"),
     "prl.": ("pos", "ADP"),
     "dll.": ("pos", "PART"),
+    # VDU writes interjections as "jstk."; bare "jst." kept defensively (SPEC59).
+    "jstk.": ("pos", "INTJ"),
     "jst.": ("pos", "INTJ"),
     "vyr. g.": ("gender", "Masc"),
     "mot. g.": ("gender", "Fem"),

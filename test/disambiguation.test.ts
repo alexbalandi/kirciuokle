@@ -123,6 +123,17 @@ describe("MI parsing and scoring", () => {
 
     expect(scoreTags(parseMi("įv."), context)).toBe(4);
   });
+
+  it("parses VDU interjection labels (jstk.) — regression for SPEC59", () => {
+    // "jstk." (jaustukas) is what VDU actually writes; before it was mapped, every
+    // interjection variant parsed to {} and scored 0, masking prašom/ačiū/… out of
+    // the joint model's stress supervision.
+    expect(parseMi("jstk., pagr.")).toEqual({ pos: "INTJ" });
+
+    const context = tokenTags(token("prašom", "prašom", "INTJ"));
+    expect(scoreTags(parseMi("jstk., pagr."), context)).toBe(4);
+    expect(scoreTags(parseMi("vksm., dgs., es. l., 1 asm."), context)).toBe(-3);
+  });
 });
 
 describe("variant picking", () => {

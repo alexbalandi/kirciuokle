@@ -85,6 +85,19 @@ def test_det_tokens_score_as_pron_against_vdu_pronoun_variants() -> None:
     assert score_tags(parse_mi("įv."), context) == 4
 
 
+def test_interjection_mi_uses_vdu_jstk_abbreviation() -> None:
+    # VDU writes interjections as "jstk." (jaustukas). Before this mapping existed,
+    # "jstk., pagr." parsed to {} and scored 0 against an INTJ context — which made
+    # the joint-dataset projector mask ALL interjections (prašom, ačiū, …) out of
+    # stress supervision (SPEC59).
+    assert parse_mi("jstk., pagr.") == {"pos": "INTJ"}
+
+    context = token_tags(token("prašom", "prašom", "INTJ"))
+    assert score_tags(parse_mi("jstk., pagr."), context) == 4
+    # the verb reading of prašom still loses against an INTJ context
+    assert score_tags(parse_mi("vksm., dgs., es. l., 1 asm."), context) == -3
+
+
 def test_pick_variant_uses_lemma_exception_before_scoring() -> None:
     variants = [
         {"form": "ỹra", "info": "vksm., es. l., 3 asm.", "mi": ["vksm., es. l., 3 asm."]},

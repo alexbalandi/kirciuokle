@@ -53,6 +53,12 @@ MI_TAGS: dict[str, tuple[Slot, str]] = {
     "jng.": ("pos", "CCONJ"),
     "prl.": ("pos", "ADP"),
     "dll.": ("pos", "PART"),
+    # VDU writes interjections as "jstk." (jaustukas); keep the bare "jst." too in
+    # case any source abbreviates further. Before "jstk." was added here, EVERY
+    # interjection variant parsed to {} and scored 0, so the dataset projector
+    # masked all ~2,450 INTJ tokens (prašom, ačiū, …) out of stress supervision —
+    # the root cause of the model mis-stressing prašom (docs/SPEC59).
+    "jstk.": ("pos", "INTJ"),
     "jst.": ("pos", "INTJ"),
     "vyr. g.": ("gender", "Masc"),
     "mot. g.": ("gender", "Fem"),

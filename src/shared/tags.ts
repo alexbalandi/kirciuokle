@@ -26,6 +26,10 @@ export const MI_TAGS: Record<string, [Slot, string]> = {
   "jng.": ["pos", "CCONJ"],
   "prl.": ["pos", "ADP"],
   "dll.": ["pos", "PART"],
+  // VDU writes interjections as "jstk." (jaustukas) — the bare "jst." never occurs
+  // in real MI strings but is kept defensively. Missing "jstk." made every
+  // interjection variant unscorable (see docs/SPEC59).
+  "jstk.": ["pos", "INTJ"],
   "jst.": ["pos", "INTJ"],
   "vyr. g.": ["gender", "Masc"],
   "mot. g.": ["gender", "Fem"],
