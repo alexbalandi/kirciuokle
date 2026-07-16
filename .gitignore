@@ -32,6 +32,7 @@ local/accentuator/joint/data-literary/
 local/accentuator/joint/data-round2/
 local/accentuator/joint/data-round2-r50/
 local/accentuator/joint/pruned/
+local/accentuator/joint/pruned-*/
 local/accentuator/joint/hf_release/
 local/accentuator/joint/train_*.log
 local/accentuator/joint/train_*.err
