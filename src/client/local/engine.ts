@@ -986,8 +986,18 @@ function readMemoryStatus(): MemoryStatus {
   };
 }
 
+// Yield to the renderer between batches so progress paints. requestAnimationFrame
+// alone would hang the whole run in a hidden/backgrounded tab (browsers throttle
+// rAF to zero there) — the promise never resolves and the accent() result is never
+// returned. Race it with a short timeout so a backgrounded run still completes.
 function nextFrame(): Promise<void> {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(resolve, 250);
+    requestAnimationFrame(() => {
+      window.clearTimeout(timer);
+      resolve();
+    });
+  });
 }
 
 function errorMessage(error: unknown): string {

@@ -517,6 +517,7 @@ async function submitText(): Promise<void> {
       accentMode === "local" ? await accentTextLocal(text) : await accentTextWeb(text);
     applyAccentResponse(payload);
   } catch (error) {
+    console.error("[accent] submit failed:", error);
     renderedParts = [];
     renderedSourceText = "";
     spellcheckRequestId += 1;
