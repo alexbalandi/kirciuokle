@@ -206,6 +206,13 @@ English, and Russian (e.g. „kilm." → "genitive" / «родительный»
 hand-reviewed gloss tables live in `src/client/i18n.ts`. The accented words
 themselves are, of course, Lithuanian.
 
+## Retraining the local model
+
+The in-browser accentuation model (`joint_vN`) can be retrained, evaluated,
+and re-shipped end to end — datasets → training → gates → prune/quantize →
+browser bundle → R2/HF. The full runbook, with the exact commands and the
+gotchas that bite, is in [docs/RETRAIN.md](docs/RETRAIN.md).
+
 ## License
 
 The code in this repository is released into the public domain under
